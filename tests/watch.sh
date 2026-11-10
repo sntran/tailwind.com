@@ -6,6 +6,8 @@
 # It checks that an edit of a source file, a new file in a new directory,
 # an edit of the input, and an input with an error and its repair each
 # give the correct output, and that the end of stdin stops the program.
+# The watch runs with --map out.css.map: the test also checks that the
+# source map follows the input.
 set -eu
 program=$1
 shift
@@ -52,11 +54,11 @@ case "$(uname -s)" in
     *) mkfifo stdin.fifo ;;
 esac
 if [ $fifo = 1 ]; then
-    run -i app.css -o out.css --watch "$@" < stdin.fifo > log.txt 2>&1 &
+    run -i app.css -o out.css --map out.css.map --watch "$@" < stdin.fifo > log.txt 2>&1 &
     pid=$!
     exec 3> stdin.fifo
 else
-    run -i app.css -o out.css --watch=always "$@" > log.txt 2>&1 &
+    run -i app.css -o out.css --map out.css.map --watch=always "$@" > log.txt 2>&1 &
     pid=$!
 fi
 trap 'kill $pid 2>/dev/null || true' EXIT
@@ -82,6 +84,13 @@ echo "watch.sh: a file replaced by a rename: pass"
 printf '@import "tailwindcss" source(none);\n@source "./src";\n.one { color: red; }\n' > app.css
 wait_for '.one {'
 echo "watch.sh: an edit of the input: pass"
+
+# The program writes the map before the output.
+if ! grep -qF 'sourceMappingURL=out.css.map' out.css || ! grep -qF '.one { color: red; }' out.css.map; then
+    echo "watch.sh: the source map does not have the new input" >&2
+    exit 1
+fi
+echo "watch.sh: the source map of the new input: pass"
 
 # An error keeps the watch alive, and the repair gives a new output.
 printf '@import "tailwindcss" source(none);\n.two { @apply does-not-exist; }\n' > app.css

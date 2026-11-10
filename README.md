@@ -43,6 +43,8 @@ tailwind.com [--input input.css] [--output output.css] [--watch] [--poll=ms] [op
                  sets the interval)
 -m, --minify     Optimize and minify the output
     --optimize   Optimize the output without minifying
+    --map        Generate a source map: in the output, or with --map=FILE
+                 in a file
     --cwd        The current working directory
     --silent     Suppress non-error output
 -h, --help       Display usage information
@@ -97,6 +99,8 @@ expects the same text, byte for byte:
 | The same candidates in one build (the sort of the output) | 24 MB of CSS |
 | `@import "tailwindcss"` with real-world classes, also through the optimizer | 686 candidates |
 | The official command line program on small projects | 17 projects |
+| The source maps of the official compiler and of its optimizer | 317 stylesheets |
+| The official command line program with `--map` | 23 projects |
 
 See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the results and
 the known differences, and [`docs/TESTING.md`](docs/TESTING.md) for the
@@ -111,7 +115,11 @@ version of Lightning CSS with the same options.
 
 - **No JavaScript**: `@plugin` and `@config` are errors. A plugin that
   is only CSS (`@utility`, `@custom-variant`, `@theme`) works.
-- **No source maps**: `--map` is an error.
+- **Source maps of the stylesheets in the file**: with `--map`, a
+  source of a stylesheet of Tailwind CSS that is in the program has the
+  path `/$tailwindcss/NAME.css`. With `node_modules/tailwindcss` in the
+  project, the path is the path of the file, as with the official
+  program.
 - **The watch on Windows polls**: there, it reads the times of the files
   at an interval. On the other systems it uses the events of the file
   system (inotify, kqueue), as the file watcher of BEAM.com.

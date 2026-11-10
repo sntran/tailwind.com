@@ -196,8 +196,11 @@ struct Options {
 /// The state of the last write.
 #[derive(Default)]
 struct Previous {
+    /// The CSS of the compiler that `optimized_css` and `map` are for.
     css: Option<String>,
     optimized_css: String,
+    /// The source map of the output.
+    map: Option<SourceMap>,
     output: Option<String>,
 }
 
@@ -362,12 +365,21 @@ fn output_file(file: &Path, contents: &str) -> std::io::Result<()> {
     std::fs::write(file, contents)
 }
 
-/// Write the CSS to the output, with its source map when there is one.
-/// The result is true when the output changed.
-fn write(css: &str, mut map: Option<SourceMap>, options: &Options, previous: &mut Previous) -> Result<bool> {
-    let mut output = std::borrow::Cow::Borrowed(css);
-    if options.minify || options.optimize {
-        if previous.css.as_deref() != Some(css) {
+/// Write the CSS to the output, with its source map for `--map`.
+/// `source_map` gives the source map of the CSS. The result is true when
+/// the output changed.
+fn write(
+    css: &str,
+    source_map: &dyn Fn() -> SourceMap,
+    options: &Options,
+    previous: &mut Previous,
+) -> Result<bool> {
+    let optimize = options.minify || options.optimize;
+    // The optimizer and the map run only for new CSS: the watch calls
+    // this function at each tick.
+    if (optimize || options.map != MapOption::None) && previous.css.as_deref() != Some(css) {
+        let mut map = (options.map != MapOption::None).then(source_map);
+        if optimize {
             let optimized = optimize_css::optimize(
                 css,
                 &options.optimizer_file,
@@ -376,17 +388,16 @@ fn write(css: &str, mut map: Option<SourceMap>, options: &Options, previous: &mu
             )
             .map_err(Error::new)?;
             previous.optimized_css = optimized.code;
-            previous.css = Some(css.to_string());
             if let Some(raw) = optimized.map {
                 map = Some(source_maps::raw_source_map(raw));
             }
         }
-        // As the official program: with no change of the CSS, the map is
-        // the map from before the optimizer.
-        output = std::borrow::Cow::Borrowed(&previous.optimized_css);
+        previous.map = map;
+        previous.css = Some(css.to_string());
     }
+    let mut output = std::borrow::Cow::Borrowed(if optimize { previous.optimized_css.as_str() } else { css });
 
-    if let Some(map) = &map {
+    if let Some(map) = &previous.map {
         match &options.map {
             MapOption::None => {}
             MapOption::Inline => {
@@ -506,8 +517,8 @@ fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options,
 fn build_once(build: &mut Build, options: &Options, previous: &mut Previous) -> Result<()> {
     let candidates = build.scanner.scan();
     let css = build.compiler.build(&candidates);
-    let map = (options.map != MapOption::None).then(|| source_maps::to_source_map(&build.compiler.build_source_map()));
-    write(&css, map, options, previous)?;
+    let compiler = &build.compiler;
+    write(&css, &|| source_maps::to_source_map(&compiler.build_source_map()), options, previous)?;
     Ok(())
 }
 

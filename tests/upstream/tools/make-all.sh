@@ -25,6 +25,10 @@ node "$TOOLS/gen-full.mjs" "$CLONE" "$OUT"
 
 # 4. cli/*/stdout.css and cli/*/exit.txt
 node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli" 4.3.5
+node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli-map" 4.3.5
 
-# 5. Check
+# 5. source-maps.jsonl.gz
+node "$TOOLS/gen-source-maps.mjs" "$CLONE" "$OUT"
+
+# 6. Check
 python3 "$TOOLS/check.py" "$OUT"

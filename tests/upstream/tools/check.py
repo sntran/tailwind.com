@@ -22,12 +22,19 @@ full = json.load(gzip.open(os.path.join(d, 'full.json.gz'), 'rt', encoding='utf-
 for e in full:
     print(f'full.json.gz: entry with {len(e["candidates"])} candidates, css {len(e["css"])}, optimized {len(e["optimized"])}, minified {len(e["minified"])} characters')
 
-cli = os.path.join(d, 'cli')
-for name in sorted(os.listdir(cli)):
-    c = os.path.join(cli, name)
-    if not os.path.isdir(c):
-        continue
-    code = open(os.path.join(c, 'exit.txt')).read().strip()
-    size = os.path.getsize(os.path.join(c, 'stdout.css'))
-    args = ' '.join(open(os.path.join(c, 'args.txt')).read().split())
-    print(f'cli/{name}: exit {code}, stdout {size} bytes, args: {args}')
+for group in ('cli', 'cli-map'):
+    cli = os.path.join(d, group)
+    for name in sorted(os.listdir(cli)):
+        c = os.path.join(cli, name)
+        if not os.path.isdir(c):
+            continue
+        code = open(os.path.join(c, 'exit.txt')).read().strip()
+        size = os.path.getsize(os.path.join(c, 'stdout.css'))
+        args = ' '.join(open(os.path.join(c, 'args.txt')).read().split())
+        files = sum(len(f) for _, _, f in os.walk(os.path.join(c, 'files')))
+        print(f'{group}/{name}: exit {code}, stdout {size} bytes, {files} files, args: {args}')
+
+maps = [json.loads(l) for l in gzip.open(os.path.join(d, 'source-maps.jsonl.gz'), 'rt', encoding='utf-8')]
+builds = [b for r in maps for b in r['builds']]
+print(f'source-maps.jsonl.gz: {len(maps)} records, {len(builds)} builds, '
+      f'{sum(len(b["map"]["mappings"]) for b in builds)} mappings, {sum("error" in r for r in maps)} errors')

@@ -189,6 +189,8 @@ apply() {
     bash $tools/make-all.sh "$clone" "$work/record"
     node $tools/gen-nodes.mjs "$clone" tests/upstream
     node $tools/gen-extra.mjs "$clone" tests/upstream
+    # After gen-extra: the source maps use its records.
+    node $tools/gen-source-maps.mjs "$clone" tests/upstream
     node $tools/gen-css-utility.mjs "$clone" native/tailwind/tests/fixtures/css_utility.json
     node $tools/gen-variants.mjs "$clone" native/tailwind/tests/fixtures/variants.json
     node $tools/gen-optimize.mjs "$clone" native/tailwind/tests/fixtures/optimize.json
