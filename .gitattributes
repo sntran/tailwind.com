@@ -1,0 +1,7 @@
+# The line ends are LF on all the systems: the tests compare the output of
+# the program with recorded files, byte for byte.
+* text=auto eol=lf
+tests/upstream/** -text
+native/tailwind/tests/fixtures/** -text
+native/tailwind/assets/** -text
+*.gz binary

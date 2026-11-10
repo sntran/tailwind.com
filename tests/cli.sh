@@ -38,6 +38,7 @@ for name in "$@"; do
     # The arguments: one for each line of args.txt.
     set --
     while IFS= read -r arg; do
+        arg=$(printf "%s" "$arg" | tr -d "\r")
         [ -n "$arg" ] && set -- "$@" "$arg"
     done < "$cases/$name/args.txt"
     status=0
