@@ -58,7 +58,7 @@ fn candidates() -> impl Strategy<Value = Vec<String>> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig { cases: 64, failure_persistence: None, ..ProptestConfig::default() })]
 
     /// The output does not depend on the sequence of the candidates.
     #[test]
@@ -95,7 +95,8 @@ proptest! {
     /// The same build two times gives the same text.
     #[test]
     fn a_build_is_deterministic(list in candidates()) {
-        prop_assert_eq!(build(&[list.clone()]), build(&[list]));
+        let first = build(std::slice::from_ref(&list));
+        prop_assert_eq!(first, build(&[list]));
     }
 
     /// The output is CSS that the parser reads, and the printer gives the

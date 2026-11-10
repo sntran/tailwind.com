@@ -23,23 +23,6 @@ const CSS_FILTER_VALUE: &str = "var(--tw-blur, ) var(--tw-brightness, ) var(--tw
 
 const CSS_BACKDROP_FILTER_VALUE: &str = "var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, )";
 
-/// `value.slice(0, -1)` of JavaScript. `None` when the result is not a
-/// complete string (the last character has two UTF-16 units).
-fn without_last_unit(value: &str) -> Option<&str> {
-    match value.chars().next_back() {
-        None => Some(""),
-        Some(c) if c.len_utf16() == 2 => None,
-        Some(c) => Some(&value[..value.len() - c.len_utf8()]),
-    }
-}
-
-/// `isPositiveInteger(value.slice(0, -1))`.
-fn is_integer_percentage(value: &str) -> bool {
-    without_last_unit(value).is_some_and(is_positive_integer)
-}
-
-
-
 fn mask_properties_edge() -> AstNode {
     at_root(vec![
         property("--tw-mask-left", Some("linear-gradient(#fff, #fff)"), None),

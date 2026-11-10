@@ -346,12 +346,11 @@ fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options,
         }
         None => (None, false),
     };
-    if input.is_some() && input == output {
-        let input = input.unwrap();
+    if let Some(input) = input.as_ref().filter(|input| Some(*input) == output.as_ref()) {
         return Err(format!(
             "Specified input file {} and output file {} are identical.",
-            style.highlight(&relative(&input)),
-            style.highlight(&relative(&input))
+            style.highlight(&relative(input)),
+            style.highlight(&relative(input))
         ));
     }
 

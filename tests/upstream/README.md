@@ -193,3 +193,14 @@ python3 tests/upstream/tools/check.py tests/upstream
 | `tools/make-all.sh` | Runs all the steps. |
 
 The generator scripts set `NODE_ENV=test`, the same as the upstream unit tests.
+
+### `nodes.jsonl.gz`
+
+One JSON line for each candidate of `classes.jsonl.gz`: `{"candidate", "kind", "nodes"}`.
+`nodes` has the rules of the candidate before the last pass of the compiler (`compileAstNodes`, then `toCss` of each rule):
+`css`, and `order` and `count` of the property sort. `tools/gen-nodes.mjs` makes the file.
+
+### Fixtures in `native/tailwind/tests/fixtures`
+
+`tools/gen-css-utility.mjs`, `tools/gen-variants.mjs` and `tools/gen-optimize.mjs` make `css_utility.json`, `variants.json` and `optimize.json`.
+Each script takes the path of the upstream clone as its first argument.

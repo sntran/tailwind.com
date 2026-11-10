@@ -71,7 +71,7 @@ impl Theme {
     /// Add a value. A key that ends with `-*` clears a namespace: its value
     /// must be `initial`.
     pub fn add(&self, key: &str, value: &str, options: ThemeOptions) -> Result<(), crate::Error> {
-        if key.ends_with("-*") {
+        if let Some(namespace) = key.strip_suffix("-*") {
             if value != "initial" {
                 return Err(crate::Error::new(format!(
                     "Invalid theme value `{value}` for namespace `{key}`"
@@ -80,7 +80,7 @@ impl Theme {
             if key == "--*" {
                 self.values.borrow_mut().clear();
             } else {
-                self.clear_namespace(&key[..key.len() - 2], NONE);
+                self.clear_namespace(namespace, NONE);
             }
         }
 

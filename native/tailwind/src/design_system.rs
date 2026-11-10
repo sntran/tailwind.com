@@ -23,6 +23,9 @@ pub const COMPILE_RESPECT_IMPORTANT: CompileAstFlags = 1 << 0;
 /// layer sets it (`compat.rs`), as upstream replaces `resolveThemeValue`.
 pub type ResolveThemeValueFn = Rc<dyn Fn(&DesignSystem, &str, bool) -> Option<String>>;
 
+/// The rules of each candidate, by the flags and the address of the candidate.
+type CompiledCache = HashMap<(CompileAstFlags, *const Candidate), Rc<Vec<CompiledNode>>>;
+
 /// The order of each parsed variant, by the address of the variant.
 pub type VariantOrder = HashMap<*const Variant, u32>;
 
@@ -38,7 +41,7 @@ pub struct DesignSystem {
 
     parsed_variants: RefCell<indexmap::IndexMap<String, Option<Rc<Variant>>>>,
     parsed_candidates: RefCell<HashMap<String, Rc<Vec<Rc<Candidate>>>>>,
-    compiled: RefCell<HashMap<(CompileAstFlags, *const Candidate), Rc<Vec<CompiledNode>>>>,
+    compiled: RefCell<CompiledCache>,
     tracked: RefCell<HashSet<String>>,
     variant_order: RefCell<Option<(usize, Rc<VariantOrder>)>>,
 }
