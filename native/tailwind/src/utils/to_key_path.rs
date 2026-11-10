@@ -21,10 +21,7 @@ pub fn to_key_path(path: &str) -> Vec<&str> {
 
         let mut current_index = 0;
 
-        loop {
-            let Some(bracket_l) = part[current_index..].find('[').map(|i| i + current_index) else {
-                break;
-            };
+        while let Some(bracket_l) = part[current_index..].find('[').map(|i| i + current_index) {
             let Some(bracket_r) = part[bracket_l..].find(']').map(|i| i + bracket_l) else {
                 break;
             };

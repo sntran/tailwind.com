@@ -27,7 +27,9 @@ enum State {
 /// not a key of the graph is ignored.
 ///
 /// The upstream callback always throws, so the first cycle is the error.
-pub fn topological_sort<K: Eq + Hash + Clone>(graph: &[(K, Vec<K>)]) -> Result<Vec<K>, CircularDependency<K>> {
+pub fn topological_sort<K: Eq + Hash + Clone>(
+    graph: &[(K, Vec<K>)],
+) -> Result<Vec<K>, CircularDependency<K>> {
     let index: HashMap<&K, usize> = graph.iter().enumerate().map(|(i, (key, _))| (key, i)).collect();
     let mut state = vec![State::New; graph.len()];
     let mut sorted = Vec::with_capacity(graph.len());

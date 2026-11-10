@@ -360,11 +360,8 @@ fn append(target: &mut Vec<SelectorAstNode>, node: SelectorAstNode) {
 
 /// Parse a selector.
 pub fn parse(input: &str) -> Vec<SelectorAstNode> {
-    let input: Cow<'_, str> = if input.contains("\r\n") {
-        Cow::Owned(input.replace("\r\n", "\n"))
-    } else {
-        Cow::Borrowed(input)
-    };
+    let input: Cow<'_, str> =
+        if input.contains("\r\n") { Cow::Owned(input.replace("\r\n", "\n")) } else { Cow::Borrowed(input) };
     parse_normalized(&input)
 }
 
@@ -425,7 +422,8 @@ fn parse_normalized(input: &str) -> Vec<SelectorAstNode> {
             // A function: `.foo:not(.bar)`
             OPEN_PAREN => {
                 let name = std::mem::take(&mut buffer);
-                if matches!(name.as_str(), ":not" | ":where" | ":has" | ":is" | ":-moz-any" | ":-webkit-any") {
+                if matches!(name.as_str(), ":not" | ":where" | ":has" | ":is" | ":-moz-any" | ":-webkit-any")
+                {
                     stack.push(std::mem::replace(&mut frame, Frame { name, ..Frame::default() }));
                     i += 1;
                     continue;
@@ -457,7 +455,11 @@ fn parse_normalized(input: &str) -> Vec<SelectorAstNode> {
                 let mut nodes = Vec::new();
                 // `:nth-child(2n + 1 of .foo, .bar)`: the part after `of` is
                 // a selector list.
-                let of = if name == ":nth-child" || name == ":nth-last-child" { contents.find("of ") } else { None };
+                let of = if name == ":nth-child" || name == ":nth-last-child" {
+                    contents.find("of ")
+                } else {
+                    None
+                };
                 match of {
                     Some(idx) => {
                         nodes.push(value(&contents[..idx + 3]));

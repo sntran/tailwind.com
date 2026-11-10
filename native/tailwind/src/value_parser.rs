@@ -166,11 +166,8 @@ const SPECIAL: [bool; 256] = {
 
 /// Parse a CSS value.
 pub fn parse(input: &str) -> Vec<ValueAstNode> {
-    let input: Cow<'_, str> = if input.contains("\r\n") {
-        Cow::Owned(input.replace("\r\n", "\n"))
-    } else {
-        Cow::Borrowed(input)
-    };
+    let input: Cow<'_, str> =
+        if input.contains("\r\n") { Cow::Owned(input.replace("\r\n", "\n")) } else { Cow::Borrowed(input) };
     let input: &str = &input;
     let bytes = input.as_bytes();
     let len = bytes.len();

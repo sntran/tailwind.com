@@ -50,11 +50,7 @@ pub fn is_valid_arbitrary(input: &str) -> bool {
                     return false;
                 }
             }
-            b';' => {
-                if stack_pos == 0 {
-                    return false;
-                }
-            }
+            b';' if stack_pos == 0 => return false,
             _ => {}
         }
         idx += 1;

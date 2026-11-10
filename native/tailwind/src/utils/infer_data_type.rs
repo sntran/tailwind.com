@@ -275,10 +275,10 @@ pub fn is_fraction(value: &str) -> bool {
 
 /// See <https://developer.mozilla.org/en-US/docs/Learn/CSS/Building_blocks/Values_and_units>.
 const LENGTH_UNITS: [&str; 49] = [
-    "cm", "mm", "Q", "in", "pc", "pt", "px", "em", "ex", "ch", "cap", "ic", "rem", "rex", "rch", "rcap", "ric",
-    "lh", "rlh", "vw", "vh", "vmin", "vmax", "vb", "vi", "svw", "svh", "svi", "svb", "svmin", "svmax", "lvw",
-    "lvh", "lvi", "lvb", "lvmin", "lvmax", "dvw", "dvh", "dvi", "dvb", "dvmin", "dvmax", "cqw", "cqh", "cqi",
-    "cqb", "cqmin", "cqmax",
+    "cm", "mm", "Q", "in", "pc", "pt", "px", "em", "ex", "ch", "cap", "ic", "rem", "rex", "rch", "rcap",
+    "ric", "lh", "rlh", "vw", "vh", "vmin", "vmax", "vb", "vi", "svw", "svh", "svi", "svb", "svmin", "svmax",
+    "lvw", "lvh", "lvi", "lvb", "lvmin", "lvmax", "dvw", "dvh", "dvi", "dvb", "dvmin", "dvmax", "cqw", "cqh",
+    "cqi", "cqb", "cqmin", "cqmax",
 ];
 
 /// `true` when the value is a number with one of the units.

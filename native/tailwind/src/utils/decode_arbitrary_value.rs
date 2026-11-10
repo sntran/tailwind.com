@@ -26,11 +26,7 @@ pub fn decode_arbitrary_value(input: &str) -> Cow<'_, str> {
 /// only `\_` changes.
 fn convert_underscores_to_whitespace(input: &str, skip_underscore_to_space: bool) -> Cow<'_, str> {
     let bytes = input.as_bytes();
-    let needs_change = if skip_underscore_to_space {
-        input.contains("\\_")
-    } else {
-        bytes.contains(&b'_')
-    };
+    let needs_change = if skip_underscore_to_space { input.contains("\\_") } else { bytes.contains(&b'_') };
     if !needs_change {
         return Cow::Borrowed(input);
     }

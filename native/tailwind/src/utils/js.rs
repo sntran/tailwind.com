@@ -88,10 +88,7 @@ fn utf16_key(c: char) -> u32 {
 }
 
 /// The order of two sequences of characters by UTF-16 code units.
-pub fn js_compare_chars(
-    mut a: impl Iterator<Item = char>,
-    mut z: impl Iterator<Item = char>,
-) -> Ordering {
+pub fn js_compare_chars(mut a: impl Iterator<Item = char>, mut z: impl Iterator<Item = char>) -> Ordering {
     loop {
         match (a.next(), z.next()) {
             (None, None) => return Ordering::Equal,
@@ -192,8 +189,8 @@ fn digit_value(b: u8, radix: u32) -> Option<u32> {
     (d < radix).then_some(d)
 }
 
-/// The value of digits in a radix that is a power of two, with correct
-/// rounding. All bytes of `digits` must be digits of the radix.
+/// The value of digits in a radix that is a power of two: a correctly rounded
+/// result. All bytes of `digits` must be digits of the radix.
 fn power_of_two_radix_value(digits: &[u8], radix: u32) -> f64 {
     let bits = radix.trailing_zeros();
     let mut i = 0;
@@ -231,6 +228,10 @@ fn generic_radix_value(digits: &[u8], radix: u32) -> f64 {
     const MAXIMUM_MULTIPLIER: u32 = 0xFFFF_FFFF / 36;
     let mut value = 0f64;
     let mut i = 0;
+    // V8 ignores the zeros at the start.
+    while i < digits.len() && digits[i] == b'0' {
+        i += 1;
+    }
     while i < digits.len() {
         let mut part: u32 = 0;
         let mut multiplier: u32 = 1;
@@ -380,6 +381,52 @@ pub fn js_parse_int(input: &str, radix: u32) -> f64 {
     }
 }
 
+/// The digits and the exponent of a number whose exact value is in the
+/// middle of two decimal numbers of `count` digits. JavaScript then uses the
+/// even one. The result is `None` when the number is not such a tie.
+///
+/// A tie is possible only with 16 or 17 digits.
+fn shortest_digits_of_tie(x: f64, count: usize) -> Option<(String, i32)> {
+    // One more digit, correctly rounded. A tie has a 5 at the end.
+    let probe = format!("{:.*e}", count, x);
+    let (mantissa, _) = probe.split_once('e')?;
+    if !mantissa.ends_with('5') {
+        return None;
+    }
+    // All digits of the exact value: a double has 767 digits at most.
+    let exact = format!("{:.767e}", x);
+    let (mantissa, exponent) = exact.split_once('e')?;
+    let mut exponent: i32 = exponent.parse().ok()?;
+    let all: Vec<u8> = mantissa.bytes().filter(|b| *b != b'.').collect();
+    if all[count] != b'5' || all[count + 1..].iter().any(|b| *b != b'0') {
+        return None;
+    }
+    let mut digits = all[..count].to_vec();
+    if (digits[count - 1] - b'0') % 2 == 1 {
+        // Go up to the even number.
+        let mut i = digits.len();
+        loop {
+            if i == 0 {
+                digits.insert(0, b'1');
+                digits.pop();
+                exponent += 1;
+                break;
+            }
+            i -= 1;
+            if digits[i] == b'9' {
+                digits[i] = b'0';
+            } else {
+                digits[i] += 1;
+                break;
+            }
+        }
+    }
+    let digits = String::from_utf8(digits).ok()?;
+    // At a power of two, the even number can be a different double.
+    let same_number = format!("{}e{}", digits, exponent - (count as i32 - 1)).parse::<f64>() == Ok(x);
+    same_number.then_some((digits, exponent))
+}
+
 /// `String(number)`: `Number.prototype.toString` with radix 10.
 pub fn js_number_to_string(x: f64) -> String {
     if x.is_nan() {
@@ -398,9 +445,15 @@ pub fn js_number_to_string(x: f64) -> String {
     // `{:e}` gives the shortest digits that give the same number again.
     let scientific = format!("{:e}", x.abs());
     let (mantissa, exponent) = scientific.split_once('e').unwrap_or((&scientific, "0"));
-    let exponent: i32 = exponent.parse().unwrap_or(0);
+    let mut exponent: i32 = exponent.parse().unwrap_or(0);
     let mut digits = String::with_capacity(mantissa.len());
     digits.extend(mantissa.chars().filter(|c| *c != '.'));
+    if digits.len() >= 16 {
+        if let Some((tie_digits, tie_exponent)) = shortest_digits_of_tie(x.abs(), digits.len()) {
+            digits = tie_digits;
+            exponent = tie_exponent;
+        }
+    }
     let k = digits.len() as i32;
     let n = exponent + 1;
 

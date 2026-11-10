@@ -63,7 +63,13 @@ pub fn parse(input: &str) -> Option<AttributeSelector<'_>> {
     }
 
     if i == end {
-        return Some(AttributeSelector { attribute, operator: None, quote: None, value: None, sensitivity: None });
+        return Some(AttributeSelector {
+            attribute,
+            operator: None,
+            quote: None,
+            value: None,
+            sensitivity: None,
+        });
     }
 
     // The operator: [data-foo*=value]

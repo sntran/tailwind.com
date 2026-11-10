@@ -66,10 +66,8 @@ pub fn segment(input: &str, separator: u8) -> Vec<&str> {
                 }
                 stack_pos += 1;
             }
-            b')' | b']' | b'}' => {
-                if stack_pos > 0 && stack_pos <= STACK_SIZE && c == stack[stack_pos - 1] {
-                    stack_pos -= 1;
-                }
+            b')' | b']' | b'}' if stack_pos > 0 && stack_pos <= STACK_SIZE && c == stack[stack_pos - 1] => {
+                stack_pos -= 1;
             }
             _ => {}
         }

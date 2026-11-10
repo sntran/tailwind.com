@@ -37,7 +37,7 @@ pub fn expand(pattern: &str) -> Result<Vec<String>, ExpandError> {
     let pre = &pattern[..index];
     let rest = &pattern[index..];
 
-    // Find the closing brace of the first brace.
+    // Find the `}` that agrees with the first `{`.
     let mut depth = 0usize;
     let mut end_index = rest.rfind('}');
     for (i, b) in rest.bytes().enumerate() {
