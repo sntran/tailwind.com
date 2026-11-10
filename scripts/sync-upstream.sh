@@ -20,7 +20,7 @@
 #       WORK/PORT.md as the guide.
 #
 # WORK is a scratch directory (default: build/sync). The steps need git,
-# Node.js 22, pnpm and npm. See docs/SYNC.md.
+# bash, Node.js 22, pnpm and npm. See docs/SYNC.md.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
@@ -46,6 +46,8 @@ expect() {
 
 check() {
     status=0
+    # shellcheck disable=SC1091
+    . ./UPSTREAM
     v=$TAILWINDCSS_VERSION
     expect native/tailwind/src/index.rs "pub const VERSION: &str = \"$v\";"
     expect native/tailwind/Cargo.toml "tag = \"v$v\""
@@ -145,7 +147,8 @@ apply() {
     sed -i.bak "s|v$old|v$new|g; s|@$old|@$new|g; s|$TAILWINDCSS_COMMIT|$commit|" tests/upstream/README.md
     sed -i.bak "s|tag v$old|tag v$new|; s| $old\$| $new|" tests/upstream/tools/make-all.sh
     sed -i.bak "s|version = '$old'|version = '$new'|" tests/upstream/tools/run-cli.mjs
-    find native src lib tests/upstream/tools tests/upstream/README.md README.md -name '*.bak' -exec rm -f {} +
+    rm -f README.md.bak tests/upstream/README.md.bak
+    find native src lib tests/upstream/tools -name '*.bak' -exec rm -f {} +
     set_key TAILWINDCSS_VERSION "$new"
     set_key TAILWINDCSS_COMMIT "$commit"
 
@@ -183,7 +186,7 @@ apply() {
     fi
 
     log "The record of the official compiler (this takes some minutes)"
-    sh $tools/make-all.sh "$clone" "$work/record"
+    bash $tools/make-all.sh "$clone" "$work/record"
     node $tools/gen-nodes.mjs "$clone" tests/upstream
     node $tools/gen-extra.mjs "$clone" tests/upstream
     node $tools/gen-css-utility.mjs "$clone" native/tailwind/tests/fixtures/css_utility.json
@@ -196,7 +199,7 @@ apply() {
     check
     log "The tests: each failure is behavior of Tailwind CSS $new to port"
     cargo update -p tailwindcss-oxide > /dev/null 2>&1 || true
-    if cargo test --release > "$work/test.log" 2>&1; then
+    if cargo test --release --no-fail-fast > "$work/test.log" 2>&1; then
         log "all the tests pass: Tailwind CSS $new needs no change by hand"
     else
         grep -E 'test result: FAILED|^test .* FAILED|records|different' "$work/test.log" | head -40 >&2 || true
