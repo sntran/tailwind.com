@@ -120,7 +120,7 @@ design system in `runtime.rs` (see below), the file events
 
 ### The bundle and the shims
 
-`assets/compat.js` is one JavaScript file (88 KB, minified), made by
+`assets/compat.js` is one JavaScript file (89 KB, minified), made by
 `tests/upstream/tools/build-compat-bundle.mjs` with esbuild from the
 source of Tailwind CSS and from `native/tailwind/js`. It is in the
 repository, so a build needs no Node.js.
@@ -354,7 +354,7 @@ one for aarch64, of about 9 MB each. In one copy:
 | Lightning CSS with its CSS parser, for `--minify` and `--optimize`, and its source maps | about 3.5 MB |
 | The compiler (the utilities, the variants, the default theme of v3) | about 1 MB |
 | The scanner of Tailwind CSS with its regular expressions and its `.gitignore` code | about 1 MB |
-| QuickJS with its Unicode tables, the JSON code, and the plugin layer of Tailwind CSS (88 KB) | about 1.5 MB |
+| QuickJS with its Unicode tables, the JSON code, and the plugin layer of Tailwind CSS (89 KB) | about 1.5 MB |
 | The Rust standard library, the unwind tables, the stylesheets, Cosmopolitan | the rest |
 
 The source maps (the code of the compiler and of the program, and the

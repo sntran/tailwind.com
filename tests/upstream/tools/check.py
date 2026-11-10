@@ -22,7 +22,7 @@ full = json.load(gzip.open(os.path.join(d, 'full.json.gz'), 'rt', encoding='utf-
 for e in full:
     print(f'full.json.gz: entry with {len(e["candidates"])} candidates, css {len(e["css"])}, optimized {len(e["optimized"])}, minified {len(e["minified"])} characters')
 
-for group in ('cli', 'cli-map'):
+for group in ('cli', 'cli-map', 'cli-js'):
     cli = os.path.join(d, group)
     for name in sorted(os.listdir(cli)):
         c = os.path.join(cli, name)
