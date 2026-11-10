@@ -1,13 +1,36 @@
 //! The variants: `variants.ts` of Tailwind CSS.
 
-use crate::ast::AstNode;
+use crate::ast::{at_root, at_rule, context, decl, rule, style_rule, AstNode, AtRule, ContextMap, StyleRule};
 use crate::candidate::{ValueKind, Variant};
+use crate::compile::apply_variant;
 use crate::design_system::DesignSystem;
 use crate::theme::Theme;
+use crate::utils::compare_breakpoints::{compare_breakpoints, Direction};
+use crate::utils::infer_data_type::is_positive_integer;
+use crate::utils::js::{is_js_whitespace, js_trim};
+use crate::utils::segment::segment;
+use crate::value_parser::{self, ValueAstNode};
+use crate::walk::{walk, WalkAction};
+use crate::{Error, Features, FEATURES_NONE, FEATURES_VARIANTS};
 use indexmap::IndexMap;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::rc::Rc;
+
+/// The test of a variant name: `/^@?[a-z0-9][a-zA-Z0-9_-]*(?<![_-])$/`.
+pub fn is_valid_variant_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    let bytes = bytes.strip_prefix(b"@").unwrap_or(bytes);
+    let Some((first, rest)) = bytes.split_first() else { return false };
+    if !(first.is_ascii_lowercase() || first.is_ascii_digit()) {
+        return false;
+    }
+    if !rest.iter().all(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-') {
+        return false;
+    }
+    !matches!(bytes.last(), Some(b'_' | b'-'))
+}
 
 /// The kind of a variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +80,8 @@ pub struct Variants {
     /// The variants of one group have the same order.
     group_order: Option<i64>,
     last_order: i64,
+    /// The error of a variant function. Upstream throws it.
+    error: RefCell<Option<Error>>,
 }
 
 impl Variants {
@@ -234,6 +259,63 @@ impl Variants {
         self.variants.keys()
     }
 
+    pub fn entries(&self) -> impl Iterator<Item = (&String, &VariantInfo)> {
+        self.variants.iter()
+    }
+
+    /// Register a static variant from the body of an `@custom-variant`
+    /// rule. Each `@slot` of the body gets the nodes of the rule.
+    ///
+    /// Upstream throws when an `@variant` of the body is not valid. Here
+    /// the function of the variant returns `None`, and `take_error` gives
+    /// the error.
+    pub fn from_ast(&mut self, name: impl Into<String>, ast: Vec<AstNode>) {
+        let mut selectors: Vec<String> = Vec::new();
+        let mut uses_at_variant = false;
+        let mut uses_at_scope = false;
+        collect_selectors(&ast, &mut selectors, &mut uses_at_variant, &mut uses_at_scope);
+        let selector_refs: Vec<&str> = selectors.iter().map(String::as_str).collect();
+        let compounds = compounds_for_selectors(&selector_refs);
+
+        self.r#static(
+            name,
+            move |r, _, ds| {
+                let mut body = ast.clone();
+                if uses_at_variant {
+                    if let Err(error) = substitute_at_variant(&mut body, ds) {
+                        ds.variants.set_error(error);
+                        return None;
+                    }
+                }
+
+                let nodes = r.children_mut()?;
+                if uses_at_scope {
+                    let user = context(source_context("user"), std::mem::take(nodes));
+                    substitute_at_slot(&mut body, std::slice::from_ref(&user));
+                    *nodes = vec![context(source_context("variant"), body)];
+                } else {
+                    substitute_at_slot(&mut body, nodes);
+                    *nodes = body;
+                }
+                Some(())
+            },
+            VariantOptions { compounds: Some(compounds), order: None },
+        );
+    }
+
+    /// Keep the error of a variant function. The first error stays.
+    pub fn set_error(&self, error: Error) {
+        let mut slot = self.error.borrow_mut();
+        if slot.is_none() {
+            *slot = Some(error);
+        }
+    }
+
+    /// Take the error of a variant function, if there is one.
+    pub fn take_error(&self) -> Option<Error> {
+        self.error.borrow_mut().take()
+    }
+
     fn set(&mut self, name: String, kind: VariantKind, apply_fn: VariantFn, compounds_with: Compounds, options: VariantOptions) {
         let compounds = options.compounds.unwrap_or(COMPOUNDS_STYLE_RULES);
         if let Some(existing) = self.variants.get_mut(&name) {
@@ -291,12 +373,785 @@ pub fn compounds_for_selectors(selectors: &[&str]) -> Compounds {
     compounds
 }
 
+/// A context with one key: `source`.
+fn source_context(source: &str) -> ContextMap {
+    let mut map = ContextMap::new();
+    map.insert("source".into(), source.into());
+    map
+}
+
+/// Collect the selectors of the body of a custom variant.
+fn collect_selectors(ast: &[AstNode], selectors: &mut Vec<String>, uses_at_variant: &mut bool, uses_at_scope: &mut bool) {
+    for node in ast {
+        match node {
+            AstNode::Rule(r) => selectors.push(r.selector.clone()),
+            AstNode::AtRule(r) if r.name == "@variant" => *uses_at_variant = true,
+            AstNode::AtRule(r) if r.name != "@slot" => {
+                if r.name == "@scope" {
+                    *uses_at_scope = true;
+                }
+                selectors.push(format!("{} {}", r.name, r.params));
+            }
+            _ => {}
+        }
+        if let Some(children) = node.children() {
+            collect_selectors(children, selectors, uses_at_variant, uses_at_scope);
+        }
+    }
+}
+
+/// Put `nodes` around the children of the rule, one time for each selector.
+fn wrap_children(r: &mut AstNode, selectors: &[&str]) -> Option<()> {
+    let nodes = r.children_mut()?;
+    let body = std::mem::take(nodes);
+    let last = selectors.len().saturating_sub(1);
+    let mut body = Some(body);
+    *nodes = selectors
+        .iter()
+        .enumerate()
+        .map(|(idx, selector)| {
+            let children = if idx == last { body.take().unwrap_or_default() } else { body.clone().unwrap_or_default() };
+            rule(*selector, children)
+        })
+        .collect();
+    Some(())
+}
+
+/// Register a static variant such as `hover`.
+fn static_variant(variants: &mut Variants, name: &str, selectors: &'static [&'static str], compounds: Option<Compounds>) {
+    let compounds = compounds.unwrap_or_else(|| compounds_for_selectors(selectors));
+    variants.r#static(name, move |r, _, _| wrap_children(r, selectors), VariantOptions { compounds: Some(compounds), order: None });
+}
+
+/// Replace the children of the rule with one node that has them.
+fn wrap_in(r: &mut AstNode, make: impl FnOnce(Vec<AstNode>) -> AstNode) -> Option<()> {
+    let nodes = r.children_mut()?;
+    let body = std::mem::take(nodes);
+    *nodes = vec![make(body)];
+    Some(())
+}
+
+fn negate_conditions(rule_name: &str, conditions: &[&str]) -> Vec<String> {
+    conditions
+        .iter()
+        .map(|condition| {
+            if rule_name == "@container" {
+                let mut ast = value_parser::parse(js_trim(condition));
+                let is_word = |node: &ValueAstNode| node.is_word();
+                let is_not = |node: &ValueAstNode| node.is_word() && node.value() == "not";
+
+                if !ast.is_empty() && ast[0].is_function() {
+                    // `{query}`
+                    format!("not {condition}")
+                } else if ast.len() >= 3 && is_not(&ast[0]) && ast[2].is_function() {
+                    // `not {query}`
+                    ast.drain(0..2);
+                    value_parser::to_css(&ast)
+                } else if ast.len() >= 5 && is_word(&ast[0]) && is_not(&ast[2]) && ast[4].is_function() {
+                    // `{name} not {query}`
+                    ast.drain(2..4);
+                    value_parser::to_css(&ast)
+                } else if ast.len() >= 3 && is_word(&ast[0]) && !is_not(&ast[0]) && ast[2].is_function() {
+                    // `{name} {query}`
+                    ast.splice(1..1, [value_parser::separator(" "), value_parser::word("not")]);
+                    value_parser::to_css(&ast)
+                } else {
+                    format!("not {condition}")
+                }
+            } else {
+                let condition = js_trim(condition);
+                let parts = segment(condition, b' ');
+                if parts[0] == "not" {
+                    // `@media not {query}`, `@supports not {query}`
+                    parts[1..].join(" ")
+                } else {
+                    format!("not {condition}")
+                }
+            }
+        })
+        .collect()
+}
+
+fn negate_at_rule(rule: &AtRule) -> Option<AstNode> {
+    if !matches!(rule.name.as_str(), "@media" | "@supports" | "@container") {
+        return None;
+    }
+    let conditions = segment(&rule.params, b',');
+    // The negation of a list of conditions is not supported.
+    if conditions.len() > 1 {
+        return None;
+    }
+    let conditions = negate_conditions(&rule.name, &conditions);
+    Some(at_rule(rule.name.clone(), conditions.join(", "), Vec::new()))
+}
+
+fn negate_selector(selector: &str) -> Option<String> {
+    if selector.contains("::") {
+        return None;
+    }
+    // `&:hover` becomes `&:not(*:hover)`.
+    let selectors: Vec<String> = segment(selector, b',').into_iter().map(|sel| sel.replace('&', "*")).collect();
+    Some(format!("&:not({})", selectors.join(", ")))
+}
+
+/// The state of the walk of the `not` variant.
+#[derive(Default)]
+struct NotWalk {
+    /// The new children of the rule, after the first rule that applies.
+    rules: Option<Vec<AstNode>>,
+    did_apply: bool,
+}
+
+/// One step of the walk of the `not` variant. The result is `false` when
+/// the walk stops.
+///
+/// Upstream replaces the root of the walk when a rule applies, and then
+/// continues in the old tree. From then on, the root in the path is the
+/// style rule `&`.
+fn not_visit<'a>(node: &'a AstNode, path: &mut Vec<&'a AstNode>, state: &mut NotWalk) -> bool {
+    let children = match node {
+        AstNode::Rule(StyleRule { nodes, .. }) | AstNode::AtRule(AtRule { nodes, .. }) if nodes.is_empty() => None,
+        other => other.children(),
+    };
+
+    if let Some(children) = children {
+        if children.is_empty() {
+            return true;
+        }
+        path.push(node);
+        for child in children {
+            if !not_visit(child, path, state) {
+                path.pop();
+                return false;
+            }
+        }
+        path.pop();
+        return true;
+    }
+    if !matches!(node, AstNode::Rule(_) | AstNode::AtRule(_)) {
+        return true;
+    }
+
+    // A rule with no children. Reject nested style rules and nested at-rules.
+    let mut at_rules: Vec<&AtRule> = Vec::new();
+    let mut style_rules: Vec<&str> = Vec::new();
+    for (idx, ancestor) in path.iter().copied().chain(std::iter::once(node)).enumerate() {
+        if idx == 0 && state.rules.is_some() {
+            style_rules.push("&");
+            continue;
+        }
+        match ancestor {
+            AstNode::AtRule(r) => at_rules.push(r),
+            AstNode::Rule(r) => style_rules.push(&r.selector),
+            _ => {}
+        }
+    }
+    if at_rules.len() > 1 || style_rules.len() > 1 {
+        return false;
+    }
+
+    let mut rules: Vec<AstNode> = Vec::new();
+    for selector in style_rules {
+        let Some(selector) = negate_selector(selector) else {
+            state.did_apply = false;
+            return false;
+        };
+        rules.push(style_rule(selector, Vec::new()));
+    }
+    for r in at_rules {
+        let Some(negated) = negate_at_rule(r) else {
+            state.did_apply = false;
+            return false;
+        };
+        rules.push(negated);
+    }
+
+    state.rules = Some(rules);
+    state.did_apply = true;
+    true
+}
+
+/// Change the selector of each style rule of the tree. The result is
+/// `false` when a style rule is in another style rule.
+fn rewrite_selectors(node: &mut AstNode, in_style_rule: bool, rewrite: &dyn Fn(&str) -> String) -> bool {
+    let is_style_rule = if let AstNode::Rule(r) = node {
+        if in_style_rule {
+            return false;
+        }
+        r.selector = rewrite(&r.selector);
+        true
+    } else {
+        false
+    };
+    if let Some(children) = node.children_mut() {
+        for child in children {
+            if !rewrite_selectors(child, in_style_rule || is_style_rule, rewrite) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// The function of a compound variant that changes each selector.
+fn selector_variant(rule_node: &mut AstNode, rewrite: &dyn Fn(&str) -> String) -> Option<()> {
+    // No style rule in the tree: the variant does not apply.
+    fn has_style_rule(node: &AstNode) -> bool {
+        matches!(node, AstNode::Rule(_)) || node.children().is_some_and(|c| c.iter().any(has_style_rule))
+    }
+    if !rewrite_selectors(rule_node, false, rewrite) {
+        return None;
+    }
+    has_style_rule(rule_node).then_some(())
+}
+
+fn is_relative_arbitrary(variant: &Variant) -> bool {
+    matches!(variant, Variant::Compound { variant, .. } if matches!(**variant, Variant::Arbitrary { relative: true, .. }))
+}
+
+/// The function of `group` and `peer`. `combinator` is the text between
+/// the selector of the group and `&`.
+fn group_or_peer(name: &'static str, combinator: &'static str) -> impl Fn(&mut AstNode, &Variant, &DesignSystem) -> Option<()> {
+    move |rule_node, variant, ds| {
+        if is_relative_arbitrary(variant) {
+            return None;
+        }
+
+        let prefix = match &ds.theme.prefix {
+            Some(prefix) if !prefix.is_empty() => format!("{prefix}\\:"),
+            _ => String::new(),
+        };
+        // The modifier gives a name to the group.
+        let variant_selector = match variant.modifier() {
+            Some(modifier) => format!(":where(.{prefix}{name}\\/{})", modifier.value),
+            None => format!(":where(.{prefix}{name})"),
+        };
+
+        selector_variant(rule_node, &|selector| {
+            let mut selector = selector.replace('&', &variant_selector);
+            // A list of selectors must be in `:is(…)`.
+            if segment(&selector, b',').len() > 1 {
+                selector = format!(":is({selector})");
+            }
+            format!(":is({selector}{combinator}&)")
+        })
+    }
+}
+
+/// `[\w-]*\s*\(` at the start of the value.
+fn starts_with_function(value: &str) -> bool {
+    let rest = value.trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    let rest = rest.trim_start_matches(is_js_whitespace);
+    rest.starts_with('(')
+}
+
+/// Put spaces around `and`, `or` and `not` when they are functions.
+fn space_supports_keywords(ast: &mut [ValueAstNode]) -> bool {
+    let mut changed = false;
+    for node in ast {
+        let ValueAstNode::Function(f) = node else { continue };
+        // A selector can have `a:not(b)`: do not change it.
+        if f.value == "selector" {
+            continue;
+        }
+        if matches!(f.value.as_str(), "and" | "or" | "not") {
+            changed = true;
+            f.value = format!(" {} ", f.value);
+        }
+        changed |= space_supports_keywords(&mut f.nodes);
+    }
+    changed
+}
+
+/// The function of the `nth-*` variants.
+fn nth_variant(pseudo: &'static str) -> impl Fn(&mut AstNode, &Variant, &DesignSystem) -> Option<()> {
+    move |rule_node, variant, _| {
+        let value = variant.value()?;
+        if variant.modifier().is_some() {
+            return None;
+        }
+        // A bare value must be a number.
+        if value.kind == ValueKind::Named && !is_positive_integer(&value.value) {
+            return None;
+        }
+        let selector = format!("&:{pseudo}({})", value.value);
+        wrap_in(rule_node, |nodes| style_rule(selector, nodes))
+    }
+}
+
+/// The value of a breakpoint variant (`sm`, `min-*`, `max-*`).
+fn resolved_breakpoint(variant: &Variant, theme: &Theme) -> Option<String> {
+    match variant {
+        Variant::Static { root } => theme.resolve_value(Some(root), &["--breakpoint"]),
+        Variant::Functional { value, modifier, .. } => {
+            let value = value.as_ref()?;
+            if modifier.is_some() {
+                return None;
+            }
+            let value = match value.kind {
+                ValueKind::Arbitrary => Some(value.value.clone()),
+                ValueKind::Named => theme.resolve_value(Some(&value.value), &["--breakpoint"]),
+            }?;
+            if value.is_empty() || value.contains("var(") {
+                return None;
+            }
+            Some(value)
+        }
+        Variant::Arbitrary { .. } | Variant::Compound { .. } => None,
+    }
+}
+
+/// The value of a container query variant (`@*`, `@min-*`, `@max-*`).
+fn resolved_width(variant: &Variant, theme: &Theme) -> Option<String> {
+    match variant {
+        Variant::Functional { value, .. } => {
+            let value = value.as_ref()?;
+            let value = match value.kind {
+                ValueKind::Arbitrary => Some(value.value.clone()),
+                ValueKind::Named => theme.resolve_value(Some(&value.value), &["--container"]),
+            }?;
+            if value.is_empty() || value.contains("var(") {
+                return None;
+            }
+            Some(value)
+        }
+        _ => None,
+    }
+}
+
+/// Compare two variants by their values. The responsive variants and the
+/// container queries use this function.
+fn compare_breakpoint_variants(
+    a: &Variant,
+    z: &Variant,
+    direction: Direction,
+    lookup: fn(&Variant, &Theme) -> Option<String>,
+    theme: &Theme,
+) -> i32 {
+    if std::ptr::eq(a, z) {
+        return 0;
+    }
+    let asc = direction == Direction::Asc;
+    let Some(a_value) = lookup(a, theme) else { return if asc { -1 } else { 1 } };
+    let Some(z_value) = lookup(z, theme) else { return if asc { 1 } else { -1 } };
+    match compare_breakpoints(&a_value, &z_value, direction) {
+        Ordering::Less => -1,
+        Ordering::Equal => 0,
+        Ordering::Greater => 1,
+    }
+}
+
+fn compare_by(direction: Direction, lookup: fn(&Variant, &Theme) -> Option<String>) -> Option<CompareFn> {
+    Some(Rc::new(move |a, z, ds| compare_breakpoint_variants(a, z, direction, lookup, &ds.theme)))
+}
+
+/// The function of a container query variant. `operator` is `<` or `>=`.
+fn container_variant(operator: &'static str) -> impl Fn(&mut AstNode, &Variant, &DesignSystem) -> Option<()> {
+    move |rule_node, variant, ds| {
+        let value = resolved_width(variant, &ds.theme)?;
+        let params = match variant.modifier() {
+            Some(modifier) => format!("{} (width {operator} {value})", modifier.value),
+            None => format!("(width {operator} {value})"),
+        };
+        wrap_in(rule_node, |nodes| at_rule("@container", params, nodes))
+    }
+}
+
+/// The function of `min` and `max`. `operator` is `<` or `>=`.
+fn media_width_variant(operator: &'static str) -> impl Fn(&mut AstNode, &Variant, &DesignSystem) -> Option<()> {
+    move |rule_node, variant, ds| {
+        if variant.modifier().is_some() {
+            return None;
+        }
+        let value = resolved_breakpoint(variant, &ds.theme)?;
+        wrap_in(rule_node, |nodes| at_rule("@media", format!("(width {operator} {value})"), nodes))
+    }
+}
+
 /// All the variants of Tailwind CSS.
-pub fn create_variants(_theme: &Theme) -> Variants {
-    Variants::new()
+pub fn create_variants(theme: &Theme) -> Variants {
+    let mut variants = Variants::new();
+    let v = &mut variants;
+    let at_rules = VariantOptions { compounds: Some(COMPOUNDS_AT_RULES), order: None };
+    let never = VariantOptions { compounds: Some(COMPOUNDS_NEVER), order: None };
+
+    static_variant(v, "*", &[":is(& > *)"], Some(COMPOUNDS_NEVER));
+    static_variant(v, "**", &[":is(& *)"], Some(COMPOUNDS_NEVER));
+
+    v.compound(
+        "not",
+        COMPOUNDS_STYLE_RULES | COMPOUNDS_AT_RULES,
+        |rule_node, variant, _| {
+            if is_relative_arbitrary(variant) {
+                return None;
+            }
+            if variant.modifier().is_some() {
+                return None;
+            }
+
+            let mut state = NotWalk::default();
+            not_visit(rule_node, &mut Vec::new(), &mut state);
+            if let Some(rules) = state.rules.take() {
+                *rule_node = style_rule("&", rules);
+            }
+
+            if let AstNode::Rule(r) = rule_node {
+                if r.selector == "&" && r.nodes.len() == 1 {
+                    let only = r.nodes.pop()?;
+                    *rule_node = only;
+                }
+            }
+
+            // The variant does not apply when no rule was changed.
+            state.did_apply.then_some(())
+        },
+        VariantOptions::default(),
+    );
+
+    v.compound("group", COMPOUNDS_STYLE_RULES, group_or_peer("group", " "), VariantOptions::default());
+    v.compound("peer", COMPOUNDS_STYLE_RULES, group_or_peer("peer", " ~ "), VariantOptions::default());
+
+    static_variant(v, "first-letter", &["&::first-letter"], None);
+    static_variant(v, "first-line", &["&::first-line"], None);
+
+    static_variant(v, "marker", &["& *::marker", "&::marker", "& *::-webkit-details-marker", "&::-webkit-details-marker"], None);
+
+    static_variant(v, "selection", &["& *::selection", "&::selection"], None);
+    static_variant(v, "file", &["&::file-selector-button"], None);
+    static_variant(v, "placeholder", &["&::placeholder"], None);
+    static_variant(v, "backdrop", &["&::backdrop"], None);
+    static_variant(v, "details-content", &["&::details-content"], None);
+
+    for (name, selector) in [("before", "&::before"), ("after", "&::after")] {
+        v.r#static(
+            name,
+            move |r, _, _| {
+                wrap_in(r, |nodes| {
+                    let content_properties = at_root(vec![at_rule(
+                        "@property",
+                        "--tw-content",
+                        vec![decl("syntax", "\"*\""), decl("initial-value", "\"\""), decl("inherits", "false")],
+                    )]);
+                    let mut children = vec![content_properties, decl("content", "var(--tw-content)")];
+                    children.extend(nodes);
+                    style_rule(selector, children)
+                })
+            },
+            never,
+        );
+    }
+
+    // Positional
+    static_variant(v, "first", &["&:first-child"], None);
+    static_variant(v, "last", &["&:last-child"], None);
+    static_variant(v, "only", &["&:only-child"], None);
+    static_variant(v, "odd", &["&:nth-child(odd)"], None);
+    static_variant(v, "even", &["&:nth-child(even)"], None);
+    static_variant(v, "first-of-type", &["&:first-of-type"], None);
+    static_variant(v, "last-of-type", &["&:last-of-type"], None);
+    static_variant(v, "only-of-type", &["&:only-of-type"], None);
+
+    // State
+    static_variant(v, "visited", &["&:visited"], None);
+    static_variant(v, "target", &["&:target"], None);
+    static_variant(v, "open", &["&:is([open], :popover-open, :open)"], None);
+
+    // Forms
+    static_variant(v, "default", &["&:default"], None);
+    static_variant(v, "checked", &["&:checked"], None);
+    static_variant(v, "indeterminate", &["&:indeterminate"], None);
+    static_variant(v, "placeholder-shown", &["&:placeholder-shown"], None);
+    static_variant(v, "autofill", &["&:autofill"], None);
+    static_variant(v, "optional", &["&:optional"], None);
+    static_variant(v, "required", &["&:required"], None);
+    static_variant(v, "valid", &["&:valid"], None);
+    static_variant(v, "invalid", &["&:invalid"], None);
+    static_variant(v, "user-valid", &["&:user-valid"], None);
+    static_variant(v, "user-invalid", &["&:user-invalid"], None);
+    static_variant(v, "in-range", &["&:in-range"], None);
+    static_variant(v, "out-of-range", &["&:out-of-range"], None);
+    static_variant(v, "read-only", &["&:read-only"], None);
+
+    // Content
+    static_variant(v, "empty", &["&:empty"], None);
+
+    // Interactive
+    static_variant(v, "focus-within", &["&:focus-within"], None);
+    v.r#static(
+        "hover",
+        |r, _, _| wrap_in(r, |nodes| style_rule("&:hover", vec![at_rule("@media", "(hover: hover)", nodes)])),
+        VariantOptions::default(),
+    );
+    static_variant(v, "focus", &["&:focus"], None);
+    static_variant(v, "focus-visible", &["&:focus-visible"], None);
+    static_variant(v, "active", &["&:active"], None);
+    static_variant(v, "enabled", &["&:enabled"], None);
+    static_variant(v, "disabled", &["&:disabled"], None);
+
+    static_variant(v, "inert", &["&:is([inert], [inert] *)"], None);
+
+    v.compound(
+        "in",
+        COMPOUNDS_STYLE_RULES,
+        |rule_node, variant, _| {
+            if variant.modifier().is_some() {
+                return None;
+            }
+            // `&:hover` becomes `:where(*:hover) &`.
+            selector_variant(rule_node, &|selector| format!(":where({}) &", selector.replace('&', "*")))
+        },
+        VariantOptions::default(),
+    );
+
+    v.compound(
+        "has",
+        COMPOUNDS_STYLE_RULES,
+        |rule_node, variant, _| {
+            if variant.modifier().is_some() {
+                return None;
+            }
+            // `&:hover` becomes `&:has(*:hover)`.
+            selector_variant(rule_node, &|selector| format!("&:has({})", selector.replace('&', "*")))
+        },
+        VariantOptions::default(),
+    );
+
+    v.functional(
+        "aria",
+        |rule_node, variant, _| {
+            let value = variant.value()?;
+            if variant.modifier().is_some() {
+                return None;
+            }
+            let selector = match value.kind {
+                ValueKind::Arbitrary => format!("[aria-{}]", quote_attribute_value(&value.value)),
+                ValueKind::Named => format!("[aria-{}=\"true\"]", value.value),
+            };
+            crate::attribute_selector_parser::parse(&selector)?;
+            wrap_in(rule_node, |nodes| style_rule(format!("&{selector}"), nodes))
+        },
+        VariantOptions::default(),
+    );
+
+    v.functional(
+        "data",
+        |rule_node, variant, _| {
+            let value = variant.value()?;
+            if variant.modifier().is_some() {
+                return None;
+            }
+            let selector = format!("[data-{}]", quote_attribute_value(&value.value));
+            crate::attribute_selector_parser::parse(&selector)?;
+            wrap_in(rule_node, |nodes| style_rule(format!("&{selector}"), nodes))
+        },
+        VariantOptions::default(),
+    );
+
+    v.functional("nth", nth_variant("nth-child"), VariantOptions::default());
+    v.functional("nth-last", nth_variant("nth-last-child"), VariantOptions::default());
+    v.functional("nth-of-type", nth_variant("nth-of-type"), VariantOptions::default());
+    v.functional("nth-last-of-type", nth_variant("nth-last-of-type"), VariantOptions::default());
+
+    v.functional(
+        "supports",
+        |rule_node, variant, _| {
+            let value = variant.value()?;
+            if variant.modifier().is_some() {
+                return None;
+            }
+            let mut value = value.value.clone();
+
+            // A value that starts with a function, such as `not(…)` or
+            // `selector(…)`, is used as it is.
+            if starts_with_function(&value) {
+                // `(a)or(b)` is not valid in Chrome, `(a) or (b)` is.
+                let mut ast = value_parser::parse(&value);
+                let query = if space_supports_keywords(&mut ast) { value_parser::to_css(&ast) } else { value };
+                return wrap_in(rule_node, |nodes| at_rule("@supports", query, nodes));
+            }
+
+            // `supports-[display]` becomes `(display: var(--tw))`.
+            if !value.contains(':') {
+                value = format!("{value}: var(--tw)");
+            }
+
+            // `supports-[display:flex]` becomes `(display:flex)`.
+            if !value.starts_with('(') || !value.ends_with(')') {
+                value = format!("({value})");
+            }
+
+            wrap_in(rule_node, |nodes| at_rule("@supports", value, nodes))
+        },
+        at_rules,
+    );
+
+    static_variant(v, "motion-safe", &["@media (prefers-reduced-motion: no-preference)"], None);
+    static_variant(v, "motion-reduce", &["@media (prefers-reduced-motion: reduce)"], None);
+
+    static_variant(v, "contrast-more", &["@media (prefers-contrast: more)"], None);
+    static_variant(v, "contrast-less", &["@media (prefers-contrast: less)"], None);
+
+    // Breakpoints. Upstream reads the theme for `max-*` and `min-*` at the
+    // time of the call. It reads the values of `sm`, `md`, … here.
+    v.group(|v| v.functional("max", media_width_variant("<"), at_rules), compare_by(Direction::Desc, resolved_breakpoint));
+
+    v.group(
+        |v| {
+            for (key, value) in theme.namespace("--breakpoint") {
+                let Some(key) = key else { continue };
+                v.r#static(
+                    key,
+                    move |r, _, _| wrap_in(r, |nodes| at_rule("@media", format!("(width >= {value})"), nodes)),
+                    at_rules,
+                );
+            }
+            v.functional("min", media_width_variant(">="), at_rules);
+        },
+        compare_by(Direction::Asc, resolved_breakpoint),
+    );
+
+    // Container queries
+    v.group(|v| v.functional("@max", container_variant("<"), at_rules), compare_by(Direction::Desc, resolved_width));
+
+    v.group(
+        |v| {
+            v.functional("@", container_variant(">="), at_rules);
+            v.functional("@min", container_variant(">="), at_rules);
+        },
+        compare_by(Direction::Asc, resolved_width),
+    );
+
+    static_variant(v, "portrait", &["@media (orientation: portrait)"], None);
+    static_variant(v, "landscape", &["@media (orientation: landscape)"], None);
+
+    static_variant(v, "ltr", &["&:where(:dir(ltr), [dir=\"ltr\"], [dir=\"ltr\"] *)"], None);
+    static_variant(v, "rtl", &["&:where(:dir(rtl), [dir=\"rtl\"], [dir=\"rtl\"] *)"], None);
+
+    static_variant(v, "dark", &["@media (prefers-color-scheme: dark)"], None);
+
+    static_variant(v, "starting", &["@starting-style"], None);
+
+    static_variant(v, "print", &["@media print"], None);
+
+    static_variant(v, "forced-colors", &["@media (forced-colors: active)"], None);
+
+    static_variant(v, "inverted-colors", &["@media (inverted-colors: inverted)"], None);
+
+    static_variant(v, "pointer-none", &["@media (pointer: none)"], None);
+    static_variant(v, "pointer-coarse", &["@media (pointer: coarse)"], None);
+    static_variant(v, "pointer-fine", &["@media (pointer: fine)"], None);
+    static_variant(v, "any-pointer-none", &["@media (any-pointer: none)"], None);
+    static_variant(v, "any-pointer-coarse", &["@media (any-pointer: coarse)"], None);
+    static_variant(v, "any-pointer-fine", &["@media (any-pointer: fine)"], None);
+
+    static_variant(v, "noscript", &["@media (scripting: none)"], None);
+
+    variants
+}
+
+/// Put quotes around the value of an attribute selector, when it has none.
+fn quote_attribute_value(input: &str) -> String {
+    if !input.contains('=') {
+        return input.to_string();
+    }
+    let parts = segment(input, b'=');
+    let attribute = parts[0];
+    let after = parts[1..].join("=");
+    let value = js_trim(&after);
+
+    // The value has quotes.
+    if value.starts_with('\'') || value.starts_with('"') {
+        return input.to_string();
+    }
+
+    // A flag for the case of the value: ` i` or ` s`.
+    for flag in ['i', 'I', 's', 'S'] {
+        if let Some(rest) = value.strip_suffix(flag).and_then(|rest| rest.strip_suffix(' ')) {
+            return format!("{attribute}=\"{rest}\" {flag}");
+        }
+    }
+
+    format!("{attribute}=\"{value}\"")
+}
+
+/// Replace each `@slot` with `nodes`. Put each `@keyframes` and `@property`
+/// rule in an at-root node.
+pub fn substitute_at_slot(ast: &mut Vec<AstNode>, nodes: &[AstNode]) {
+    walk(ast, |node, _| {
+        let AstNode::AtRule(r) = node else { return WalkAction::Continue };
+        if r.name == "@slot" {
+            return WalkAction::ReplaceSkip(nodes.to_vec());
+        }
+        if r.name == "@keyframes" || r.name == "@property" {
+            let inner = AstNode::AtRule(std::mem::take(r));
+            *node = at_root(vec![inner]);
+            return WalkAction::Skip;
+        }
+        WalkAction::Continue
+    });
 }
 
 /// Replace each `@variant` rule with the rules of its variant.
-pub fn substitute_at_variant(_ast: &mut Vec<AstNode>, _design_system: &DesignSystem) -> Result<crate::Features, crate::Error> {
-    Ok(crate::FEATURES_NONE)
+pub fn substitute_at_variant(ast: &mut Vec<AstNode>, design_system: &DesignSystem) -> Result<Features, Error> {
+    let mut features = FEATURES_NONE;
+    let mut error: Option<Error> = None;
+
+    walk(ast, |variant_node, _| {
+        let AstNode::AtRule(variant_rule) = variant_node else { return WalkAction::Continue };
+        if variant_rule.name != "@variant" {
+            return WalkAction::Continue;
+        }
+
+        let mut body = Some(std::mem::take(&mut variant_rule.nodes));
+        let mut nodes: Vec<AstNode> = Vec::new();
+        let compound_variants = segment(&variant_rule.params, b',');
+        let last = compound_variants.len() - 1;
+
+        for (idx, compound_variant) in compound_variants.iter().enumerate() {
+            // Start with the `&` rule. The last one uses the nodes of the
+            // `@variant` rule, the others use copies.
+            let children = if idx == last { body.take().unwrap_or_default() } else { body.clone().unwrap_or_default() };
+            let mut node = style_rule("&", children);
+
+            for variant in segment(compound_variant, b':').into_iter().rev() {
+                let variant = js_trim(variant);
+
+                if variant.is_empty() {
+                    error = Some(Error::new("Cannot use `@variant` with empty variant"));
+                    return WalkAction::Stop;
+                }
+
+                let Some(variant_ast) = design_system.parse_variant(variant) else {
+                    error = Some(Error::new(format!("Cannot use `@variant` with unknown variant: {variant}")));
+                    return WalkAction::Stop;
+                };
+
+                design_system.variants.take_error();
+                if apply_variant(&mut node, &variant_ast, design_system, 0).is_none() {
+                    // An error of the function of the variant comes first.
+                    error = Some(
+                        design_system
+                            .variants
+                            .take_error()
+                            .unwrap_or_else(|| Error::new(format!("Cannot use `@variant` with variant: {variant}"))),
+                    );
+                    return WalkAction::Stop;
+                }
+            }
+
+            match node {
+                AstNode::Rule(StyleRule { selector, nodes: children }) if selector == "&" => nodes.extend(children),
+                other => nodes.push(other),
+            }
+        }
+
+        // The walk visits the new nodes: they can have an `@variant` rule.
+        features |= FEATURES_VARIANTS;
+        WalkAction::Replace(nodes)
+    });
+
+    match error {
+        Some(error) => Err(error),
+        None => Ok(features),
+    }
 }

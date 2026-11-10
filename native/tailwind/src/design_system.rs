@@ -30,7 +30,7 @@ pub struct DesignSystem {
     /// True: each declaration of a utility is `!important`.
     pub important: bool,
 
-    parsed_variants: RefCell<HashMap<String, Option<Rc<Variant>>>>,
+    parsed_variants: RefCell<indexmap::IndexMap<String, Option<Rc<Variant>>>>,
     parsed_candidates: RefCell<HashMap<String, Rc<Vec<Rc<Candidate>>>>>,
     compiled: RefCell<HashMap<(CompileAstFlags, *const Candidate), Rc<Vec<CompiledNode>>>>,
     tracked: RefCell<HashSet<String>>,
@@ -47,7 +47,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         variants,
         invalid_candidates: RefCell::new(HashSet::new()),
         important: false,
-        parsed_variants: RefCell::new(HashMap::new()),
+        parsed_variants: RefCell::new(indexmap::IndexMap::new()),
         parsed_candidates: RefCell::new(HashMap::new()),
         compiled: RefCell::new(HashMap::new()),
         tracked: RefCell::new(HashSet::new()),
@@ -119,8 +119,10 @@ impl DesignSystem {
             }
         }
 
-        let mut variants: Vec<Rc<Variant>> = self.parsed_variants.borrow().values().flatten().cloned().collect();
-        variants.sort_by(|a, z| self.variants.compare(Some(a), Some(z), self).cmp(&0));
+        let variants: Vec<Rc<Variant>> = self.parsed_variants.borrow().values().flatten().cloned().collect();
+        // The compare function is not a total order for some invalid
+        // variants, so the sort must accept any comparator.
+        let variants = merge_sort(variants, &|a, z| self.variants.compare(Some(a), Some(z), self) <= 0);
 
         let mut order = VariantOrder::new();
         let mut prev: Option<&Rc<Variant>> = None;
@@ -185,4 +187,30 @@ impl DesignSystem {
             })
             .collect()
     }
+}
+
+/// A stable merge sort that accepts a comparator that is not a total
+/// order. `in_order(a, z)` is true when `a` can stay before `z`.
+fn merge_sort<T: Clone>(items: Vec<T>, in_order: &dyn Fn(&T, &T) -> bool) -> Vec<T> {
+    if items.len() <= 1 {
+        return items;
+    }
+    let right = items[items.len() / 2..].to_vec();
+    let mut left = items;
+    left.truncate(left.len() - right.len());
+    let (left, right) = (merge_sort(left, in_order), merge_sort(right, in_order));
+    let mut merged = Vec::with_capacity(left.len() + right.len());
+    let (mut i, mut j) = (0, 0);
+    while i < left.len() && j < right.len() {
+        if in_order(&left[i], &right[j]) {
+            merged.push(left[i].clone());
+            i += 1;
+        } else {
+            merged.push(right[j].clone());
+            j += 1;
+        }
+    }
+    merged.extend_from_slice(&left[i..]);
+    merged.extend_from_slice(&right[j..]);
+    merged
 }

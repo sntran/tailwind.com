@@ -1,0 +1,10 @@
+{application, tailwind, [
+    {description, "Tailwind CSS in one file: tailwind.com for Erlang and Elixir"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {applications, [kernel, stdlib, inets, ssl, public_key, crypto]},
+    {env, []},
+    {modules, []},
+    {licenses, ["Apache-2.0"]},
+    {links, [{"GitHub", "https://github.com/sntran/tailwind.com"}]}
+]}.

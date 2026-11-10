@@ -178,13 +178,18 @@ struct Build {
     full_rebuild_paths: Vec<(PathBuf, Stamp)>,
 }
 
-fn read_input(options: &Options, stdin_text: &Option<String>) -> Result<String> {
+/// Read the input. The result has the stamp of the input file from before
+/// the read: a change of the file after this stamp gives another stamp at
+/// the next tick of the watch, so no change is lost (`specs/Watch.tla`).
+fn read_input(options: &Options, stdin_text: &Option<String>) -> Result<(String, Stamp)> {
     match (&options.input, options.input_is_stdin) {
         (Some(path), _) => {
-            std::fs::read_to_string(path).map_err(|e| Error::new(format!("{}: {e}", path.display())))
+            let before = stamp(path);
+            let css = std::fs::read_to_string(path).map_err(|e| Error::new(format!("{}: {e}", path.display())))?;
+            Ok((css, before))
         }
-        (None, true) => Ok(stdin_text.clone().unwrap_or_default()),
-        (None, false) => Ok(DEFAULT_INPUT.to_string()),
+        (None, true) => Ok((stdin_text.clone().unwrap_or_default(), None)),
+        (None, false) => Ok((DEFAULT_INPUT.to_string(), None)),
     }
 }
 
@@ -205,15 +210,19 @@ fn ensure_source_detection_root_exists(root: &Root) -> Result<()> {
     Ok(())
 }
 
-fn create_build(options: &Options, css: &str) -> Result<Build> {
+fn create_build(options: &Options, (css, input_stamp): &(String, Stamp)) -> Result<Build> {
     let input_base = match &options.input {
         Some(path) => path.parent().unwrap_or(Path::new("")).to_path_buf(),
         None => std::env::current_dir().unwrap_or_default(),
     };
 
-    let dependencies = std::cell::RefCell::new(Vec::<PathBuf>::new());
+    // The resolver gives each path before it reads the file, so each stamp
+    // is from before the read.
+    let dependencies = std::cell::RefCell::new(Vec::<(PathBuf, Stamp)>::new());
     let load = |id: &str, base: &str| {
-        resolve::load_stylesheet(id, base, &mut |path| dependencies.borrow_mut().push(path.to_path_buf()))
+        resolve::load_stylesheet(id, base, &mut |path| {
+            dependencies.borrow_mut().push((path.to_path_buf(), stamp(path)))
+        })
     };
     let compiler = compile(
         css,
@@ -266,9 +275,9 @@ fn create_build(options: &Options, css: &str) -> Result<Build> {
         }
     }
 
-    let mut paths: Vec<PathBuf> = options.input.iter().cloned().collect();
-    paths.extend(dependencies.into_inner());
-    let full_rebuild_paths = paths.into_iter().map(|p| (p.clone(), stamp(&p))).collect();
+    let mut full_rebuild_paths: Vec<(PathBuf, Stamp)> =
+        options.input.iter().map(|path| (path.clone(), *input_stamp)).collect();
+    full_rebuild_paths.extend(dependencies.into_inner());
 
     Ok(Build { compiler, scanner: Scanner::new(sources), full_rebuild_paths })
 }
@@ -418,11 +427,12 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
 
         let result = if full {
             // Keep the old compiler when the new input has an error. Record
-            // the new stamps, so the same error is not printed at each tick.
+            // the new stamps before the read, so the same error is not
+            // printed at each tick, and a later change is not lost.
             for (path, old) in build.full_rebuild_paths.iter_mut() {
                 *old = stamp(path);
             }
-            read_input(options, stdin_text).and_then(|css| create_build(options, &css)).and_then(|mut new_build| {
+            read_input(options, stdin_text).and_then(|input| create_build(options, &input)).and_then(|mut new_build| {
                 let result = build_once(&mut new_build, options, previous);
                 build = new_build;
                 result.map(|_| true)
@@ -486,7 +496,7 @@ pub fn run(mut argv: Vec<String>) -> i32 {
     };
 
     let mut previous = Previous::default();
-    let first = read_input(&options, &stdin_text).and_then(|css| create_build(&options, &css)).and_then(|mut build| {
+    let first = read_input(&options, &stdin_text).and_then(|input| create_build(&options, &input)).and_then(|mut build| {
         build_once(&mut build, &options, &mut previous)?;
         Ok(build)
     });
