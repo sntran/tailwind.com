@@ -13,6 +13,7 @@
 
 use crate::ast::{rule, AstNode, AtRule};
 use crate::compile::compile_candidates;
+use crate::source_maps::{utf16_len, SourceLocation};
 use crate::design_system::DesignSystem;
 use crate::to_css::to_css;
 use crate::utils::js::is_js_whitespace;
@@ -414,13 +415,26 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
     let mut normal_idents: Vec<&str> = Vec::new();
     let mut dashed_idents: Vec<&str> = Vec::new();
 
-    for part in parts.iter().step_by(2) {
-        if part.starts_with("--") {
-            dashed_idents.push(part);
-        } else {
-            normal_idents.push(part);
+    // The offset of each candidate in the params, in UTF-16 code units.
+    // The last use of a candidate gives its offset, as upstream.
+    let track = design_system.track_sources.get() && child.loc.src().is_some();
+    let mut candidate_offsets: Vec<(&str, usize)> = Vec::new();
+    let mut offset = 0;
+    for (index, part) in parts.iter().enumerate() {
+        if index % 2 == 0 {
+            if part.starts_with("--") {
+                dashed_idents.push(part);
+            } else {
+                normal_idents.push(part);
+            }
+            candidates.insert(part);
+            if track {
+                candidate_offsets.push((part, offset));
+            }
         }
-        candidates.insert(part);
+        if track {
+            offset += utf16_len(part);
+        }
     }
 
     if !dashed_idents.is_empty() {
@@ -474,7 +488,25 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
 
     // For a style rule, use its children: the selector is not necessary.
     let mut new_nodes = Vec::new();
-    for sorted in compiled {
+    for mut sorted in compiled {
+        // The `@apply` rule made the node, also when the node comes from
+        // an `@utility`: the location is the candidate in the params.
+        if design_system.track_sources.get() {
+            let candidate_src = child.loc.src().map(|src| {
+                let candidate_offset = candidate_offsets
+                    .iter()
+                    .rev()
+                    .find(|(part, _)| *part == sorted.candidate)
+                    .map_or(0, |(_, offset)| *offset);
+                let start = src.start + 7 + candidate_offset;
+                SourceLocation {
+                    source: std::rc::Rc::clone(&src.source),
+                    start,
+                    end: start + utf16_len(&sorted.candidate),
+                }
+            });
+            set_src(std::slice::from_mut(&mut sorted.node), candidate_src.as_ref());
+        }
         match sorted.node {
             AstNode::Rule(rule) => new_nodes.extend(rule.nodes),
             node => new_nodes.push(node),
@@ -482,6 +514,20 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
     }
 
     Ok(Some(new_nodes))
+}
+
+/// Set the `src` of each node of a tree. The nodes are new objects of
+/// upstream (`cloneAstNode`): they have no shared identity.
+fn set_src(nodes: &mut [AstNode], src: Option<&SourceLocation>) {
+    for node in nodes {
+        node.set_src(src.cloned());
+        if let Some(loc) = node.loc_mut() {
+            loc.clear_identity();
+        }
+        if let Some(children) = node.children_mut() {
+            set_src(children, src);
+        }
+    }
 }
 
 /// The error for a candidate of `@apply` that gives no rule.

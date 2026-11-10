@@ -34,6 +34,7 @@ use tailwind::{compile, CompileOptions, Compiler, Error, Root, Stylesheet, POLYF
 #[derive(Deserialize)]
 struct Options {
     base: Option<String>,
+    from: Option<String>,
     polyfills: Option<u8>,
 }
 
@@ -219,6 +220,7 @@ fn replay(record: &Record) -> Outcome {
         polyfills: record.options.polyfills.unwrap_or(POLYFILLS_ALL),
         load_stylesheet: Some(&loader),
         test_mode: true,
+        from: record.options.from.clone(),
     };
 
     let compiled = compile(&record.input, options);
@@ -301,6 +303,7 @@ fn replay_with_modules(record: &Record) -> Outcome {
         polyfills: record.options.polyfills.unwrap_or(POLYFILLS_ALL),
         load_stylesheet: Some(&loader),
         test_mode: true,
+        from: record.options.from.clone(),
     };
     match compile(&record.input, options) {
         Err(error) if error.message == PLUGIN_NEEDS_JAVASCRIPT || error.message == CONFIG_NEEDS_JAVASCRIPT => Outcome::Pass,

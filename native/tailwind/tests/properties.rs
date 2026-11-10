@@ -21,6 +21,7 @@ fn build(batches: &[Vec<String>]) -> String {
             polyfills: tailwind::POLYFILLS_ALL,
             load_stylesheet: Some(&loader),
             test_mode: true,
+            from: None,
         },
     )
     .unwrap();
@@ -122,7 +123,7 @@ proptest! {
         "@custom-variant b (&:hover);", "@variant b { .c { color: red } }", ".d { @apply flex; }", "@source inline(\"p-{1,2}\");",
     ])) {
         let input = format!("{extra}\n{css}");
-        if let Ok(mut compiler) = compile(&input, CompileOptions { base: String::new(), polyfills: tailwind::POLYFILLS_ALL, load_stylesheet: None, test_mode: true }) {
+        if let Ok(mut compiler) = compile(&input, CompileOptions { base: String::new(), polyfills: tailwind::POLYFILLS_ALL, load_stylesheet: None, test_mode: true, from: None }) {
             compiler.build(&["flex".to_string(), "b:a-x".to_string()]);
         }
     }

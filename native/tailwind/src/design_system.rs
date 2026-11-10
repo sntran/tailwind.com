@@ -38,6 +38,9 @@ pub struct DesignSystem {
     pub important: bool,
     /// When set, `resolve_theme_value` calls this function.
     pub resolve_theme_value_hook: Option<ResolveThemeValueFn>,
+    /// True when the compiler keeps the source locations (the `from`
+    /// option), for source maps.
+    pub track_sources: std::cell::Cell<bool>,
 
     parsed_variants: RefCell<indexmap::IndexMap<String, Option<Rc<Variant>>>>,
     parsed_candidates: RefCell<HashMap<String, Rc<Vec<Rc<Candidate>>>>>,
@@ -57,6 +60,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         invalid_candidates: RefCell::new(HashSet::new()),
         important: false,
         resolve_theme_value_hook: None,
+        track_sources: std::cell::Cell::new(false),
         parsed_variants: RefCell::new(indexmap::IndexMap::new()),
         parsed_candidates: RefCell::new(HashMap::new()),
         compiled: RefCell::new(HashMap::new()),

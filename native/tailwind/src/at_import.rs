@@ -7,6 +7,7 @@
 
 use crate::ast::{at_rule, context, AstNode, ContextMap, ContextValue};
 use crate::css_parser;
+use crate::source_maps::SourceLocation;
 use crate::utils::js::js_to_lower_case;
 use crate::value_parser::{self, ValueAstNode};
 use crate::{Error, Features, Result, FEATURES_AT_IMPORT, FEATURES_NONE};
@@ -49,23 +50,39 @@ struct Pending {
     loaded: Stylesheet,
     params: ImportParams,
     depth: usize,
+    /// The location of the `@import` rule.
+    src: Option<SourceLocation>,
 }
 
 /// Replace each `@import` and `@reference` rule with the content of its
 /// file. The result has `FEATURES_AT_IMPORT` when the tree has an import.
 pub fn substitute_at_imports(ast: &mut [AstNode], base: &str, load_stylesheet: LoadStylesheet) -> Result<Features> {
+    substitute_at_imports_tracked(ast, base, load_stylesheet, false)
+}
+
+/// `substitute_at_imports`. With `track`, the nodes of each imported file
+/// have their source locations: the file of a location is the path that
+/// the loader gives.
+pub fn substitute_at_imports_tracked(
+    ast: &mut [AstNode],
+    base: &str,
+    load_stylesheet: LoadStylesheet,
+    track: bool,
+) -> Result<Features> {
     let mut queue: VecDeque<Pending> = VecDeque::new();
     let mut ready: Vec<Option<Vec<AstNode>>> = Vec::new();
 
     let features = collect(ast, base, load_stylesheet, 0, &mut queue, &mut ready)?;
 
     while let Some(pending) = queue.pop_front() {
-        let mut imported = css_parser::parse(&pending.loaded.content)?;
+        let from = if track { Some(pending.loaded.path.as_str()) } else { None };
+        let mut imported = css_parser::parse_with_source(&pending.loaded.content, from)?;
         collect(&mut imported, &pending.loaded.base, load_stylesheet, pending.depth + 1, &mut queue, &mut ready)?;
 
         let mut import_context = ContextMap::new();
         import_context.insert("base".into(), ContextValue::Str(pending.loaded.base));
-        ready[pending.id] = Some(build_import_nodes(vec![context(import_context, imported)], &pending.params));
+        ready[pending.id] =
+            Some(build_import_nodes(vec![context(import_context, imported)], &pending.params, pending.src.as_ref()));
     }
 
     if !ready.is_empty() {
@@ -130,7 +147,8 @@ fn collect(
 
         let id = ready.len();
         ready.push(None);
-        queue.push_back(Pending { id, loaded, params, depth });
+        let src = rule.loc.src().cloned();
+        queue.push_back(Pending { id, loaded, params, depth, src });
 
         let mut marker = ContextMap::new();
         marker.insert(PENDING_KEY.into(), ContextValue::Str(id.to_string()));
@@ -234,20 +252,20 @@ pub fn parse_import_params(params: &[ValueAstNode]) -> Result<Option<ImportParam
 }
 
 /// Put the wrappers of the import conditions around the imported nodes.
-fn build_import_nodes(imported: Vec<AstNode>, params: &ImportParams) -> Vec<AstNode> {
+fn build_import_nodes(imported: Vec<AstNode>, params: &ImportParams, src: Option<&SourceLocation>) -> Vec<AstNode> {
     let mut root = imported;
 
     if let Some(layer) = &params.layer {
-        root = vec![at_rule("@layer", layer.clone(), root)];
+        root = vec![at_rule("@layer", layer.clone(), root).with_src(src)];
     }
 
     if let Some(media) = &params.media {
-        root = vec![at_rule("@media", media.clone(), root)];
+        root = vec![at_rule("@media", media.clone(), root).with_src(src)];
     }
 
     if let Some(supports) = &params.supports {
         let condition = if supports.starts_with('(') { supports.clone() } else { format!("({supports})") };
-        root = vec![at_rule("@supports", condition, root)];
+        root = vec![at_rule("@supports", condition, root).with_src(src)];
     }
 
     root

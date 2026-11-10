@@ -48,6 +48,8 @@ fn is_ignored_theme_key(theme_key: &str, namespace: &str) -> bool {
 pub struct ThemeValue {
     pub value: String,
     pub options: ThemeOptions,
+    /// The location of the declaration that gave the value.
+    pub src: Option<crate::source_maps::SourceLocation>,
 }
 
 /// The values of `@theme`, in the sequence of their first definition.
@@ -71,6 +73,17 @@ impl Theme {
     /// Add a value. A key that ends with `-*` clears a namespace: its value
     /// must be `initial`.
     pub fn add(&self, key: &str, value: &str, options: ThemeOptions) -> Result<(), crate::Error> {
+        self.add_with_src(key, value, options, None)
+    }
+
+    /// `add`, with the location of the declaration that gives the value.
+    pub fn add_with_src(
+        &self,
+        key: &str,
+        value: &str,
+        options: ThemeOptions,
+        src: Option<crate::source_maps::SourceLocation>,
+    ) -> Result<(), crate::Error> {
         if let Some(namespace) = key.strip_suffix("-*") {
             if value != "initial" {
                 return Err(crate::Error::new(format!(
@@ -96,7 +109,7 @@ impl Theme {
         if value == "initial" {
             values.shift_remove(key);
         } else {
-            values.insert(key.to_string(), ThemeValue { value: value.to_string(), options });
+            values.insert(key.to_string(), ThemeValue { value: value.to_string(), options, src });
         }
         Ok(())
     }

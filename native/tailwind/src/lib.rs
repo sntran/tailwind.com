@@ -19,6 +19,7 @@ pub mod index;
 pub mod optimize;
 pub mod property_order;
 pub mod selector_parser;
+pub mod source_maps;
 pub mod theme;
 pub mod to_css;
 pub mod utilities;

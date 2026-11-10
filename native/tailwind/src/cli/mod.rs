@@ -7,6 +7,7 @@ pub mod args;
 pub mod events;
 pub mod optimize_css;
 pub mod resolve;
+pub mod source_maps;
 
 use crate::index::{compile, CompileOptions, Compiler, Root};
 use crate::{Error, Result};
@@ -240,6 +241,7 @@ fn create_build(options: &Options, (css, input_stamp): &(String, Stamp)) -> Resu
             polyfills: crate::POLYFILLS_ALL,
             load_stylesheet: Some(&load),
             test_mode: false,
+            from: None,
         },
     )?;
     ensure_source_detection_root_exists(&compiler.root)?;
