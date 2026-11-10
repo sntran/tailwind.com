@@ -30,6 +30,11 @@ CPUS=${CPUS:-x86_64 aarch64}
 
 log() { echo "build.sh: $*" >&2; }
 
+if [ ! -f "$root/c_src/quickjs/quickjs.c" ]; then
+    log "c_src/quickjs is empty: run git submodule update --init"
+    exit 1
+fi
+
 if [ ! -x "$C/bin/cosmocc" ]; then
     log "Downloading cosmocc $COSMOCC_VERSION"
     mkdir -p "$C"

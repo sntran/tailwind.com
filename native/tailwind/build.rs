@@ -30,6 +30,9 @@ fn compile() {
 
     let c_src = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../c_src");
     let quickjs = c_src.join("quickjs");
+    if !quickjs.join("quickjs.c").is_file() {
+        panic!("c_src/quickjs is empty: run `git submodule update --init`");
+    }
     let version = std::fs::read_to_string(quickjs.join("VERSION")).unwrap();
     let files = [
         quickjs.join("quickjs.c"),

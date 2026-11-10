@@ -87,8 +87,8 @@ There are two paths (`compat.rs`):
 
 ### The engine
 
-`c_src/quickjs` is QuickJS (Fabrice Bellard), with no change: see its
-`README.md` for the version and the files. The build has no
+`c_src/quickjs` is QuickJS (Fabrice Bellard) as a git submodule, with no
+change: see `c_src/QUICKJS.md` for the version and the files. The build has no
 `quickjs-libc`, so JavaScript has no `std`, no `os`, no files and no
 network.
 

@@ -1,5 +1,15 @@
 # Build tailwind.com
 
+## The source
+
+QuickJS is a git submodule (`c_src/quickjs`, see
+[`c_src/QUICKJS.md`](../c_src/QUICKJS.md)):
+
+```sh
+git clone --recursive https://github.com/sntran/tailwind.com
+# or, in a clone: git submodule update --init
+```
+
 ## A program for this computer
 
 You need Rust 1.85 or later, and a C compiler (`cc`: GCC or Clang) for
@@ -90,9 +100,9 @@ let css = compiler.build(&["flex".to_string(), "md:p-4".to_string()]);
 The repository has two generated or copied parts. A build needs no
 Node.js for them.
 
-- `c_src/quickjs` is a copy of files of QuickJS, with no change.
-  `sh scripts/sync-quickjs.sh DIR_OF_QUICKJS_CLONE` copies the files of
-  another version (see `c_src/quickjs/README.md`).
+- `c_src/quickjs` is the git submodule of QuickJS, with no change.
+  `sh scripts/sync-quickjs.sh COMMIT_OR_TAG` moves it to another version
+  (see `c_src/QUICKJS.md`).
 - `native/tailwind/assets/compat.js` is the plugin layer of Tailwind
   CSS in one file. After a change of `native/tailwind/js`, or for a new
   version of Tailwind CSS, make it again with Node.js and a clone of
