@@ -289,9 +289,7 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
         |root: &str| design_system.utilities.has(root, crate::utilities::UtilityKind::Functional);
 
     // The pairs of root and value that can match.
-    let roots: Vec<(String, Option<String>)>;
-
-    if base_without_modifier.ends_with(']') {
+    let roots: Vec<(String, Option<String>)> = if base_without_modifier.ends_with(']') {
         // `bg-[#0088cc]`: the root is before the `-[`.
         let idx = match base_without_modifier.find("-[") {
             Some(idx) => idx,
@@ -301,7 +299,7 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
         if !has_functional(root) {
             return result;
         }
-        roots = vec![(root.to_string(), Some(base_without_modifier[idx + 1..].to_string()))];
+        vec![(root.to_string(), Some(base_without_modifier[idx + 1..].to_string()))]
     } else if base_without_modifier.ends_with(')') {
         // `bg-(--my-var)`: the short form of `bg-[var(--my-var)]`.
         let idx = match base_without_modifier.find("-(") {
@@ -327,10 +325,10 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
             None => format!("[var({value})]"),
             Some(t) => format!("[{t}:var({value})]"),
         };
-        roots = vec![(root.to_string(), Some(value))];
+        vec![(root.to_string(), Some(value))]
     } else {
-        roots = find_roots(base_without_modifier, &has_functional);
-    }
+        find_roots(base_without_modifier, &has_functional)
+    };
 
     for (root, value) in roots {
         let mut candidate = FunctionalCandidate {

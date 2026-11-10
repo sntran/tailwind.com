@@ -100,10 +100,9 @@ pub fn parse(input: &str) -> Option<AttributeSelector<'_>> {
         return None;
     }
 
-    let value;
     let mut quote = None;
     let current = bytes[i];
-    if current == b'\'' || current == b'"' {
+    let value = if current == b'\'' || current == b'"' {
         // A value with quotes. The value ends at the last quote that is the
         // same as the first.
         quote = Some(current as char);
@@ -119,15 +118,15 @@ pub fn parse(input: &str) -> Option<AttributeSelector<'_>> {
             j += 1;
         }
         // With no last quote, the value is empty.
-        value = if i > start { &input[start..i - 1] } else { "" };
+        if i > start { &input[start..i - 1] } else { "" }
     } else {
         // A value with no quotes ends at white space.
         start = i;
         while i < end && !is_ascii_whitespace(bytes.get(i)) {
             i += 1;
         }
-        value = &input[start..i];
-    }
+        &input[start..i]
+    };
 
     while is_ascii_whitespace(bytes.get(i)) {
         i += 1;

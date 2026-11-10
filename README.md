@@ -10,7 +10,7 @@ aarch64.
 [BEAM.com](https://github.com/sntran/BEAM.com). It takes the place of:
 
 - **The official `tailwindcss` program**: the same options, the same
-  output, in one file of about 18 MB for all the systems and both CPUs.
+  output, in one file of about 15 MB for all the systems and both CPUs.
 - **The Hex package `tailwind`** in a Phoenix project: this repository
   is also an Erlang and Elixir project with the application name
   `tailwind`, the module `Tailwind`, and the tasks `mix tailwind` and

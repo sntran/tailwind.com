@@ -130,6 +130,22 @@ the method of BEAM.com for Rust:
 - `scripts/rust_link.sh` makes one object with one global name,
   `tailwind_main`, and `c_src/main.c` calls it.
 
+### The size of the file
+
+The file is about 15 MB: two copies of the program, one for x86_64 and
+one for aarch64, of about 7.5 MB each. In one copy:
+
+| Part | Size |
+|---|---|
+| Lightning CSS with its CSS parser, for `--minify` and `--optimize` | about 3.5 MB |
+| The compiler (the utilities, the variants, the default theme of v3) | about 1 MB |
+| The scanner of Tailwind CSS with its regular expressions and its `.gitignore` code | about 1 MB |
+| The Rust standard library, the unwind tables, the stylesheets, Cosmopolitan | the rest |
+
+The dependencies build for size (`opt-level = "s"`), and the compiler
+builds for speed. With all the code built for speed, the file is 18 MB,
+and a build with `--minify` is about 20% faster.
+
 ## The Erlang and Elixir modules
 
 `src/tailwind.erl` has the work: the path of the file, the download

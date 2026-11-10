@@ -51,7 +51,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - run: rustup target add wasm32-wasip1
       - run: make wasm
       - name: The program in Node.js, against the record
         run: node tests/wasi.mjs build/tailwind.wasm
@@ -83,9 +82,7 @@ jobs:
       # x86_64: the std of stable Rust. aarch64: a std built again with x18
       # and x28 reserved, with a nightly Rust (scripts/build.sh).
       - name: The Rust toolchains
-        run: |
-          rustup target add x86_64-unknown-linux-musl
-          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component rust-src
+        run: rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component rust-src
       - run: make
       - run: ls -l build/tailwind.com
       - run: sh tests/cli.sh build/tailwind.com
@@ -116,7 +113,9 @@ jobs:
       - name: The program, against the record of the official program
         run: |
           chmod +x build/tailwind.com
-          sh build/tailwind.com --version
+          # On Windows the file is a program. On the other systems the
+          # shell starts it.
+          if [ "$RUNNER_OS" = Windows ]; then ./build/tailwind.com --version; else sh build/tailwind.com --version; fi
           sh tests/cli.sh build/tailwind.com
       - name: The watch, with the file events of the system
         run: sh tests/watch.sh build/tailwind.com
