@@ -36,6 +36,11 @@ CI runs the tests for each pull request.
 - Each file of `native/tailwind/src` follows one file of
   `packages/tailwindcss/src` of Tailwind CSS. Keep this relation: a new
   release of Tailwind CSS then has one clear place for each change.
+- The plugin layer for `@plugin` and `@config` is the JavaScript of
+  Tailwind CSS, and not a port. Do not edit
+  `native/tailwind/assets/compat.js` or `c_src/quickjs`: the first file
+  is made by a script, and the second directory is a copy (see
+  [`docs/BUILDING.md`](docs/BUILDING.md)).
 - Each change has tests of its behavior, also for errors and limits, not
   only for the normal case.
 - Keep each change small, and give it one purpose.

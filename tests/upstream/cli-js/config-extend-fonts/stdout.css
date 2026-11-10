@@ -1,0 +1,114 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer properties;
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+    --spacing: 0.25rem;
+    --text-lg: 1.125rem;
+    --text-lg--line-height: calc(1.75 / 1.125);
+  }
+}
+@layer utilities {
+  .font-settings {
+    font-family: Inter;
+    font-feature-settings: "cv11", "ss01";
+    font-variation-settings: "opsz" 32;
+  }
+  .font-body {
+    font-family: "Open Sans", sans-serif;
+  }
+  .font-code {
+    font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  .font-display {
+    font-family: Oswald, ui-serif, serif;
+  }
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+  .text-hero {
+    font-size: 4rem;
+    line-height: var(--tw-leading, 1.05);
+    letter-spacing: var(--tw-tracking, -0.02em);
+    font-weight: var(--tw-font-weight, 800);
+  }
+  .text-2xs {
+    font-size: 0.6875rem;
+    line-height: var(--tw-leading, 1rem);
+  }
+  .text-base {
+    font-size: 1.0625rem;
+    line-height: var(--tw-leading, 1.6);
+  }
+  .text-hero\/10 {
+    font-size: 4rem;
+    line-height: calc(var(--spacing) * 10);
+  }
+  .text-lead {
+    font-size: 1.375rem;
+    line-height: var(--tw-leading, 1.9);
+  }
+  .text-lead\/extra {
+    font-size: 1.375rem;
+    line-height: 2.5;
+  }
+  .text-lg {
+    font-size: var(--text-lg);
+    line-height: var(--tw-leading, var(--text-lg--line-height));
+  }
+  .text-loose {
+    font-size: 1rem;
+    line-height: var(--tw-leading, 2rem);
+  }
+  .text-tiny {
+    font-size: 0.625rem;
+  }
+  .leading-13 {
+    --tw-leading: 3.25rem;
+    line-height: 3.25rem;
+  }
+  .leading-extra {
+    --tw-leading: 2.5;
+    line-height: 2.5;
+  }
+  .font-chunky {
+    --tw-font-weight: 950;
+    font-weight: 950;
+  }
+  .font-hairline {
+    --tw-font-weight: 50;
+    font-weight: 50;
+  }
+  .-tracking-mega {
+    --tw-tracking: calc(0.25em * -1);
+    letter-spacing: calc(0.25em * -1);
+  }
+  .tracking-mega {
+    --tw-tracking: 0.25em;
+    letter-spacing: 0.25em;
+  }
+}
+@property --tw-leading {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-font-weight {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-tracking {
+  syntax: "*";
+  inherits: false;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --tw-leading: initial;
+      --tw-font-weight: initial;
+      --tw-tracking: initial;
+    }
+  }
+}
+

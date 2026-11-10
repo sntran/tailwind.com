@@ -2,6 +2,11 @@
 // program of Tailwind CSS (tests/upstream/cli), and compare the output.
 //
 // Usage: node tests/wasi.mjs build/tailwind.wasm [CASE...]
+//        CASES=tests/upstream/cli-js node tests/wasi.mjs build/tailwind.wasm [CASE...]
+//
+// CASES is the directory of the cases (default: tests/upstream/cli). The
+// cases of tests/upstream/cli-js need a program with JavaScript: a build
+// with WASI_SDK_PATH (see docs/BUILDING.md).
 //
 // Each case runs in a child process, because a WASI instance runs one
 // time. The project is a copy outside this repository, as in tests/cli.sh.
@@ -30,7 +35,7 @@ if (process.argv[2] === '--child') {
 }
 
 const wasm = path.resolve(process.argv[2])
-const cases = path.join(here, 'upstream/cli')
+const cases = path.resolve(process.env.CASES ?? path.join(here, 'upstream/cli'))
 const names = process.argv.length > 3 ? process.argv.slice(3) : fs.readdirSync(cases).sort()
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'tailwind-wasi-'))
 
@@ -48,11 +53,30 @@ for (const name of names) {
   )
   const expectedStatus = Number(fs.readFileSync(path.join(dir, 'exit.txt'), 'utf8'))
   const expected = fs.readFileSync(path.join(dir, 'stdout.css'))
-  if (result.status === expectedStatus && result.stdout.equals(expected)) {
+  // For an error: each message line of the official program must be in
+  // the error output, as in tests/cli.sh. The project is the directory `/`.
+  let missing = []
+  if (fs.existsSync(path.join(dir, 'stderr.txt'))) {
+    const contains = path.join(dir, 'stderr-contains.txt')
+    const lines = fs.existsSync(contains)
+      ? fs.readFileSync(contains, 'utf8').split('\n')
+      : fs
+          .readFileSync(path.join(dir, 'stderr.txt'), 'utf8')
+          .replace(/\x1b\[[0-9;]*m/g, '')
+          .split('\n')
+          .filter((line) => line.startsWith('│'))
+    const stderr = result.stderr.toString()
+    for (let line of lines) {
+      line = line.replaceAll('<project>/', '/').replaceAll('<project>', '/')
+      if (line !== '' && !stderr.includes(line)) missing.push(line)
+    }
+  }
+  if (result.status === expectedStatus && result.stdout.equals(expected) && missing.length === 0) {
     console.log(`wasi.mjs: ${name}: pass`)
   } else {
     failed++
     console.error(`wasi.mjs: ${name}: exit status ${result.status} (expected ${expectedStatus}), output ${result.stdout.equals(expected) ? 'same' : 'different'}`)
+    for (const line of missing) console.error(`wasi.mjs: ${name}: the error output does not have: ${line}`)
     console.error(result.stderr.toString().split('\n').slice(0, 8).join('\n'))
   }
 }

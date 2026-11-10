@@ -4,8 +4,9 @@
 # Usage: sh tests/watch.sh PROGRAM [OPTION...]     (for example --poll=100)
 #
 # It checks that an edit of a source file, a new file in a new directory,
-# an edit of the input, and an input with an error and its repair each
-# give the correct output, and that the end of stdin stops the program.
+# an edit of the input, an input with an error and its repair, and an
+# edit of a JavaScript plugin each give the correct output, and that the
+# end of stdin stops the program.
 set -eu
 program=$1
 shift
@@ -91,6 +92,19 @@ grep -q 'does-not-exist' log.txt || { echo "watch.sh: no error message" >&2; cat
 printf '@import "tailwindcss" source(none);\n@source "./src";\n.three { color: blue; }\n' > app.css
 wait_for '.three {'
 echo "watch.sh: an error and its repair: pass"
+
+# A JavaScript plugin: a change of the plugin file gives a new compiler.
+cat > plugin.js <<'JS'
+module.exports = ({ addUtilities }) => addUtilities({ '.from-plugin': { color: 'red' } })
+JS
+echo '<p class="from-plugin"></p>' > src/a.html
+printf '@import "tailwindcss" source(none);\n@source "./src";\n@plugin "./plugin.js";\n' > app.css
+wait_for 'color: red'
+cat > plugin.js <<'JS'
+module.exports = ({ addUtilities }) => addUtilities({ '.from-plugin': { color: 'green' } })
+JS
+wait_for 'color: green'
+echo "watch.sh: an edit of a JavaScript plugin: pass"
 
 # The end of stdin stops the program.
 if [ $fifo = 0 ]; then

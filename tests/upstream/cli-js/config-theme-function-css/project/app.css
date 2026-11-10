@@ -1,0 +1,31 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./index.html";
+@config "./tailwind.config.js";
+
+.legacy-theme {
+  color: theme('colors.blue.500');
+  background: theme(colors.brand.DEFAULT);
+  border-color: theme(colors.brand.dark / 50%);
+  outline-color: theme('colors.brand.light', #fff);
+  padding: theme(spacing.4) theme(spacing.gutter);
+  margin: theme(spacing[2.5]);
+  font-family: theme(fontFamily.display);
+  font-size: theme(fontSize.hero);
+  line-height: theme(fontSize.hero[1].lineHeight);
+  border-radius: theme(borderRadius.card);
+  box-shadow: theme(boxShadow.card);
+  width: calc(100% - theme(spacing.sidebar));
+  z-index: theme(zIndex.modal);
+  fill: theme(colors.missing, tomato);
+  stroke: theme(--color-brand-dark);
+  accent-color: --theme(--color-brand);
+  caret-color: --alpha(theme(colors.brand.DEFAULT) / 20%);
+}
+
+@media (min-width: theme(screens.tablet)) {
+  .legacy-theme {
+    color: theme(colors.red.500);
+  }
+}

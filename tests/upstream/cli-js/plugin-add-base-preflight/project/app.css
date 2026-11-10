@@ -1,0 +1,9 @@
+@import "tailwindcss" source(none);
+@source "./index.html";
+@plugin "./plugin.js";
+
+@layer base {
+  h1 {
+    color: green;
+  }
+}

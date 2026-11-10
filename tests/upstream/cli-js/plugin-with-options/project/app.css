@@ -1,0 +1,14 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./index.html";
+@plugin "./plugin.js" {
+  class-name: fancy;
+  color: rebeccapurple;
+  sizes: 1, 2, 3;
+  debug: true;
+}
+@plugin "./plugin.js" {
+  class-name: second;
+}
+@plugin "./no-options.js";

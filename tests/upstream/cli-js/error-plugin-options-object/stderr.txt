@@ -1,0 +1,13 @@
+≈ tailwindcss v4.3.5
+
+[31mError:[39m
+[2m┌[22m
+[2m│[22m Error: Unexpected `@plugin` option:
+[2m│[22m 
+[2m│[22m .nested {
+[2m│[22m color: blue;
+[2m│[22m }
+[2m│[22m 
+[2m│[22m 
+[2m│[22m `@plugin` options must be a flat list of declarations.
+[2m└[22m

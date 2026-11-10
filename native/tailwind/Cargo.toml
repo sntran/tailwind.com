@@ -7,6 +7,8 @@ license = "Apache-2.0"
 description = "A Tailwind CSS compiler in one file"
 repository = "https://github.com/sntran/tailwind.com"
 
+build = "build.rs"
+
 [lib]
 name = "tailwind"
 path = "src/lib.rs"
@@ -21,9 +23,15 @@ required-features = ["cli"]
 default = ["cli"]
 # The command line program: the scanner of Tailwind CSS, and Lightning CSS
 # for --minify and --optimize.
-cli = ["dep:tailwindcss-oxide", "dep:lightningcss", "dep:serde_json"]
+cli = ["dep:tailwindcss-oxide", "dep:lightningcss", "dep:serde_json", "js"]
+# `@plugin` and `@config`: the QuickJS engine (c_src/quickjs, c_src/js.c)
+# and the plugin layer of Tailwind CSS (assets/compat.js). build.rs
+# compiles the C files. For wasm32-wasip1 it needs WASI_SDK_PATH: with no
+# wasi-sdk, the program has no JavaScript.
+js = ["dep:serde_json", "dep:cc"]
 # The build of tailwind.com (scripts/build.sh): the file events of
-# c_src/watch.c are linked into the program.
+# c_src/watch.c are linked into the program. scripts/build.sh compiles the
+# C files of the feature `js` with cosmocc, and build.rs compiles nothing.
 ape = ["cli"]
 
 [dependencies]
@@ -33,7 +41,12 @@ tailwindcss-oxide = { git = "https://github.com/tailwindlabs/tailwindcss.git", t
 # The version that the npm package lightningcss 1.33.0 has: the optimizer
 # of Tailwind CSS 4.3.5.
 lightningcss = { version = "=1.0.0-alpha.72", default-features = false, optional = true }
-serde_json = { version = "1", optional = true }
+# `preserve_order`: the sequence of the conditions of `exports` in a
+# package.json has a meaning.
+serde_json = { version = "1", optional = true, features = ["preserve_order"] }
+
+[build-dependencies]
+cc = { version = "1", optional = true }
 
 [dev-dependencies]
 proptest = "1"

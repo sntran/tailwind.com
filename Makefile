@@ -2,7 +2,9 @@
 #
 #   make            build/tailwind.com: one file for all the systems
 #   make native     target/release/tailwind: a program for this computer
-#   make wasm       build/tailwind.wasm: the program for WASI
+#   make wasm       build/tailwind.wasm: the program for WASI. With
+#                   WASI_SDK_PATH (a wasi-sdk), the program has JavaScript
+#                   for @plugin and @config.
 #   make test       all the tests
 #   make tlc        the TLA+ models of specs/, with TLC
 #
@@ -34,6 +36,7 @@ test-rust:
 # program to test (default: the program of "make native").
 test-cli: native
 	sh tests/cli.sh $${TAILWIND:-target/release/tailwind}
+	CASES=tests/upstream/cli-js sh tests/cli.sh $${TAILWIND:-target/release/tailwind}
 
 test-mix: native
 	TAILWIND_COM=$${TAILWIND:-$(CURDIR)/target/release/tailwind} mix test

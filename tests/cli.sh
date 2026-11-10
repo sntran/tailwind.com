@@ -3,10 +3,18 @@
 # Tailwind CSS (tests/upstream/cli), and compare the output.
 #
 # Usage: sh tests/cli.sh PROGRAM [CASE...]
+#        CASES=tests/upstream/cli-js sh tests/cli.sh PROGRAM [CASE...]
+#
+# CASES is the directory of the cases (default: tests/upstream/cli).
+# tests/upstream/cli-js has the cases with JavaScript plugins and configs.
 #
 # Each case has project/ (the files), args.txt (one argument for each
 # line), stdout.css and exit.txt (the record of the official program),
-# and for an error stderr.txt. The program runs on a copy of project/
+# and for an error stderr.txt. In stderr.txt, the text <project> is the
+# absolute path of the copy of the project. A case with a file
+# stderr-contains.txt has an error message that this program cannot
+# repeat (a message of the JavaScript parser of Node.js): then only the
+# lines of stderr-contains.txt must be in the error output. The program runs on a copy of project/
 # outside this repository, as the record was made: the .gitignore of this
 # repository must not change the scan.
 set -eu
@@ -14,8 +22,11 @@ program=$1
 shift
 case "$program" in /*) ;; *) program=$(pwd)/$program ;; esac
 root=$(cd "$(dirname "$0")/.." && pwd)
-cases=$root/tests/upstream/cli
+cases=${CASES:-$root/tests/upstream/cli}
+case "$cases" in /*) ;; *) cases=$(pwd)/$cases ;; esac
 work=$(mktemp -d "${TMPDIR:-/tmp}/tailwind-cli.XXXXXX")
+# The real path: the program prints paths with no symbolic links.
+work=$(cd "$work" && pwd -P)
 [ $# -gt 0 ] || set -- $(ls "$cases")
 
 # An APE file needs the shell to start it, except on Windows, where it is
@@ -58,7 +69,18 @@ for name in "$@"; do
     # of the box) must be in the output, without the colors.
     if [ -f "$cases/$name/stderr.txt" ]; then
         esc=$(printf '\033')
-        sed "s/$esc\[[0-9;]*m//g" "$cases/$name/stderr.txt" | grep '^│' > "$work/$name/expected.txt" || true
+        if [ -f "$cases/$name/stderr-contains.txt" ]; then
+            cat "$cases/$name/stderr-contains.txt" > "$work/$name/expected.raw"
+        else
+            sed "s/$esc\[[0-9;]*m//g" "$cases/$name/stderr.txt" | grep '^│' > "$work/$name/expected.raw" || true
+        fi
+        case "$(uname -s)" in
+            # On Windows, the program and the shell do not write the path
+            # of the project in the same way: compare the text before and
+            # after the path.
+            MINGW*|MSYS*|CYGWIN*) sed "s|<project>|\n|g" "$work/$name/expected.raw" | sed "s/^│ *$//" | grep -v '^$' > "$work/$name/expected.txt" || true ;;
+            *) sed "s|<project>|$work/$name/project|g" "$work/$name/expected.raw" > "$work/$name/expected.txt" ;;
+        esac
         while IFS= read -r line; do
             if ! grep -qF -- "$line" "$work/$name/stderr.txt"; then
                 echo "cli.sh: $name: the error output does not have: $line" >&2

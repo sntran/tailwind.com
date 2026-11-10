@@ -1,0 +1,74 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --spacing: 0.25rem;
+  }
+}
+@layer utilities {
+  .avatar {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    & > img {
+      width: 100%;
+    }
+  }
+  .avatar-\[5rem\] {
+    width: 5rem;
+    height: 5rem;
+    border-radius: 9999px;
+    & > img {
+      width: 100%;
+    }
+  }
+  .avatar-md {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 9999px;
+    & > img {
+      width: 100%;
+    }
+  }
+  .avatar-sm {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9999px;
+    & > img {
+      width: 100%;
+    }
+  }
+  .icon-moon {
+    mask: url(/moon.svg);
+    width: 2rem;
+  }
+  .icon-star {
+    mask: url(/star.svg);
+    width: 1rem;
+  }
+  .w-4 {
+    width: calc(var(--spacing) * 4);
+  }
+  .tag-red-500 {
+    color: oklch(63.7% 0.237 25.331);
+    --tag-mod: null;
+  }
+  .tag-red-500\/50 {
+    color: color-mix(in oklab, oklch(63.7% 0.237 25.331) 5000%, transparent);
+    --tag-mod: 50;
+  }
+  .icon-\[x\] {
+    mask: url(undefined);
+  }
+  @media (hover: hover) {
+    .hover\:avatar-sm:hover {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 9999px;
+    }
+    .hover\:avatar-sm:hover > img {
+      width: 100%;
+    }
+  }
+}
+

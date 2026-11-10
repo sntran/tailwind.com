@@ -31,7 +31,7 @@ packages/tailwindcss/src/compat/default-theme.ts	native/tailwind/src/compat/defa
 packages/tailwindcss/src/compat/legacy-utilities.ts	native/tailwind/src/compat/legacy_utilities.rs	port
 packages/tailwindcss/src/compat/plugin-functions.ts	native/tailwind/src/compat/theme_fn.rs	port
 packages/tailwindcss/src/compat/apply-compat-hooks.ts	native/tailwind/src/compat.rs	port
-packages/tailwindcss/src/compat/	native/tailwind/src/compat.rs native/tailwind/src/compat/	port
+packages/tailwindcss/src/compat/	native/tailwind/assets/compat.js (the bundle; new host calls: native/tailwind/js/ and native/tailwind/src/compat/js/)	gen
 packages/tailwindcss/index.css	native/tailwind/assets/index.css	copy
 packages/tailwindcss/theme.css	native/tailwind/assets/theme.css	copy
 packages/tailwindcss/preflight.css	native/tailwind/assets/preflight.css	copy

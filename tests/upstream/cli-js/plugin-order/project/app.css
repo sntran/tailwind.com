@@ -1,0 +1,17 @@
+@import "tailwindcss" source(none);
+@source "./index.html";
+@plugin "./a.js";
+
+@layer components {
+  .css-component {
+    color: red;
+  }
+}
+
+@utility css-utility {
+  color: blue;
+}
+
+@plugin "./b.js";
+
+@custom-variant css-variant (&:is(.css));

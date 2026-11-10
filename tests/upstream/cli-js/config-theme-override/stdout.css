@@ -1,0 +1,93 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .inset-sm {
+    inset: 8px;
+  }
+  .-m-sm {
+    margin: calc(8px * -1);
+  }
+  .m-lg {
+    margin: 32px;
+  }
+  .size-lg {
+    width: 32px;
+    height: 32px;
+  }
+  .w-1\/2 {
+    width: calc(1 / 2 * 100%);
+  }
+  .w-full {
+    width: 100%;
+  }
+  .w-md {
+    width: 16px;
+  }
+  .max-w-md {
+    max-width: 16px;
+  }
+  .gap-xl {
+    gap: 64px;
+  }
+  .rounded-none {
+    border-radius: 0;
+  }
+  .rounded-pill {
+    border-radius: 9999px;
+  }
+  .bg-\[\#123\] {
+    background-color: #123;
+  }
+  .bg-black {
+    background-color: #000;
+  }
+  .bg-extra {
+    background-color: #f0f;
+  }
+  .bg-primary {
+    background-color: #2563eb;
+  }
+  .bg-transparent {
+    background-color: transparent;
+  }
+  .p-0 {
+    padding: 0;
+  }
+  .p-\[5px\] {
+    padding: 5px;
+  }
+  .p-px {
+    padding: 1px;
+  }
+  .p-sm {
+    padding: 8px;
+  }
+  .text-body {
+    font-size: 16px;
+    line-height: var(--tw-leading, 24px);
+  }
+  .text-primary-dark {
+    color: #1e40af;
+  }
+  @media (width >= 40rem) {
+    .sm\:block {
+      display: block;
+    }
+  }
+  @media (width >= 48rem) {
+    .md\:flex {
+      display: flex;
+    }
+  }
+  @media (width >= 640px) {
+    .tablet\:flex {
+      display: flex;
+    }
+  }
+  @media (width >= 1280px) {
+    .desktop\:hidden {
+      display: none;
+    }
+  }
+}
+

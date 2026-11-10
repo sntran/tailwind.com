@@ -181,9 +181,8 @@ apply() {
     tools=tests/upstream/tools
     node $tools/gen-property-order.mjs "$clone" native/tailwind/src/property_order.rs
     node $tools/gen-default-theme.mjs "$clone" native/tailwind/src/compat/default_theme.rs
-    if [ -f $tools/build-compat-bundle.mjs ]; then
-        node $tools/build-compat-bundle.mjs "$clone"
-    fi
+    # make-all.sh, below, also makes the JavaScript bundle of the plugin
+    # layer (native/tailwind/assets/compat.js) and the plugin records.
 
     log "The record of the official compiler (this takes some minutes)"
     bash $tools/make-all.sh "$clone" "$work/record"
@@ -192,9 +191,6 @@ apply() {
     node $tools/gen-css-utility.mjs "$clone" native/tailwind/tests/fixtures/css_utility.json
     node $tools/gen-variants.mjs "$clone" native/tailwind/tests/fixtures/variants.json
     node $tools/gen-optimize.mjs "$clone" native/tailwind/tests/fixtures/optimize.json
-    for extra in gen-plugin-suite.mjs; do
-        [ -f "$tools/$extra" ] && node "$tools/$extra" "$clone" tests/upstream
-    done
 
     check
     log "The tests: each failure is behavior of Tailwind CSS $new to port"

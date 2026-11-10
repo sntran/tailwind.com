@@ -34,7 +34,8 @@ Fields:
 - `options`: `base`, `from`, `polyfills` (`null` when not set), `hasLoadModule`, `hasLoadStylesheet`.
 - `stylesheets`: each `loadStylesheet` call in order: `id`, `base`, and `result` (`path`, `base`, `content`) or `error`.
 - `modules`: the number of `loadModule` calls. `moduleRequests` gives the `id`, `base` and `hint` of each call.
-  A record with `modules` > 0 uses a JavaScript plugin or config. The Rust tests cannot replay such a record.
+  A record with `modules` > 0 uses a JavaScript plugin or config. The module is a JavaScript value of the test file,
+  so this file does not have it: `plugin-suite.jsonl.gz` has these records with the modules as source text.
 - `builds`: each `build(candidates)` call in order: `candidates`, and `css` or `error`.
   `optimized` is `optimize(css).code`. `minified` is `optimize(css, { minify: true }).code`.
   `optimizeError` is there when `optimize` throws.
@@ -47,6 +48,40 @@ The lines are in the order of the test files. In one test file, the lines are in
 Six tests in the `sorting` group of `index.test.ts` shuffle their candidates with `Math.random()`.
 Thus the `builds` of these six lines change from run to run. All the other lines are stable.
 The tests that call only `__unstable__loadDesignSystem`, the candidate parser or other internal functions give no lines.
+
+### `plugin-suite.jsonl.gz`
+
+The records of `suite.jsonl.gz` that load a JavaScript plugin or config, from `tools/gen-plugin-suite.mjs`.
+The file has 296 lines: 306 compile calls of the unit tests load a module, and 10 of them are not in the file (see below).
+
+The script runs the unit tests of `packages/tailwindcss` with the recorder, as for `suite.jsonl.gz`.
+The recorder writes each module that a test gives to `loadModule` as JavaScript source text (`tools/recorder.ts`, with `TW_ORACLE_MODULES=1`):
+
+- A function is its own source text (`toString()`). Objects and arrays are written item by item.
+- `plugin(handler, config)` gives a plain object, so it needs no special work.
+  For `plugin.withOptions(...)`, the script makes `plugin.ts` of the clone keep the two arguments, and the text is a call of `plugin.withOptions` with them.
+- Vitest changes the names of imports in the code of a test (`__vite_ssr_import_0__.default`). The recorder puts the names of the test file back.
+- The text starts with the names that the modules of the tests use: `plugin`, `css`, `html`, an `expect` and a `vi.fn` that do nothing,
+  and the default imports of `plugin`, `colors`, `default-theme` and `flatten-color-palette` with `require('tailwindcss/...')`.
+
+A function that uses a variable of its test is not complete as text.
+For this reason, the script runs each record again with the upstream compiler and the modules from their text, and keeps a record only when
+the error, the features, the sources and the CSS of each build are the same.
+For v4.3.5, 10 records fail this check: 9 use the local function `fn` of a group of tests in `plugin-api.test.ts`, and 1 uses a local variable `didCallPluginFn`.
+
+Fields: as `suite.jsonl.gz`, except:
+
+- `modules`: each `loadModule` call in order: `id`, `base`, `hint`, `source` (the CommonJS source text), `resultBase` (the `base` of the result),
+  or `error` when the function of the test throws.
+- `builds`: `candidates`, and `css` or `error`.
+
+The Rust test `native/tailwind/tests/plugin_suite.rs` gives each `source` to the compiler as a file in memory.
+
+### `candidates.jsonl.gz`
+
+From `tools/gen-candidates.mjs`: `parseCandidate` of the default design system as JSON, for 10,983 candidates of `classes.jsonl.gz`
+(each 25th candidate, and more of the candidates with variants or modifiers). Each line has `candidate` and `parsed` (a list: one item for each reading).
+A JavaScript plugin gets a candidate in this shape. The Rust test `tests/js_plugins.rs` compares its JSON with this file.
 
 ### `suite-extra.jsonl.gz`
 
@@ -138,6 +173,182 @@ Git also obeys these nested `.gitignore` files. Use `git add -f tests/upstream/c
 
 The `-m`/`--minify` and `--optimize` outputs come from lightningcss.
 
+### `cli-js/`
+
+Cases for the official CLI with JavaScript plugins and JavaScript configs (`@plugin` and `@config`).
+The layout of a case is the same as in `cli/`: `project/`, `args.txt`, `stdout.css`, `exit.txt` and, for an error, `stderr.txt`.
+There are 88 cases. Each project is small. A project does not use files outside its `project/` directory.
+The only exception is the module `tailwindcss` (`tailwindcss/plugin`, `tailwindcss/colors`, `tailwindcss/defaultTheme`):
+the program that runs the case gives these modules.
+
+The plugin files and the config files that are part of this repository use only these modules:
+`tailwindcss/plugin`, `tailwindcss/colors`, `tailwindcss/defaultTheme`, and relative files (JavaScript files and one JSON file).
+The third-party files are not changed. They also use `fs` (`readdirSync`, `readFileSync`), `path` (`join`, `basename`), `__dirname`,
+`util` (`util.deprecate`), `console.log`, `atob`, `encodeURIComponent` and `decodeURIComponent`.
+
+Most cases start with these lines, thus the output has no preflight and the scanner reads only `index.html`:
+
+```css
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./index.html";
+```
+
+In `stderr.txt`, the text `<project>` replaces the absolute path of the project directory.
+The message of `error-plugin-syntax` comes from the parser of the official program (jiti). Another JavaScript engine gives a different text.
+
+A case with a file `standalone.txt` uses the module interop of the standalone program (`tools/bun-interop.mjs`).
+The standalone program runs on Bun. Phoenix uses the standalone program.
+For a CommonJS module with the exports `__esModule` and `default`, Bun gives the `default` export as the plugin. Node.js gives the full exports object.
+Without the interop, the npm CLI stops with the message `The plugin "../vendor/daisyui" does not accept options` for the Phoenix project.
+The record of these cases comes from the npm CLI with the interop hook, and not from the standalone program file.
+
+Plugin API cases (`@plugin` with a local file):
+
+| Case | Content |
+| --- | --- |
+| `plugin-add-base` | `addBase` with an object and with an array: nested rules, an at-rule, `theme()` values. |
+| `plugin-add-base-preflight` | `addBase` together with the preflight and a `@layer base` block of the CSS file. `@font-face`. |
+| `plugin-add-utilities-object` | `addUtilities` with an object: camelCase properties, a selector list, an array of values, variants, `!`. |
+| `plugin-add-utilities-array` | `addUtilities` with an array. The same class occurs two times, and has the name of a core utility. |
+| `plugin-add-utilities-nested` | `addUtilities` with nested selectors (`&:hover`, `> svg`, `.dark &`) and with compound selectors. |
+| `plugin-add-utilities-at-rules` | `addUtilities` with `@media`, `@supports`, `@container`, `@layer` and `@keyframes` in a class. |
+| `plugin-add-utilities-apply` | `@apply` in `addUtilities` and in `addComponents`, and `@apply` of a plugin utility in the CSS file. |
+| `plugin-add-utilities-prefix` | `prefix(tw)` on the imports: `addUtilities`, `addComponents`, `matchUtilities`, and the `prefix()` function. |
+| `plugin-match-utilities-values` | `matchUtilities` with `values`, a `DEFAULT` value, arbitrary values, `theme('spacing')` values, and no values. |
+| `plugin-match-utilities-multiple-rules` | `matchUtilities` functions that return an array of rules, nested rules, or an empty object. |
+| `plugin-match-utilities-types` | `matchUtilities` with `type`: `color`, `length`, `any`, a list of types, and two plugins with the same root. |
+| `plugin-match-utilities-modifiers` | `matchUtilities` with `modifiers` (an object and `'any'`), and the opacity modifier of a color utility. |
+| `plugin-match-utilities-negative` | `matchUtilities` with `supportsNegativeValues`. |
+| `plugin-add-components` | `addComponents` with an object and an array. The sort order with a core utility. |
+| `plugin-match-components` | `matchComponents` with values, object values, a color type and modifiers. |
+| `plugin-add-variant-string` | `addVariant` with a string, an array of strings, at-rules, and compound variants (`group-`, `peer-`, `not-`, `has-`, `in-`). |
+| `plugin-add-variant-object` | `addVariant` with a CSS-in-JS object and `@slot`. |
+| `plugin-match-variant` | `matchVariant` with `values`, `DEFAULT`, arbitrary values, `sort`, modifiers, and an array result. |
+| `plugin-theme-function` | `theme()` in a plugin: dot paths, bracket paths, a default value, opacity modifiers, tuples, and CSS theme variables. |
+| `plugin-config-function` | `config()` in a plugin, with a `@config` file. |
+| `plugin-esm` | ES modules: `.mjs` files, ESM syntax in a `.js` file, a relative `import`, a plain function as the default export. |
+| `plugin-plain-function` | Plain functions with no `plugin()` wrapper (`.js` and `.cjs`), `require` of a local file, and the object form (`handler` and `config`). |
+| `plugin-with-options` | `plugin.withOptions` with `@plugin "./x.js" { ... }` options. One plugin file loads two times. A plugin with no options. |
+| `plugin-options-types` | The types of the `@plugin` option values: string, quoted string, number, boolean, `null`, lists, functions. |
+| `plugin-with-config` | The second argument of `plugin()`: a config with `theme` and `theme.extend`. |
+| `plugin-order` | Two plugins and CSS rules in one file: the order of base, components, utilities and variants in the output. |
+| `plugin-cjs-esmodule` | A CommonJS file with the exports `__esModule` and `default`. Uses `standalone.txt`. |
+
+Config cases (`@config`):
+
+| Case | Content |
+| --- | --- |
+| `config-extend-colors` | `theme.extend.colors`: nested objects, `DEFAULT`, `<alpha-value>`, an override of one default color. |
+| `config-theme-functions` | Theme values as functions: `({ theme, colors }) => ...`. |
+| `config-esm` | A `tailwind.config.mjs` file with `import`: colors, spacing, screens, fontFamily, a plugin in the config. |
+| `config-esm-js` | ESM syntax in `tailwind.config.js`. |
+| `config-extend-fonts` | `fontFamily` (list, string, with font feature settings), `fontSize` (string, tuples with `lineHeight`), `fontWeight`, `lineHeight`, `letterSpacing`. |
+| `config-extend-animation` | `keyframes` and `animation`, and the transition scales. |
+| `config-extend-radius-shadow` | `borderRadius`, `boxShadow`, `dropShadow`, `borderWidth`, `blur`, `aspectRatio`. |
+| `config-theme-override` | `theme` keys that replace the defaults (colors, spacing, screens, fontSize, borderRadius), together with `extend`. |
+| `config-dark-selector`, `config-dark-class`, `config-dark-media` | `darkMode` as a string. |
+| `config-dark-class-custom`, `config-dark-selector-custom` | `darkMode` as `['class', ...]` and `['selector', ...]`. |
+| `config-dark-variant`, `config-dark-variant-list` | `darkMode` as `['variant', ...]` with one selector and with a list. |
+| `config-dark-css-wins` | `darkMode` in the config and a `@custom-variant dark` in the CSS file. |
+| `config-prefix`, `config-prefix-legacy` | `prefix` in the config. The legacy form `tw-` gives a warning on stderr and the exit code 0. |
+| `config-important-true` | `important: true`, with plugins and `@utility`. |
+| `config-important-selector` | `important: '#app'` with `source(none)` on the import of the utilities. The selector is not in the output. |
+| `config-important-selector-wrap` | `important: '#app'` with no `source(none)`. The selector is in the output. |
+| `config-plugins` | `plugins: [...]` with `require` of local files, a directory, a JSON file, `withOptions` with and without a call, and inline plugins. |
+| `config-presets` | `presets`, also a preset in a preset. The order of the merge. |
+| `config-content` | `content` with files, globs and a negated glob. The config file is in a subdirectory. The paths are relative to the config file. |
+| `config-content-object` | `content` as an object with `relative` and `files`, with automatic source detection and a `.gitignore`. |
+| `config-blocklist` | `blocklist`. |
+| `config-container`, `config-container-simple` | `theme.container`: `center`, `padding` (string and object), `screens`. |
+| `config-screens` | `theme.screens`: strings, `min`, `max`, `raw`, a list. |
+| `config-supports-aria-data` | `theme.extend.supports`, `aria`, `data` and `containers`. |
+| `config-ignored-options` | `corePlugins`, `separator`, `safelist`, `future`, `experimental`, `variants`: version 4 ignores them. |
+| `config-theme-function-css` | The legacy `theme('colors.blue.500')` function in CSS with values from the config. |
+| `config-and-plugin` | `@theme`, `@config` and `@plugin` give the same theme keys. |
+| `config-two-configs` | Two `@config` rules in one file. |
+
+Error cases (the exit code is 1, stdout is empty):
+
+| Case | Content |
+| --- | --- |
+| `error-plugin-throws`, `error-plugin-throws-on-load`, `error-plugin-syntax` | A plugin function throws. A module throws when it loads. A file has a syntax error. |
+| `error-plugin-missing`, `error-plugin-missing-package`, `error-plugin-no-path` | A missing file, a missing package, `@plugin` with no path. |
+| `error-plugin-nested` | `@plugin` in a rule. |
+| `error-plugin-options-object`, `error-plugin-options-object-value`, `error-plugin-options-no-function` | Invalid `@plugin` options, and options for a plugin that does not accept options. |
+| `error-plugin-utility-selector`, `error-plugin-match-utilities-name` | Invalid names in `addUtilities` and `matchUtilities`. |
+| `error-config-body`, `error-config-nested`, `error-config-missing` | `@config` with a body, `@config` in an at-rule, a missing config file. |
+| `error-config-throws` | A config file with a `require` of a missing file. |
+| `error-config-content-raw` | `content` with a `raw` entry. |
+| `error-config-apply-unknown` | `@apply` of an unknown utility in a plugin of the config. |
+
+Third-party plugins. Each project has its own `node_modules` directory, as `npm install` makes it:
+
+| Case | Content |
+| --- | --- |
+| `typography` | `@plugin "@tailwindcss/typography"`: `prose prose-lg prose-slate dark:prose-invert`, element modifiers. |
+| `typography-config` | The typography plugin in `plugins` of a config, with the `className` option and `theme.extend.typography`. |
+| `forms`, `forms-class` | `@plugin "@tailwindcss/forms"`, and with the option `strategy: "class"`. |
+| `animate` | `@plugin "tailwindcss-animate"`. |
+| `container-queries` | `@plugin "@tailwindcss/container-queries"`. It loads on version 4. |
+| `daisyui-bundle` | The one-file bundle of daisyUI with the `themes` option, `btn` and `card` classes. Uses `standalone.txt`. |
+| `phoenix` | A Phoenix 1.8 project: `assets/css/app.css` and the vendor files of `mix phx.new`, heroicons, `.heex` and `.ex` files. Uses `standalone.txt`. |
+| `phoenix-minify` | The same project with `--minify`. |
+
+The Phoenix project comes from the installer templates of Phoenix `v1.8.5`.
+The values of the template are: the application `my_app`, with LiveView, gettext and daisyUI.
+The first line of `stdout.css` of the Phoenix cases is `/*! 🌼 daisyUI 5.0.35 */`. The daisyUI plugin prints it with `console.log`.
+Phoenix `v1.8.6` and later versions do not have the daisyUI files in `assets/vendor`. They load daisyUI from the `deps` directory with `NODE_PATH`.
+
+The npm package `daisyui` (version 5) has a size of 4.2 MB. For this reason, there is no case with `@plugin "daisyui"` from `node_modules`.
+
+Versions of the third-party packages (the file `cli-js/NOTICE.md` gives the sources and the licenses):
+
+| Package | Version |
+| --- | --- |
+| `@tailwindcss/typography` | 0.5.20 (with `postcss-selector-parser` 6.0.10, `cssesc` 3.0.0, `util-deprecate` 1.0.2) |
+| `@tailwindcss/forms` | 0.5.11 (with `mini-svg-data-uri` 1.4.4) |
+| `tailwindcss-animate` | 1.0.7 |
+| `@tailwindcss/container-queries` | 0.1.1 |
+| daisyUI bundle (`daisyui.js`, `daisyui-theme.js`) | 5.0.35 |
+| heroicons | 2.2.0 |
+| Phoenix installer templates | 1.8.5 |
+
+To record the cases again:
+
+```sh
+node tests/upstream/tools/run-cli.mjs /path/to/scratch/cli tests/upstream/cli-js 4.3.5
+```
+
+To record only some cases, add the case names after the version.
+The script does not install the third-party packages. They are in the repository.
+To install the packages of one project again, run this command in its `project/` directory.
+The `package.json` file of the project has the exact versions.
+
+```sh
+npm install --no-package-lock --ignore-scripts --legacy-peer-deps
+```
+
+The option `--legacy-peer-deps` keeps the peer package `tailwindcss` out of the project.
+
+Some projects contain a `.gitignore` file, a `node_modules` directory or a `deps` directory.
+Use `git add -f tests/upstream/cli-js` to add all the files.
+
+## The plugin layer of the program
+
+`native/tailwind/assets/compat.js` is not a test file, but it comes from the same clone: it is the plugin layer of Tailwind CSS
+(`packages/tailwindcss/src/compat`) as one JavaScript file, for the JavaScript engine of the program.
+
+```sh
+node tests/upstream/tools/build-compat-bundle.mjs /path/to/tw
+```
+
+The script uses esbuild. It takes esbuild from `tests/upstream/tools/node_modules` (run `npm install` in `tests/upstream/tools`),
+or from the pnpm store of the clone. The entry and the shims are in `native/tailwind/js`: see `docs/INTERNALS.md`.
+The script stops when a module of the compiler that a shim must replace (`design-system.ts`, `compile.ts`, `at-import.ts`,
+`property-order.ts`) is in the bundle.
+
 ## How to make the files again
 
 ```sh
@@ -148,6 +359,7 @@ npm install -g pnpm
 pnpm install --frozen-lockfile --ignore-scripts
 
 # 2. Make all the files. The second argument is an empty scratch directory.
+#    The script changes files of the clone (index.ts, plugin.ts, __oracle.ts).
 cd /path/to/this/repository
 tests/upstream/tools/make-all.sh /path/to/tw /path/to/scratch
 ```
@@ -171,6 +383,18 @@ node tests/upstream/tools/gen-full.mjs /path/to/tw tests/upstream
 # cli/*/stdout.css and cli/*/exit.txt
 node tests/upstream/tools/run-cli.mjs /path/to/scratch/cli tests/upstream/cli 4.3.5
 
+# cli-js/*/stdout.css and cli-js/*/exit.txt
+node tests/upstream/tools/run-cli.mjs /path/to/scratch/cli tests/upstream/cli-js 4.3.5
+
+# plugin-suite.jsonl.gz (the unit tests again; the script changes plugin.ts of the clone)
+node tests/upstream/tools/gen-plugin-suite.mjs /path/to/tw /path/to/scratch tests/upstream/plugin-suite.jsonl.gz
+
+# candidates.jsonl.gz
+node tests/upstream/tools/gen-candidates.mjs /path/to/tw tests/upstream
+
+# native/tailwind/assets/compat.js
+node tests/upstream/tools/build-compat-bundle.mjs /path/to/tw
+
 # Read each file and print the number of records.
 python3 tests/upstream/tools/check.py tests/upstream
 ```
@@ -182,11 +406,16 @@ python3 tests/upstream/tools/check.py tests/upstream
 | `tools/instrument.mjs` | Adds the recorder to `packages/tailwindcss/src/index.ts` of the clone. It wraps the exported `compile` function. |
 | `tools/recorder.ts` | The recorder. Each vitest worker appends events to `events-<pid>.jsonl` in the directory `TW_ORACLE_DIR`. |
 | `tools/merge-suite.mjs` | Joins the event files into `suite.jsonl.gz`. |
+| `tools/gen-plugin-suite.mjs` | Makes `plugin-suite.jsonl.gz`: runs the unit tests with the recorder and `TW_ORACLE_MODULES=1`, and checks each record with the upstream compiler. |
+| `tools/gen-candidates.mjs` | Makes `candidates.jsonl.gz`. |
+| `tools/build-compat-bundle.mjs` | Makes `native/tailwind/assets/compat.js` with esbuild (`tools/package.json` names the version). |
+| `tools/bun-interop.mjs` | The module interop of the standalone program, for the cases of `cli-js/` with `standalone.txt`. |
 | `tools/lib.mjs` | Shared helpers: loads the upstream TypeScript sources with jiti, the stylesheet loader, the random number generator. |
 | `tools/candidate-lists.mjs` | The hand-made lists: arbitrary forms, variants for the random stacks, modifiers, edge candidates. |
 | `tools/gen-classes.mjs` | Makes `classes.jsonl.gz` and `classes-all.json.gz`. |
 | `tools/gen-full.mjs` | Makes `full.json.gz` and `css/`. |
-| `tools/run-cli.mjs` | Installs the npm packages into the scratch directory, copies each project there, runs the CLI. |
+| `tools/run-cli.mjs` | Installs the npm packages into the scratch directory, copies each project there, runs the CLI. It records `cli/` and `cli-js/`. |
+| `tools/bun-interop.mjs` | The module interop of the standalone program, for the `cli-js/` cases with a `standalone.txt` file. |
 | `tools/gen-extra.mjs` | Makes `suite-extra.jsonl.gz`: `node tests/upstream/tools/gen-extra.mjs /path/to/tw tests/upstream`. |
 | `tools/gen-default-theme.mjs` | Makes `native/tailwind/src/compat/default_theme.rs` from `compat/default-theme.ts`: `node tests/upstream/tools/gen-default-theme.mjs /path/to/tw native/tailwind/src/compat/default_theme.rs`. |
 | `tools/check.py` | Reads each file and prints the number of records. |

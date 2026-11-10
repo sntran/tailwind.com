@@ -10,7 +10,7 @@ aarch64.
 [BEAM.com](https://github.com/sntran/BEAM.com). It takes the place of:
 
 - **The official `tailwindcss` program**: the same options, the same
-  output, in one file of about 15 MB for all the systems and both CPUs.
+  output, in one file of about 18 MB for all the systems and both CPUs.
 - **The Hex package `tailwind`** in a Phoenix project: this repository
   is also an Erlang and Elixir project with the application name
   `tailwind`, the module `Tailwind`, and the tasks `mix tailwind` and
@@ -77,8 +77,10 @@ config :tailwind,
 as before: the watch stops when the Phoenix server stops.
 
 A new Phoenix project has `@plugin` lines in `assets/css/app.css` (for
-heroicons and daisyUI). These plugins are JavaScript, and this program
-has no JavaScript engine: see [Limits](#limits).
+heroicons and daisyUI). These plugins are JavaScript. The program runs
+them: see [JavaScript plugins and configs](#javascript-plugins-and-configs).
+The output for the project of `mix phx.new` (Phoenix 1.8) is the same as
+the output of the official program, byte for byte.
 
 An Erlang project uses the module `tailwind` (`tailwind:install/0`,
 `tailwind:run/2`), with the same configuration in the application
@@ -97,6 +99,8 @@ expects the same text, byte for byte:
 | The same candidates in one build (the sort of the output) | 24 MB of CSS |
 | `@import "tailwindcss"` with real-world classes, also through the optimizer | 686 candidates |
 | The official command line program on small projects | 17 projects |
+| The official command line program on projects with JavaScript plugins and configs (daisyUI, heroicons, `@tailwindcss/typography`, `@tailwindcss/forms`, a Phoenix project) | 88 projects |
+| The `compile` calls of the unit tests of Tailwind CSS that load a JavaScript plugin or config | 296 calls |
 
 See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the results and
 the known differences, and [`docs/TESTING.md`](docs/TESTING.md) for the
@@ -107,10 +111,40 @@ The scanner of source files is the Rust crate of Tailwind CSS itself
 (`tailwindcss-oxide`), and `--minify` and `--optimize` use the same
 version of Lightning CSS with the same options.
 
+## JavaScript plugins and configs
+
+`@plugin` and `@config` work. The file has a JavaScript engine
+([QuickJS](https://bellard.org/quickjs/)), and the plugin API is the
+JavaScript of Tailwind CSS itself (`addBase`, `addUtilities`,
+`matchUtilities`, `addComponents`, `matchComponents`, `addVariant`,
+`matchVariant`, `theme()`, `config()`, `plugin.withOptions`, presets,
+`darkMode`, `prefix`, `important`, `content`, `blocklist`).
+
+- A module is a CommonJS file or an ES module (`.js`, `.cjs`, `.mjs`),
+  or a JSON file. `require` and `import` find relative files and
+  packages in `node_modules` (`exports` and `main` of `package.json`),
+  and the directories of `NODE_PATH`.
+- `tailwindcss/plugin`, `tailwindcss/colors`, `tailwindcss/defaultTheme`
+  and `tailwindcss/lib/util/flattenColorPalette` are in the file. A
+  project needs no `node_modules` for them.
+- A module can read files: `fs` (`readFileSync`, `readdirSync`,
+  `existsSync`, `statSync`), `path`, and a small `util`. It cannot write
+  files, start a process, or open a network connection.
+- The watch builds again when a plugin or config file changes.
+
+What does not work:
+
+- **TypeScript modules** (`tailwind.config.ts`): the error names the
+  file. Use a JavaScript file.
+- **The other modules of Node.js** (`os`, `crypto`, `child_process`,
+  `http`, ...), `Buffer`, timers and `fetch`. A plugin that needs them
+  at load time gives an error.
+- **`@tailwindcss/forms`, `@tailwindcss/typography` and
+  `@tailwindcss/aspect-ratio` are not in the file**, as they are in the
+  standalone program of Tailwind CSS. They work from `node_modules`.
+
 ## Limits
 
-- **No JavaScript**: `@plugin` and `@config` are errors. A plugin that
-  is only CSS (`@utility`, `@custom-variant`, `@theme`) works.
 - **No source maps**: `--map` is an error.
 - **The watch on Windows polls**: there, it reads the times of the files
   at an interval. On the other systems it uses the events of the file
@@ -124,7 +158,8 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 `tailwind.wasm` of each release is the same program for WASI
 (`wasm32-wasip1`): it runs in Node.js, Wasmtime, and other hosts with a
-WASI file system.
+WASI file system. It has the same JavaScript engine for `@plugin` and
+`@config`.
 
 ## Documentation
 

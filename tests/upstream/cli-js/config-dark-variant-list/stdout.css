@@ -1,0 +1,41 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --color-black: #000;
+    --color-white: #fff;
+  }
+}
+@layer utilities {
+  @media (prefers-color-scheme: dark) {
+    .dark\:bg-black:not(.light *) {
+      background-color: var(--color-black);
+    }
+  }
+  .dark\:bg-black:is(.dark *) {
+    background-color: var(--color-black);
+  }
+  @media (prefers-color-scheme: dark) {
+    @media (hover: hover) {
+      .dark\:hover\:text-white:not(.light *):hover {
+        color: var(--color-white);
+      }
+    }
+  }
+  @media (hover: hover) {
+    .dark\:hover\:text-white:is(.dark *):hover {
+      color: var(--color-white);
+    }
+  }
+  @media (width >= 48rem) {
+    @media (prefers-color-scheme: dark) {
+      .md\:dark\:flex:not(.light *) {
+        display: flex;
+      }
+    }
+    .md\:dark\:flex:is(.dark *) {
+      display: flex;
+    }
+  }
+}
+

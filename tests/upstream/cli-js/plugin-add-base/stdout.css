@@ -1,0 +1,38 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .underline {
+    text-decoration-line: underline;
+  }
+}
+@layer base {
+  h1 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    font-weight: 700;
+  }
+  h2, h3 {
+    font-size: 1.25rem;
+  }
+  a {
+    color: blue;
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+  @media (min-width: 640px) {
+    body {
+      margin: 0 auto;
+    }
+  }
+  :root {
+    --plugin-base: 1;
+  }
+  .from-array {
+    color: red;
+  }
+  ul > li {
+    list-style: disc;
+  }
+}
+

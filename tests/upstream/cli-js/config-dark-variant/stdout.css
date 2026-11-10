@@ -1,0 +1,24 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --color-black: #000;
+    --color-white: #fff;
+  }
+}
+@layer utilities {
+  .dark\:bg-black:not(.light *) {
+    background-color: var(--color-black);
+  }
+  @media (hover: hover) {
+    .dark\:hover\:text-white:not(.light *):hover {
+      color: var(--color-white);
+    }
+  }
+  @media (width >= 48rem) {
+    .md\:dark\:flex:not(.light *) {
+      display: flex;
+    }
+  }
+}
+

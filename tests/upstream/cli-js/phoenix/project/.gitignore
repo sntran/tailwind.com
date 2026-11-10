@@ -1,0 +1,12 @@
+# The directory Mix will write compiled artifacts to.
+/_build/
+
+# The directory Mix downloads your dependencies sources to.
+/deps/
+
+# Ignore assets that are produced by build tools.
+/priv/static/assets/
+
+# In case you use Node.js/npm, you want to ignore these.
+npm-debug.log
+/assets/node_modules/
