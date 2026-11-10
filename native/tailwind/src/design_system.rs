@@ -19,6 +19,10 @@ pub type CompileAstFlags = u8;
 pub const COMPILE_NONE: CompileAstFlags = 0;
 pub const COMPILE_RESPECT_IMPORTANT: CompileAstFlags = 1 << 0;
 
+/// A replacement of `DesignSystem::resolve_theme_value`. The compatibility
+/// layer sets it (`compat.rs`), as upstream replaces `resolveThemeValue`.
+pub type ResolveThemeValueFn = Rc<dyn Fn(&DesignSystem, &str, bool) -> Option<String>>;
+
 /// The order of each parsed variant, by the address of the variant.
 pub type VariantOrder = HashMap<*const Variant, u32>;
 
@@ -29,6 +33,8 @@ pub struct DesignSystem {
     pub invalid_candidates: RefCell<HashSet<String>>,
     /// True: each declaration of a utility is `!important`.
     pub important: bool,
+    /// When set, `resolve_theme_value` calls this function.
+    pub resolve_theme_value_hook: Option<ResolveThemeValueFn>,
 
     parsed_variants: RefCell<indexmap::IndexMap<String, Option<Rc<Variant>>>>,
     parsed_candidates: RefCell<HashMap<String, Rc<Vec<Rc<Candidate>>>>>,
@@ -47,6 +53,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         variants,
         invalid_candidates: RefCell::new(HashSet::new()),
         important: false,
+        resolve_theme_value_hook: None,
         parsed_variants: RefCell::new(indexmap::IndexMap::new()),
         parsed_candidates: RefCell::new(HashMap::new()),
         compiled: RefCell::new(HashMap::new()),
@@ -122,7 +129,7 @@ impl DesignSystem {
         let variants: Vec<Rc<Variant>> = self.parsed_variants.borrow().values().flatten().cloned().collect();
         // The compare function is not a total order for some invalid
         // variants, so the sort must accept any comparator.
-        let variants = merge_sort(variants, &|a, z| self.variants.compare(Some(a), Some(z), self) <= 0);
+        let variants = merge_sort(variants, &|a, z| self.variants.compare(Some(z), Some(a), self) >= 0);
 
         let mut order = VariantOrder::new();
         let mut prev: Option<&Rc<Variant>> = None;
@@ -142,8 +149,18 @@ impl DesignSystem {
         order
     }
 
-    /// The value of a theme key, for example `--color-red-500 / 50%`.
+    /// The value of a theme key, for example `--color-red-500 / 50%`. The
+    /// compatibility layer can replace this function.
     pub fn resolve_theme_value(&self, path: &str, force_inline: bool) -> Option<String> {
+        match self.resolve_theme_value_hook.clone() {
+            Some(hook) => hook(self, path, force_inline),
+            None => self.resolve_theme_variable_value(path, force_inline),
+        }
+    }
+
+    /// The value of a theme variable, for example `--color-red-500 / 50%`:
+    /// `resolveThemeValue` of `design-system.ts`.
+    pub fn resolve_theme_variable_value(&self, path: &str, force_inline: bool) -> Option<String> {
         // A modifier is after the last slash.
         let (path, modifier) = match path.rfind('/') {
             Some(idx) => (crate::utils::js::js_trim(&path[..idx]), Some(crate::utils::js::js_trim(&path[idx + 1..]))),
@@ -190,7 +207,8 @@ impl DesignSystem {
 }
 
 /// A stable merge sort that accepts a comparator that is not a total
-/// order. `in_order(a, z)` is true when `a` can stay before `z`.
+/// order. `in_order(a, z)` is true when `a` stays before `z`: the sort of
+/// V8 moves `z` before `a` only when `compare(z, a)` is negative.
 fn merge_sort<T: Clone>(items: Vec<T>, in_order: &dyn Fn(&T, &T) -> bool) -> Vec<T> {
     if items.len() <= 1 {
         return items;

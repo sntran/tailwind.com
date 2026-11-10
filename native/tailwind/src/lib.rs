@@ -3,13 +3,19 @@
 //! The modules follow the files of `packages/tailwindcss/src` of Tailwind
 //! CSS, so a change of Tailwind CSS has one clear place in this crate.
 
+pub mod apply;
 pub mod ast;
+pub mod at_import;
 pub mod attribute_selector_parser;
 pub mod candidate;
+#[cfg(feature = "cli")]
+pub mod cli;
+pub mod compat;
 pub mod compile;
 pub mod css_functions;
 pub mod css_parser;
 pub mod design_system;
+pub mod index;
 pub mod optimize;
 pub mod property_order;
 pub mod selector_parser;
@@ -20,6 +26,8 @@ pub mod utils;
 pub mod value_parser;
 pub mod variants;
 pub mod walk;
+
+pub use index::{compile, CompileOptions, Compiler, Root, Source, Stylesheet, VERSION};
 
 /// An error of the compiler. The message is the message of Tailwind CSS.
 #[derive(Debug, Clone, PartialEq, Eq)]

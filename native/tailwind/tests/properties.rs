@@ -7,7 +7,7 @@ const INPUT: &str = "@layer theme, base, components, utilities;\n@import \"tailw
 
 fn load(id: &str, _base: &str) -> tailwind::Result<Stylesheet> {
     let name = id.trim_start_matches("tailwindcss/").trim_start_matches("./");
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets").join(name);
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/upstream/css").join(name);
     let content = std::fs::read_to_string(&path).map_err(|e| tailwind::Error::new(e.to_string()))?;
     Ok(Stylesheet { path: format!("/tailwindcss/{name}"), base: "/tailwindcss".into(), content })
 }

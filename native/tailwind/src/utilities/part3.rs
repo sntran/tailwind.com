@@ -11,7 +11,7 @@ use crate::candidate::{UtilityValue, ValueKind};
 use crate::design_system::DesignSystem;
 use crate::theme::Theme;
 use crate::utils::infer_data_type::{
-    infer_data_type, is_positive_integer, is_valid_opacity_value, is_valid_spacing_multiplier, DataType,
+    infer_data_type, is_positive_integer, is_valid_opacity_value, DataType,
 };
 use crate::utils::js::{js_is_integer, js_number};
 use crate::utils::replace_shadow_colors::replace_shadow_colors;

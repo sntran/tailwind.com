@@ -48,6 +48,14 @@ Six tests in the `sorting` group of `index.test.ts` shuffle their candidates wit
 Thus the `builds` of these six lines change from run to run. All the other lines are stable.
 The tests that call only `__unstable__loadDesignSystem`, the candidate parser or other internal functions give no lines.
 
+### `suite-extra.jsonl.gz`
+
+Records in the format of `suite.jsonl.gz` (82 lines), from `tools/gen-extra.mjs` and not from the upstream unit tests.
+The cases are for the parts that have a different structure in the Rust port:
+the sequence of the `@import` loads, `@apply` with `@utility`, `theme()` with a key path such as `colors.red.500`
+(the compatibility layer with the default theme), the legacy utilities, and the errors of `compile`.
+The base is `/root`. A file `./NAME.css` has the path `BASE/NAME.css` and the base `BASE/NAME`.
+
 ### `classes.jsonl.gz`
 
 One JSON line for each candidate: `{"candidate", "kind", "css"}`.
@@ -179,6 +187,8 @@ python3 tests/upstream/tools/check.py tests/upstream
 | `tools/gen-classes.mjs` | Makes `classes.jsonl.gz` and `classes-all.json.gz`. |
 | `tools/gen-full.mjs` | Makes `full.json.gz` and `css/`. |
 | `tools/run-cli.mjs` | Installs the npm packages into the scratch directory, copies each project there, runs the CLI. |
+| `tools/gen-extra.mjs` | Makes `suite-extra.jsonl.gz`: `node tests/upstream/tools/gen-extra.mjs /path/to/tw tests/upstream`. |
+| `tools/gen-default-theme.mjs` | Makes `native/tailwind/src/compat/default_theme.rs` from `compat/default-theme.ts`: `node tests/upstream/tools/gen-default-theme.mjs /path/to/tw native/tailwind/src/compat/default_theme.rs`. |
 | `tools/check.py` | Reads each file and prints the number of records. |
 | `tools/make-all.sh` | Runs all the steps. |
 
