@@ -9,8 +9,9 @@ Tailwind CSS, and the file tailwind.com contains the software below. The
 source of this repository keeps the license texts in licenses/.
 
 Tailwind CSS 4.3.5 (the compiler that native/tailwind follows file by
-file, the stylesheets in native/tailwind/assets, the scanner crate
-tailwindcss-oxide, and the recorded test data in tests/upstream)
+file, the stylesheets in native/tailwind/assets, the plugin layer in
+native/tailwind/assets/compat.js, the scanner crate tailwindcss-oxide,
+and the recorded test data in tests/upstream)
   Copyright (c) Tailwind Labs, Inc.
   MIT License (licenses/tailwindcss.txt).
   https://github.com/tailwindlabs/tailwindcss
@@ -30,6 +31,12 @@ packages that Tailwind CSS uses for its source maps)
   Copyright 2018 Rich Harris. MIT License (licenses/magic-string.txt).
   Copyright 2019-2024 Justin Ridgewell. MIT License
   (licenses/jridgewell.txt).
+QuickJS 2026-06-04 (the JavaScript engine for @plugin and @config, in
+c_src/quickjs)
+  Copyright (c) 2017-2021 Fabrice Bellard; Copyright (c) 2017-2021
+  Charlie Gordon.
+  MIT License (licenses/quickjs.txt).
+  https://github.com/bellard/quickjs (commit e585640)
 
 Cosmopolitan Libc 4.0.2 (the C runtime of the APE file)
   Copyright 2020 Justine Alexandra Roberts Tunney.
@@ -50,3 +57,8 @@ The other Rust crates of Cargo.lock
 c_src/cosmo_rust.c, c_src/eh_frame_pad.ld and scripts/rust_link.sh come
 from BEAM.com (Apache License 2.0), by the same author.
 https://github.com/sntran/BEAM.com
+
+The test projects in tests/upstream/cli-js contain files of other
+projects (daisyUI, Phoenix, heroicons, topbar and npm packages).
+tests/upstream/cli-js/NOTICE.md names them. They are not in the file
+tailwind.com.

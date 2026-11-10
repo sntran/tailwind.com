@@ -23,7 +23,8 @@ use crate::ast::{
     AtRule, ContextMap, ContextValue,
 };
 use crate::at_import::{substitute_at_imports_tracked, LoadStylesheet};
-use crate::compat::apply_compatibility_hooks;
+use crate::compat::module_loader::ModuleLoader;
+use crate::compat::{apply_compatibility_hooks, CompatOptions};
 use crate::compile::compile_candidates;
 use crate::css_functions::substitute_functions;
 use crate::css_parser;
@@ -56,6 +57,7 @@ pub const VERSION: &str = "4.3.5";
 
 /// The key of the context node that is at the place of `@tailwind utilities`.
 const UTILITIES_KEY: &str = "__utilities";
+// `compat/js/json.rs` uses the same key: JavaScript gets the at-rule.
 
 /// The options of `compile`.
 pub struct CompileOptions<'a> {
@@ -71,11 +73,22 @@ pub struct CompileOptions<'a> {
     /// The path of the stylesheet. With a path, the compiler keeps the
     /// source locations, and `Compiler::build_source_map` gives a map.
     pub from: Option<String>,
+    /// The file system for the JavaScript modules of `@plugin` and
+    /// `@config`. `None`: these rules are errors, as upstream with no
+    /// `loadModule`.
+    pub module_loader: Option<Rc<dyn ModuleLoader>>,
 }
 
 impl Default for CompileOptions<'_> {
     fn default() -> Self {
-        Self { base: String::new(), polyfills: POLYFILLS_ALL, load_stylesheet: None, test_mode: false, from: None }
+        Self {
+            base: String::new(),
+            polyfills: POLYFILLS_ALL,
+            load_stylesheet: None,
+            test_mode: false,
+            from: None,
+            module_loader: None,
+        }
     }
 }
 
@@ -129,7 +142,26 @@ pub struct Compiler {
 
 impl Compiler {
     /// The CSS for all the candidates of this call and of the calls before.
+    ///
+    /// When a function of a JavaScript plugin throws, upstream throws from
+    /// `build`. Here `try_build` gives that error, and `build` gives the
+    /// CSS without the candidate of the failure.
     pub fn build(&mut self, candidates: &[String]) -> String {
+        let output = self.build_css(candidates);
+        self.design_system.take_js_error();
+        output
+    }
+
+    /// `build`, with the error of a JavaScript plugin function.
+    pub fn try_build(&mut self, candidates: &[String]) -> Result<String> {
+        let output = self.build_css(candidates);
+        match self.design_system.take_js_error() {
+            Some(error) => Err(error),
+            None => Ok(output),
+        }
+    }
+
+    fn build_css(&mut self, candidates: &[String]) -> String {
         if self.features == FEATURES_NONE {
             return self.input.clone();
         }
@@ -462,7 +494,7 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
         custom_utilities,
         has_first_theme_rule,
         utilities_src,
-        sources,
+        mut sources,
         inline_candidates,
         ignored_candidates,
         root,
@@ -480,7 +512,12 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
     design_system.invalid_candidates.borrow_mut().extend(ignored_candidates);
 
     // The compatibility layer.
-    features |= apply_compatibility_hooks(&mut design_system, &mut ast)?;
+    features |= apply_compatibility_hooks(
+        &mut design_system,
+        &mut ast,
+        &mut sources,
+        CompatOptions { base: &options.base, module_loader: options.module_loader.clone() },
+    )?;
 
     // Register each custom variant now: its position in the list of the
     // variants is its position in the CSS.
@@ -668,7 +705,8 @@ impl Collector {
             self.has_utilities_node = true;
             self.utilities_src = at.loc.src().cloned();
             self.features |= FEATURES_UTILITIES;
-            *node = context(context_with(UTILITIES_KEY, true.into()), Vec::new());
+            let params = at.params.clone();
+            *node = context(context_with(UTILITIES_KEY, params.into()), Vec::new());
             return Ok(WalkAction::Continue);
         }
 
@@ -1165,8 +1203,15 @@ mod tests {
             error("@custom-variant a { @variant b { @slot; } }\n@custom-variant b { @variant a { @slot; } }"),
             "Circular dependency detected in custom variants:\n\n@custom-variant a { /* ← */\n  @variant b { … }\n}\n@custom-variant b {\n  @variant a { … }\n}\n"
         );
-        assert_eq!(error("@plugin \"./plugin.js\";"), crate::compat::PLUGIN_NEEDS_JAVASCRIPT);
-        assert_eq!(error("@config \"./config.js\";"), crate::compat::CONFIG_NEEDS_JAVASCRIPT);
+        // With no module loader: the error of upstream with no `loadModule`,
+        // or, in a build with no JavaScript engine, the error of this port.
+        let (plugin, config) = if crate::compat::HAS_JAVASCRIPT {
+            (crate::compat::NO_LOAD_MODULE, crate::compat::NO_LOAD_MODULE)
+        } else {
+            (crate::compat::PLUGIN_NEEDS_JAVASCRIPT, crate::compat::CONFIG_NEEDS_JAVASCRIPT)
+        };
+        assert_eq!(error("@plugin \"./plugin.js\";"), plugin);
+        assert_eq!(error("@config \"./config.js\";"), config);
     }
 
     #[test]

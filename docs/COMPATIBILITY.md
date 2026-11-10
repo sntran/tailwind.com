@@ -12,7 +12,7 @@ bug, except the items of "Known differences".
 | Record | Result |
 |---|---|
 | The `compile` calls of the unit tests of Tailwind CSS that need no JavaScript (output or error message, features, sources, root) | 2,028 of 2,028 the same |
-| The `compile` calls that load a JavaScript plugin or config | 306: each one gives the "needs JavaScript" error |
+| The `compile` calls that load a JavaScript plugin or config, with each module as source text (output or error message, features, sources) | 296 of 296 the same. 10 more calls have a module that uses a variable of its test, and cannot be made again from its text. |
 | More recorded cases for imports, `@apply` with `@utility`, `theme()` key paths, legacy utilities and errors | 82 of 82 the same |
 | 75,082 candidates in one build: each class of the default design system, its variants, 6,000 random candidates, 784 edge cases (24 MB of CSS) | the same |
 | Each 50th of these candidates alone, with a new compiler | 1,502 of 1,502 the same |
@@ -23,7 +23,9 @@ bug, except the items of "Known differences".
 | The official command line program on 17 projects (also `--minify` and `--optimize`) | 17 of 17 the same, with the native program, with `tailwind.com` and with `tailwind.wasm` |
 | The source maps of 317 stylesheets (331 builds): the decoded map of `buildSourceMap()`, the JSON text of `@tailwindcss/node`, and the code and the map of the optimizer, plain and minified | 317 of 317 the same |
 | The source locations of the parser for these stylesheets, and the position in the message of 23 syntax errors | the same |
-| The official command line program with `--map` on 23 projects (the map in the output and in a file, `--minify`, `--optimize`, imports, stdin, errors): the output and the map file | 23 of 23 the same with the native program on Linux. The test replaces the path of the project in the maps. |
+| The official command line program with `--map` on 29 projects (the map in the output and in a file, `--minify`, `--optimize`, imports, stdin, a JavaScript plugin and a JavaScript config, errors): the output and the map file | 29 of 29 the same with the native program on Linux. The test replaces the path of the project in the maps. |
+| The official command line program on 88 projects with JavaScript plugins and configs: the plugin API, config files, `@tailwindcss/typography`, `@tailwindcss/forms`, `tailwindcss-animate`, `@tailwindcss/container-queries`, daisyUI, a Phoenix 1.8 project, 18 errors | 88 of 88 the same output and exit status, with the native program, with `tailwind.com` and with `tailwind.wasm`. 17 of the 18 error messages are the same, line for line. |
+| The JSON of a candidate, as a plugin function gets it, against `parseCandidate` | 10,983 of 10,983 the same |
 | Lightning CSS from Rust against the optimizer of `@tailwindcss/node`, on 322 outputs of the unit tests, plain and minified | 644 of 644 the same |
 
 The scanner is the crate of Tailwind CSS itself, so the classes that it
@@ -31,10 +33,10 @@ finds in the source files are the same by construction.
 
 ## Known differences
 
-- **`@plugin` and `@config`** are errors: the program has no JavaScript
-  engine. The message is ``"`@plugin` needs JavaScript. This compiler
-  does not support `@plugin` and `@config`."`` The errors of Tailwind CSS
-  for a wrong `@plugin` or `@config` rule come first, as upstream.
+- **JavaScript plugins and configs** run in QuickJS, and not in Node.js
+  or Bun. The plugin layer is the JavaScript of Tailwind CSS with no
+  change, so the plugin API has no known difference. The differences
+  are in the environment of a module: see "JavaScript modules" below.
 - **Source maps of the stylesheets in the program**: a stylesheet of
   Tailwind CSS that is in the program has the source path
   `/$tailwindcss/NAME.css` in a source map. The official program from
@@ -75,6 +77,78 @@ finds in the source files are the same by construction.
 - **Text that is not valid Unicode** cannot be an input. JavaScript
   strings can hold a lone surrogate.
 
+## JavaScript modules
+
+`@plugin` and `@config` load JavaScript modules. The official program
+loads them with Node.js (the npm package) or Bun (the standalone
+program). This program loads them with its own loader. The differences:
+
+- **TypeScript modules** (`.ts`, `.mts`, `.cts`) are an error: `Cannot
+  load '…': TypeScript modules are not supported. Use a JavaScript file
+  (.js, .mjs or .cjs).` The official program loads them with jiti.
+- **Node.js modules.** `fs` (`readFileSync`, `readdirSync`,
+  `existsSync`, `statSync`, `lstatSync`, `realpathSync`), `path` (POSIX
+  paths), and `util` (`deprecate`, `inspect`, `format`, `inherits`) are
+  there, also with the `node:` prefix. `require` of another module of
+  Node.js is the error `Cannot find module`. `fs.readFileSync` with no
+  encoding gives a String object with the text of the file, and not a
+  `Buffer`: `toString()` and the methods of a string work.
+- **Globals.** `console`, `process` (`env`, `cwd()`, `platform`,
+  `argv`), `global`, `atob`, `btoa` and `structuredClone` (for plain
+  data) are there. `process.env` has `NODE_ENV` only. `Buffer`,
+  `setTimeout`, `fetch`, `URL`, `TextEncoder`, `Intl` and `Temporal`
+  are not there.
+- **`console.log`** writes to the standard output, and `console.warn`
+  and `console.error` to the standard error, as Node.js. So a line that
+  a plugin prints comes before the CSS when the output is the standard
+  output (daisyUI prints one line).
+- **The default export of a CommonJS bundle.** For a CommonJS module
+  with the exports `__esModule` and `default`, the plugin is the
+  `default`, as in the standalone program (Bun). The npm package on
+  Node.js gives the full exports object, and such a plugin then fails
+  there. The vendor file `daisyui.js` of Phoenix 1.8 needs this rule.
+- **The format of a `.js` file** with no `type` in its `package.json`
+  is CommonJS, unless the file has a syntax error as CommonJS: then it
+  is an ES module. Node.js looks for the syntax of an ES module. The
+  result is the same for a valid file.
+- **The resolver** also tries the extensions `.cjs` and `.mjs`, and
+  uses `module` of a `package.json` when there is no `main`. It does
+  not read `imports` (`#name`) of a `package.json`.
+- **`import()` in a CommonJS file** resolves a relative path from the
+  current directory, and not from the file.
+- **A module with a top-level `await`** works when the promise needs
+  no timer and no input or output.
+- **Error messages.** The message of an exception is the same. A
+  syntax error has the message of QuickJS and the path of the file,
+  and not the message of the parser of Node.js or jiti. An error has no
+  `cause` chain in the output.
+- **An exception of a plugin function in a build**: the program prints
+  the error and stops, as the official program. In the library,
+  `Compiler::try_build` gives the error, and `Compiler::build` gives
+  the CSS without the candidate of the failure.
+- **A plugin function cannot register** a utility or a variant after
+  `compile` (in a function that runs in a build). This is the error `A
+  plugin cannot change the design system during a build.` Upstream
+  accepts it.
+- **The watch** builds again when a module file changes that is not in
+  a `node_modules` directory. The official program watches the plugin
+  or config file and the relative files that it imports.
+- **Limits.** JavaScript has 1 GB of memory and 1 MB of stack (512 KB
+  in the WASI program). There is no limit of time: a plugin that does
+  not end stops the program, as in the official program.
+- **`@tailwindcss/forms`, `@tailwindcss/typography` and
+  `@tailwindcss/aspect-ratio`** are in the file of the standalone
+  program of Tailwind CSS. They are not in this file: they load from
+  `node_modules`.
+
+A build with no JavaScript engine (the library with no feature `js`, or
+the WASI program from a build with no wasi-sdk) gives the error
+``"`@plugin` needs JavaScript. This build of the compiler has no
+JavaScript engine."`` The errors of Tailwind CSS for a wrong `@plugin`
+or `@config` rule come first, as upstream. With the engine and no
+module loader, the error is the error of upstream: ``No `loadModule`
+function provided to `compile` ``.
+
 ## What is the same on purpose in the source maps
 
 - Tailwind CSS can put one node object at two places of the tree (a
@@ -83,6 +157,13 @@ finds in the source files are the same by construction.
   the position of its last place, and the map has two equal mappings
   there and none at the first place. The port gives its copies of such
   a node one identity, and the same result.
+- A node that a JavaScript plugin or config makes (`addBase`,
+  `addUtilities` with `@keyframes`) has the location of its `@plugin` or
+  `@config` rule, as upstream. The tree goes between the compiler and
+  JavaScript as JSON: a node has the numbers of its locations there,
+  and each declaration that comes from JavaScript has the number of its
+  object. So a node that a plugin puts at two places (`addVariant` with
+  a list of selectors) is one node for the printer, as upstream.
 - The optimizer gives source paths with no first slash
   (`tmp/project/app.css`), because Lightning CSS makes them relative to
   the root directory.
@@ -103,3 +184,10 @@ does not have.
 
 `sh scripts/sync-upstream.sh apply VERSION` does the mechanical part and
 gives the list of the changes to port. See [`SYNC.md`](SYNC.md).
+
+The plugin layer is not a port: the sync makes
+`native/tailwind/assets/compat.js` again from the source of Tailwind CSS
+(`tests/upstream/tools/build-compat-bundle.mjs`). When `compat/` of
+Tailwind CSS uses a new method of the theme, the utilities or the
+variants, add it to `native/tailwind/js/design-system.ts` and to the
+host operations of `src/compat/js/runtime.rs`.

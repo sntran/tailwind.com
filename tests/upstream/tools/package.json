@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "The tools of tests/upstream. esbuild makes native/tailwind/assets/compat.js.",
+  "devDependencies": {
+    "esbuild": "0.27.7"
+  }
+}

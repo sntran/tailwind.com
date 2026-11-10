@@ -2,5 +2,5 @@
 
 [31mError:[39m
 [2m┌[22m
-[2m│[22m CssSyntaxError: /PROJECT/app.css:4:3: Invalid declaration: `bar`
+[2m│[22m CssSyntaxError: <project>/app.css:4:3: Invalid declaration: `bar`
 [2m└[22m

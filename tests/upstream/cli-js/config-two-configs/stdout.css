@@ -1,0 +1,17 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .bg-a {
+    background-color: #aaaaaa;
+  }
+  .bg-b {
+    background-color: #bbbbbb;
+  }
+  .bg-both {
+    background-color: from-b;
+  }
+  .dark\:flex:is(.dark *) {
+    display: flex;
+  }
+}
+

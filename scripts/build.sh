@@ -76,8 +76,25 @@ for cpu in $CPUS; do
     sh "$C/bin/$cpu-unknown-cosmo-cc" -O2 -c -o "$d/shim.o" "$root/c_src/cosmo_rust.c"
     # The file events of the watch.
     sh "$C/bin/$cpu-unknown-cosmo-cc" -O2 -c -o "$d/watch.o" "$root/c_src/watch.c"
+    # The JavaScript engine: QuickJS and its API for Rust. The C library of
+    # the file is Cosmopolitan, so cosmocc compiles these files (with the
+    # feature `ape`, native/tailwind/build.rs compiles nothing).
+    log "Building QuickJS for $cpu"
+    js_objects=
+    for f in quickjs/quickjs quickjs/libregexp quickjs/libunicode quickjs/cutils quickjs/dtoa js; do
+        o=$d/js_$(basename "$f").o
+        sh "$C/bin/$cpu-unknown-cosmo-cc" -O2 -fwrapv -funsigned-char -D_GNU_SOURCE \
+            "-DCONFIG_VERSION=\"$(cat "$root/c_src/quickjs/VERSION")\"" \
+            -c -o "$o" "$root/c_src/$f.c" &
+        js_objects="$js_objects $o"
+    done
+    wait
+    for o in $js_objects; do
+        [ -f "$o" ] || { log "The build of $o failed"; exit 1; }
+    done
     # One object with one global name, tailwind_main.
-    sh "$root/scripts/rust_link.sh" "$C" "$cpu" tailwind_main "$d/tailwind.o" "$d/shim.o" "$d/watch.o" "$d/libtailwind.a"
+    # shellcheck disable=SC2086
+    sh "$root/scripts/rust_link.sh" "$C" "$cpu" tailwind_main "$d/tailwind.o" "$d/shim.o" "$d/watch.o" $js_objects "$d/libtailwind.a"
     objects="$objects $cpu"
 done
 

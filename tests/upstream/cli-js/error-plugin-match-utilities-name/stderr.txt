@@ -1,0 +1,6 @@
+≈ tailwindcss v4.3.5
+
+[31mError:[39m
+[2m┌[22m
+[2m│[22m Error: `matchUtilities({ 'Bad_Name!' : … })` defines an invalid utility name. Utilities should be alphanumeric and start with a lowercase letter, eg. `scrollbar`.
+[2m└[22m

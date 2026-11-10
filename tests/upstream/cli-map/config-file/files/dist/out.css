@@ -1,0 +1,60 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .flex {
+    display: flex;
+  }
+  .grid {
+    display: grid;
+  }
+  .animate-wiggle {
+    animation: wiggle 1s ease-in-out infinite;
+  }
+  .p-gutter {
+    padding: 1.5rem;
+  }
+  .tab-4 {
+    tab-size: 4;
+  }
+  .tab-\[13\] {
+    tab-size: 13;
+  }
+  .from-config {
+    color: green;
+    @media print {
+      color: black;
+    }
+  }
+  .text-brand {
+    color: #3b82f6;
+  }
+  @supports (display: grid) {
+    .supports-grid\:grid {
+      display: grid;
+    }
+  }
+  @media (width >= 48rem) {
+    .md\:flex {
+      display: flex;
+    }
+  }
+}
+.own {
+  display: flex;
+  color: oklch(63.7% 0.237 25.331);
+}
+@layer base {
+  h2 {
+    font-size: 1.5rem;
+  }
+}
+@keyframes wiggle {
+  0%, 100% {
+    rotate: -3deg;
+  }
+  50% {
+    rotate: 3deg;
+  }
+}
+
+/*# sourceMappingURL=out.css.map */

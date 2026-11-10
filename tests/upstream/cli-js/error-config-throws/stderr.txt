@@ -1,0 +1,8 @@
+≈ tailwindcss v4.3.5
+
+[31mError:[39m
+[2m┌[22m
+[2m│[22m Error: Cannot find module './not-there.js'
+[2m│[22m Require stack:
+[2m│[22m - <project>/tailwind.config.js
+[2m└[22m

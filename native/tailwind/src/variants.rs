@@ -128,6 +128,21 @@ impl Variants {
         self.group_order = None;
     }
 
+    /// Start a group: the variants until `group_end` get the same order.
+    /// This is `group` in two steps, for the plugins of JavaScript.
+    pub fn group_start(&mut self, compare_fn: Option<CompareFn>) {
+        let order = self.next_order();
+        self.group_order = Some(order);
+        if let Some(compare_fn) = compare_fn {
+            self.compare_fns.insert(order, compare_fn);
+        }
+    }
+
+    /// End the group of `group_start`.
+    pub fn group_end(&mut self) {
+        self.group_order = None;
+    }
+
     pub fn has(&self, name: &str) -> bool {
         self.variants.contains_key(name)
     }

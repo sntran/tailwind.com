@@ -1,0 +1,25 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --spacing: 0.25rem;
+  }
+}
+@layer utilities {
+  .m-2 {
+    margin: calc(var(--spacing) * 2);
+  }
+  .flex {
+    display: flex;
+  }
+  .grid {
+    display: grid;
+  }
+  .p-4 {
+    padding: calc(var(--spacing) * 4);
+  }
+  .italic {
+    font-style: italic;
+  }
+}
+

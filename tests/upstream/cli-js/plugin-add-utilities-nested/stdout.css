@@ -1,0 +1,61 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .clearfix::after {
+    content: "";
+    display: table;
+    clear: both;
+  }
+  .stack > * + * {
+    margin-top: 1rem;
+  }
+  .card-link {
+    color: inherit;
+    &:hover {
+      color: red;
+    }
+    &::after {
+      content: "→";
+    }
+     > svg {
+      width: 1em;
+    }
+    .dark & {
+      color: white;
+    }
+    & + & {
+      margin-left: 1rem;
+    }
+  }
+  .group-box:hover .inner {
+    opacity: 1;
+  }
+  @media (hover: hover) {
+    .hover\:clearfix:hover::after {
+      content: "";
+      display: table;
+      clear: both;
+    }
+  }
+  @media (width >= 40rem) {
+    .sm\:card-link {
+      color: inherit;
+    }
+    .sm\:card-link:hover {
+      color: red;
+    }
+    .sm\:card-link::after {
+      content: "→";
+    }
+    .sm\:card-link  > svg {
+      width: 1em;
+    }
+    .dark .sm\:card-link {
+      color: white;
+    }
+    .sm\:card-link + .sm\:card-link {
+      margin-left: 1rem;
+    }
+  }
+}
+

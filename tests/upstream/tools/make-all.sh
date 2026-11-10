@@ -23,12 +23,22 @@ node "$TOOLS/gen-classes.mjs" "$CLONE" "$OUT"
 # 3. full.json.gz and css/
 node "$TOOLS/gen-full.mjs" "$CLONE" "$OUT"
 
-# 4. cli/*/stdout.css and cli/*/exit.txt
+# 4. cli/*/stdout.css and cli/*/exit.txt, and the same for cli-map (with
+# files/) and cli-js
 node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli" 4.3.5
 node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli-map" 4.3.5
+node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli-js" 4.3.5
 
-# 5. source-maps.jsonl.gz
-node "$TOOLS/gen-source-maps.mjs" "$CLONE" "$OUT"
+# 5. plugin-suite.jsonl.gz: the unit tests again, with each JavaScript
+# module as source text. The script changes plugin.ts of the clone.
+node "$TOOLS/gen-plugin-suite.mjs" "$CLONE" "$SCRATCH" "$OUT/plugin-suite.jsonl.gz"
 
-# 6. Check
+# 6. candidates.jsonl.gz
+node "$TOOLS/gen-candidates.mjs" "$CLONE" "$OUT"
+
+# 7. native/tailwind/assets/compat.js: the plugin layer for the program
+node "$TOOLS/build-compat-bundle.mjs" "$CLONE"
+
+# 8. Check. source-maps.jsonl.gz uses the records of gen-extra.mjs:
+# scripts/sync-upstream.sh makes it after this script.
 python3 "$TOOLS/check.py" "$OUT"

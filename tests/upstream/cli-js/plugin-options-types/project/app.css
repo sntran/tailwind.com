@@ -1,0 +1,27 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./index.html";
+@plugin "./plugin.js" {
+  string: hello world;
+  quoted: "double quoted";
+  single: 'single quoted';
+  number: 42;
+  float: 1.5;
+  negative: -3;
+  yes: true;
+  no: false;
+  nothing: null;
+  undef: undefined;
+  list: a, b, c;
+  mixed-list: 1, two, true, "four, five", null;
+  url: url(https://example.com/a,b.png);
+  color: #ff0000;
+  size: 10px;
+  camelCase: kept;
+  --custom-prop: oklch(50% 0.1 20);
+  spaced:    lots   of   space   ;
+  fn: calc(1px + 2px), var(--x, 1);
+  dup: first;
+  dup: second;
+}

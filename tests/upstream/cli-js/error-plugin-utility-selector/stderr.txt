@@ -1,0 +1,6 @@
+≈ tailwindcss v4.3.5
+
+[31mError:[39m
+[2m┌[22m
+[2m│[22m Error: `addUtilities({ '@media print' : … })` defines an invalid utility selector. Utilities must be a single class name and start with a lowercase letter, eg. `.scrollbar-none`.
+[2m└[22m

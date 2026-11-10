@@ -66,6 +66,12 @@ impl Loc {
             locations.identity = Some(std::rc::Rc::new(()));
         }
     }
+    /// Give the node the identity of another node: the two nodes are
+    /// copies of one object of upstream.
+    pub fn copy_identity(&mut self, from: &Loc) {
+        let Some(identity) = from.0.as_ref().and_then(|locations| locations.identity.clone()) else { return };
+        self.0.get_or_insert_with(Default::default).identity = Some(identity);
+    }
     /// Remove the identity: the node is a new object.
     pub fn clear_identity(&mut self) {
         if let Some(locations) = &mut self.0 {

@@ -1,0 +1,18 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .c-values {
+    --dark-mode: selector;
+    --important: #app;
+    --prefix: "";
+    --answer: undefined;
+    --deep: undefined;
+    --missing: undefined;
+    --default: fallback;
+    --brand: #123456;
+    --red: undefined;
+    --separator: undefined;
+    --keys: blocklist content darkMode experimental future important plugins prefix theme;
+  }
+}
+

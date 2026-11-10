@@ -197,6 +197,7 @@ fn check(record: &Record) -> Result<(), String> {
         load_stylesheet: Some(&loader),
         test_mode: true,
         from: record.from.clone(),
+        module_loader: None,
     };
     let mut compiler = match (compile(&record.input, options), &record.error) {
         (Ok(compiler), None) => compiler,
@@ -488,6 +489,7 @@ mod properties {
             load_stylesheet: Some(&load),
             test_mode: true,
             from: from.map(String::from),
+            module_loader: None,
         }
     }
 

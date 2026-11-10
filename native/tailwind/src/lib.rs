@@ -28,20 +28,22 @@ pub mod value_parser;
 pub mod variants;
 pub mod walk;
 
+pub use compat::module_loader::{FileKind, FileStat, MemoryLoader, ModuleLoader};
 pub use index::{compile, CompileOptions, Compiler, Root, Source, Stylesheet, VERSION};
 
 /// An error of the compiler. The message is the message of Tailwind CSS.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
     pub message: String,
-    /// The name of the error class of Tailwind CSS: `Error`, or
-    /// `CssSyntaxError` for an error of the CSS parser.
-    pub name: &'static str,
+    /// The name of the error, as JavaScript gives it: `Error`,
+    /// `CssSyntaxError` for an error of the CSS parser, or the name of a
+    /// JavaScript exception of a plugin, for example `TypeError`.
+    pub name: std::borrow::Cow<'static, str>,
 }
 
 impl Error {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into(), name: "Error" }
+        Self { message: message.into(), name: std::borrow::Cow::Borrowed("Error") }
     }
 }
 
@@ -55,7 +57,7 @@ impl std::error::Error for Error {}
 
 impl From<css_parser::CssSyntaxError> for Error {
     fn from(e: css_parser::CssSyntaxError) -> Self {
-        Error { message: e.message, name: "CssSyntaxError" }
+        Error { message: e.message, name: std::borrow::Cow::Borrowed("CssSyntaxError") }
     }
 }
 

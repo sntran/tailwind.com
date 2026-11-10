@@ -1,35 +1,51 @@
 #!/bin/sh
 # Run the program on the recorded cases of the official program of
-# Tailwind CSS (tests/upstream/cli and tests/upstream/cli-map), and
-# compare the output.
+# Tailwind CSS, and compare the output.
 #
 # Usage: sh tests/cli.sh PROGRAM [CASE...]
+#        CASES=tests/upstream/cli-js sh tests/cli.sh PROGRAM [CASE...]
+#        CASES=tests/upstream/cli-map sh tests/cli.sh PROGRAM [CASE...]
+#
+# CASES is the directory of the cases (default: tests/upstream/cli).
+# tests/upstream/cli-js has the cases with JavaScript plugins and configs.
+# tests/upstream/cli-map has the cases for --map.
 #
 # Each case has project/ (the files), args.txt (one argument for each
 # line), stdout.css and exit.txt (the record of the official program),
-# and for an error stderr.txt. The program runs on a copy of project/
-# outside this repository, as the record was made: the .gitignore of this
-# repository must not change the scan.
+# and for an error stderr.txt. In stderr.txt, the text <project> is the
+# absolute path of the copy of the project. A case with a file
+# stderr-contains.txt has an error message that this program cannot
+# repeat (a message of the JavaScript parser of Node.js): then only the
+# lines of stderr-contains.txt must be in the error output. The program
+# runs on a copy of project/ outside this repository, as the record was
+# made: the .gitignore of this repository must not change the scan.
 #
-# The cases of cli-map are for --map. A case can also have stdin.txt (the
-# standard input of the program) and files/ (each file that the official
-# program made in the project: the output file and the source map). A
-# source map has the path of the project, so the records have /PROJECT at
-# its place (PROJECT where Lightning CSS removes the first slash). The
-# test puts the same text into the output of the program before the
-# comparison, also in a source map that is in a comment as Base64 text.
-# These cases do not run on Windows: the paths have another form there.
+# A case can also have stdin.txt (the standard input of the program) and
+# files/ (each file that the official program made in the project: the
+# output file and the source map). A source map has the path of the
+# project, so the records have /PROJECT at its place (PROJECT where
+# Lightning CSS removes the first slash). The test puts the same text
+# into the output of the program before the comparison, also in a source
+# map that is in a comment as Base64 text. The cases of cli-map do not run
+# on Windows: the paths have another form there.
 set -eu
 program=$1
 shift
 case "$program" in /*) ;; *) program=$(pwd)/$program ;; esac
 root=$(cd "$(dirname "$0")/.." && pwd)
-upstream=$root/tests/upstream
+cases=${CASES:-$root/tests/upstream/cli}
+case "$cases" in /*) ;; *) cases=$(pwd)/$cases ;; esac
 work=$(mktemp -d "${TMPDIR:-/tmp}/tailwind-cli.XXXXXX")
-[ $# -gt 0 ] || set -- $(ls "$upstream/cli") $(ls "$upstream/cli-map")
+# The real path: the program prints paths with no symbolic links.
+work=$(cd "$work" && pwd -P)
+[ $# -gt 0 ] || set -- $(ls "$cases")
 
-windows=0
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) windows=1 ;; esac
+case "$(uname -s):$(basename "$cases")" in
+    MINGW*:cli-map|MSYS*:cli-map|CYGWIN*:cli-map)
+        echo "cli.sh: the cases of cli-map do not run on Windows"
+        exit 0
+        ;;
+esac
 
 # Put /PROJECT at the place of the path of the project ($project) in a
 # file: normalize FROM TO.
@@ -68,13 +84,7 @@ run() {
 failed=0
 count=0
 for name in "$@"; do
-    cases=$upstream/cli
-    [ -f "$cases/$name/args.txt" ] || cases=$upstream/cli-map
     [ -f "$cases/$name/args.txt" ] || continue
-    if [ "$cases" = "$upstream/cli-map" ] && [ $windows = 1 ]; then
-        echo "cli.sh: $name: not on Windows"
-        continue
-    fi
     count=$((count + 1))
     mkdir -p "$work/$name"
     cp -R "$cases/$name/project" "$work/$name/project"
@@ -87,14 +97,9 @@ for name in "$@"; do
     status=0
     stdin=/dev/null
     [ -f "$cases/$name/stdin.txt" ] && stdin=$cases/$name/stdin.txt
-    if [ "$cases" = "$upstream/cli" ]; then
-        (cd "$work/$name/project" && NO_COLOR=1 run "$@" > "$work/$name/stdout.css" 2> "$work/$name/stderr.txt") || status=$?
-    else
-        (cd "$work/$name/project" && NO_COLOR=1 run "$@" > "$work/$name/stdout.raw" 2> "$work/$name/stderr.raw" < "$stdin") || status=$?
-        project=$(cd "$work/$name/project" && pwd -P)
-        normalize "$work/$name/stdout.raw" "$work/$name/stdout.css"
-        normalize "$work/$name/stderr.raw" "$work/$name/stderr.txt"
-    fi
+    (cd "$work/$name/project" && NO_COLOR=1 run "$@" > "$work/$name/stdout.raw" 2> "$work/$name/stderr.txt" < "$stdin") || status=$?
+    project=$(cd "$work/$name/project" && pwd -P)
+    normalize "$work/$name/stdout.raw" "$work/$name/stdout.css"
     expected=$(cat "$cases/$name/exit.txt")
     ok=1
     if [ "$status" != "$expected" ]; then
@@ -128,10 +133,21 @@ for name in "$@"; do
     # must be in the output, without the colors.
     if [ -f "$cases/$name/stderr.txt" ]; then
         esc=$(printf '\033')
-        sed "s/$esc\[[0-9;]*m//g" "$cases/$name/stderr.txt" | grep '^│' > "$work/$name/expected.txt" || true
-        if [ ! -s "$work/$name/expected.txt" ]; then
-            grep -v '^≈' "$cases/$name/stderr.txt" | grep . > "$work/$name/expected.txt" || true
+        if [ -f "$cases/$name/stderr-contains.txt" ]; then
+            cat "$cases/$name/stderr-contains.txt" > "$work/$name/expected.raw"
+        else
+            sed "s/$esc\[[0-9;]*m//g" "$cases/$name/stderr.txt" | grep '^│' > "$work/$name/expected.raw" || true
+            if [ ! -s "$work/$name/expected.raw" ]; then
+                grep -v '^≈' "$cases/$name/stderr.txt" | grep . > "$work/$name/expected.raw" || true
+            fi
         fi
+        case "$(uname -s)" in
+            # On Windows, the program and the shell do not write the path
+            # of the project in the same way: compare the text before and
+            # after the path.
+            MINGW*|MSYS*|CYGWIN*) sed "s|<project>|\n|g" "$work/$name/expected.raw" | sed "s/^│ *$//" | grep -v '^$' > "$work/$name/expected.txt" || true ;;
+            *) sed "s|<project>|$project|g" "$work/$name/expected.raw" > "$work/$name/expected.txt" ;;
+        esac
         while IFS= read -r line; do
             if ! grep -qF -- "$line" "$work/$name/stderr.txt"; then
                 echo "cli.sh: $name: the error output does not have: $line" >&2

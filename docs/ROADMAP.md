@@ -2,14 +2,14 @@
 
 The sequence is by value for a Phoenix project.
 
-1. **`@plugin` and `@config`.** They need a JavaScript engine and the
-   plugin API of Tailwind CSS (`compat/plugin-api.ts`: `addBase`,
-   `addUtilities`, `matchUtilities`, `addComponents`, `addVariant`,
-   `matchVariant`, `theme()`). A new Phoenix project uses plugins for
-   heroicons and daisyUI. The options: a small engine in the file
-   (QuickJS builds with Cosmopolitan), or native ports of the common
-   plugins. Until then, a project replaces a plugin with CSS
-   (`@utility`, `@custom-variant`), or keeps the official program.
+1. **More of Node.js for JavaScript plugins.** `@plugin` and `@config`
+   work with QuickJS and the plugin layer of Tailwind CSS. What is not
+   there: TypeScript modules (`tailwind.config.ts`; the official program
+   uses jiti for them), the modules `os`, `crypto` and `url`, `Buffer`,
+   and the three plugins that the standalone program of Tailwind CSS
+   has in its file (`@tailwindcss/forms`, `@tailwindcss/typography`,
+   `@tailwindcss/aspect-ratio`): here they load from `node_modules`
+   only. An interrupt for a plugin that does not end is also not there.
 2. **File events for the watch on Windows** (`ReadDirectoryChangesW`).
    The watch polls there.
 3. **`tailwind.wasm` in the BEAM**: run the compiler in the WebAssembly

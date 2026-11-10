@@ -1,0 +1,103 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .t-z {
+    z-index: 50;
+  }
+  .t-width {
+    width: color-mix(in oklab, 0.25rem 200%, transparent);
+  }
+  .t-screen {
+    max-width: 48rem;
+  }
+  .t-screen-custom {
+    max-width: 120rem;
+  }
+  .t-radius {
+    border-radius: 0.5rem;
+  }
+  .t-spacing {
+    padding: 1rem;
+  }
+  .t-spacing-custom {
+    padding: 1.5rem;
+  }
+  .t-spacing-fraction {
+    padding: 0.625rem;
+  }
+  .t-font-display {
+    font-family: "Inter", sans-serif;
+  }
+  .t-font-size {
+    fontSize: 1.25rem;
+    fontSize {
+      line-height: calc(1.75 / 1.25);
+    }
+  }
+  .t-line-height {
+    line-height: calc(1.75 / 1.25);
+  }
+  .t-bracket {
+    color: oklch(63.7% 0.237 25.331);
+  }
+  .t-brand {
+    color: #ff00aa;
+  }
+  .t-default {
+    color: tomato;
+  }
+  .t-dot {
+    color: oklch(63.7% 0.237 25.331);
+  }
+  .t-missing {
+    color: undefined;
+  }
+  .t-opacity {
+    color: color-mix(in oklab, oklch(63.7% 0.237 25.331) 50%, transparent);
+  }
+  .t-opacity-brand {
+    color: color-mix(in oklab, #ff00aa 75%, transparent);
+  }
+  .t-opacity-num {
+    color: color-mix(in oklab, oklch(62.3% 0.214 259.815) 25%, transparent);
+  }
+  .t-opacity-scale {
+    opacity: 0.5;
+  }
+  .t-shadow {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+  .t-duration {
+    transition-duration: 300ms;
+  }
+  .t-font-family {
+    fontFamily: -apple-system;
+    fontFamily: BlinkMacSystemFont;
+    fontFamily: "Segoe UI";
+    fontFamily: Roboto;
+    fontFamily: "Helvetica Neue";
+    fontFamily: "Noto Sans";
+    fontFamily: Arial;
+    fontFamily: sans-serif;
+    fontFamily: "Apple Color Emoji";
+    fontFamily: "Segoe UI Emoji";
+    fontFamily: "Segoe UI Symbol";
+    fontFamily: "Noto Color Emoji";
+  }
+  .t-typeof {
+    --colors: object;
+    --red: 50 100 200 300 400 500 600 700 800 900 950 __CSS_VALUES__;
+    --screens: sm md lg xl 2xl 3xl __CSS_VALUES__;
+  }
+  .t-font-size-tuple {
+    --value: ["1.25rem",{"lineHeight":"calc(1.75 / 1.25)"}];
+  }
+}
+@layer base {
+  :root {
+    --from-plugin-brand: #ff00aa;
+    --from-plugin-accent: #ff00aa;
+    --from-plugin-bg: oklch(63.7% 0.237 25.331);
+  }
+}
+
