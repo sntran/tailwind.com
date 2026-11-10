@@ -133,6 +133,7 @@ WASI file system.
 | [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) | The results against Tailwind CSS, and the known differences. |
 | [`docs/INTERNALS.md`](docs/INTERNALS.md) | The parts of the compiler and of the file, and how they relate to Tailwind CSS. |
 | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/TESTING.md`](docs/TESTING.md) | Build `tailwind.com`, and the tests. |
+| [`docs/SYNC.md`](docs/SYNC.md) | Move to a new version of Tailwind CSS. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What comes next. |
 
 ## Contributing

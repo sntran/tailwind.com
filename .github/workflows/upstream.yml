@@ -1,0 +1,50 @@
+name: Upstream
+
+# Each Monday: when Tailwind CSS has a release that is newer than the
+# version of the file UPSTREAM, open an issue with the list of the
+# changes to port (scripts/sync-upstream.sh report). See docs/SYNC.md.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: A new version of Tailwind CSS
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Compare the versions
+        id: versions
+        run: |
+          . ./UPSTREAM
+          latest=$(sh scripts/sync-upstream.sh latest)
+          echo "current=$TAILWINDCSS_VERSION" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "Tailwind CSS: UPSTREAM has $TAILWINDCSS_VERSION, the newest release is $latest"
+      - name: The list of the changes
+        if: steps.versions.outputs.latest != steps.versions.outputs.current
+        run: sh scripts/sync-upstream.sh report "${{ steps.versions.outputs.latest }}"
+      - name: Open an issue
+        if: steps.versions.outputs.latest != steps.versions.outputs.current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+        run: |
+          title="Tailwind CSS $LATEST"
+          # One issue for each version.
+          if [ -n "$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --search "in:title \"$title\"" --json number --jq '.[0].number')" ]; then
+            echo "An issue for $LATEST exists."
+            exit 0
+          fi
+          {
+            echo "Tailwind CSS $LATEST is out. Run \`sh scripts/sync-upstream.sh apply $LATEST\` and port the changes below (docs/SYNC.md)."
+            echo
+            head -c 60000 build/sync/PORT.md
+          } > body.md
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file body.md

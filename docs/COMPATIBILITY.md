@@ -60,12 +60,5 @@ does not have.
 
 ## A new version of Tailwind CSS
 
-1. Make the record of the new tag: `tests/upstream/tools/make-all.sh`
-   (see [`tests/upstream/README.md`](../tests/upstream/README.md)).
-2. Run `cargo test`. The failures show the changes of behavior.
-3. Port the changes: each file of `native/tailwind/src` names its file
-   of Tailwind CSS.
-4. Update the stylesheets of `native/tailwind/assets` from the npm
-   package, the tag of `tailwindcss-oxide` and the version of
-   `lightningcss` in `native/tailwind/Cargo.toml`, and `VERSION` in
-   `index.rs`.
+`sh scripts/sync-upstream.sh apply VERSION` does the mechanical part and
+gives the list of the changes to port. See [`SYNC.md`](SYNC.md).

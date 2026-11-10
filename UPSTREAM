@@ -1,0 +1,6 @@
+# The versions of the other projects that this repository follows.
+# scripts/sync-upstream.sh reads and writes this file.
+TAILWINDCSS_VERSION=4.3.5
+TAILWINDCSS_COMMIT=9b2c925c19aae46ff4f9cf54a2fa6d2dbac7fa19
+LIGHTNINGCSS_NPM=1.33.0
+LIGHTNINGCSS_CRATE=1.0.0-alpha.72

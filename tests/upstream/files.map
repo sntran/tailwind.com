@@ -1,0 +1,57 @@
+# The file of this repository for each file of Tailwind CSS.
+# scripts/sync-upstream.sh uses this list: for a new version of Tailwind
+# CSS, it gives the diff of each upstream file with the file to change.
+#
+# upstream path (in the repository of Tailwind CSS)	path here	how
+#   port: change the Rust code by hand, as the diff shows
+#   gen:  a tool makes the file again (the sync runs it)
+#   copy: the sync copies the file
+#   dep:  a dependency of Cargo.toml (the sync changes the version)
+#   skip: not in this project
+packages/tailwindcss/src/index.ts	native/tailwind/src/index.rs	port
+packages/tailwindcss/src/ast.ts	native/tailwind/src/ast.rs native/tailwind/src/to_css.rs native/tailwind/src/optimize.rs	port
+packages/tailwindcss/src/walk.ts	native/tailwind/src/walk.rs	port
+packages/tailwindcss/src/css-parser.ts	native/tailwind/src/css_parser.rs	port
+packages/tailwindcss/src/value-parser.ts	native/tailwind/src/value_parser.rs	port
+packages/tailwindcss/src/selector-parser.ts	native/tailwind/src/selector_parser.rs	port
+packages/tailwindcss/src/attribute-selector-parser.ts	native/tailwind/src/attribute_selector_parser.rs	port
+packages/tailwindcss/src/theme.ts	native/tailwind/src/theme.rs	port
+packages/tailwindcss/src/candidate.ts	native/tailwind/src/candidate.rs	port
+packages/tailwindcss/src/compile.ts	native/tailwind/src/compile.rs	port
+packages/tailwindcss/src/sort.ts	native/tailwind/src/compile.rs	port
+packages/tailwindcss/src/design-system.ts	native/tailwind/src/design_system.rs	port
+packages/tailwindcss/src/utilities.ts	native/tailwind/src/utilities/	port
+packages/tailwindcss/src/variants.ts	native/tailwind/src/variants.rs	port
+packages/tailwindcss/src/apply.ts	native/tailwind/src/apply.rs	port
+packages/tailwindcss/src/at-import.ts	native/tailwind/src/at_import.rs	port
+packages/tailwindcss/src/css-functions.ts	native/tailwind/src/css_functions.rs	port
+packages/tailwindcss/src/property-order.ts	native/tailwind/src/property_order.rs	gen
+packages/tailwindcss/src/utils/	native/tailwind/src/utils/	port
+packages/tailwindcss/src/compat/default-theme.ts	native/tailwind/src/compat/default_theme.rs	gen
+packages/tailwindcss/src/compat/legacy-utilities.ts	native/tailwind/src/compat/legacy_utilities.rs	port
+packages/tailwindcss/src/compat/plugin-functions.ts	native/tailwind/src/compat/theme_fn.rs	port
+packages/tailwindcss/src/compat/apply-compat-hooks.ts	native/tailwind/src/compat.rs	port
+packages/tailwindcss/src/compat/	native/tailwind/src/compat.rs native/tailwind/src/compat/	port
+packages/tailwindcss/index.css	native/tailwind/assets/index.css	copy
+packages/tailwindcss/theme.css	native/tailwind/assets/theme.css	copy
+packages/tailwindcss/preflight.css	native/tailwind/assets/preflight.css	copy
+packages/tailwindcss/utilities.css	native/tailwind/assets/utilities.css	copy
+packages/@tailwindcss-cli/src/	native/tailwind/src/cli/mod.rs native/tailwind/src/cli/args.rs	port
+packages/@tailwindcss-node/src/compile.ts	native/tailwind/src/cli/resolve.rs native/tailwind/src/cli/mod.rs	port
+packages/@tailwindcss-node/src/optimize.ts	native/tailwind/src/cli/optimize_css.rs	port
+packages/@tailwindcss-standalone/src/index.ts	native/tailwind/src/cli/resolve.rs	port
+crates/oxide/	native/tailwind/Cargo.toml	dep
+crates/ignore/	native/tailwind/Cargo.toml	dep
+pnpm-workspace.yaml	native/tailwind/Cargo.toml	dep
+packages/tailwindcss/src/intellisense.ts	-	skip
+packages/tailwindcss/src/canonicalize-candidates.ts	-	skip
+packages/tailwindcss/src/canonicalize-calc-expressions.ts	-	skip
+packages/tailwindcss/src/constant-fold-declaration.ts	-	skip
+packages/tailwindcss/src/expand-declaration.ts	-	skip
+packages/tailwindcss/src/source-maps/	-	skip
+packages/tailwindcss/src/cartesian.ts	-	skip
+packages/tailwindcss/src/feature-flags.ts	-	skip
+packages/tailwindcss/src/test-utils/	-	skip
+crates/node/	-	skip
+crates/classification-macros/	native/tailwind/Cargo.toml	dep
+packages/@tailwindcss-cli/src/commands/canonicalize/	-	skip
