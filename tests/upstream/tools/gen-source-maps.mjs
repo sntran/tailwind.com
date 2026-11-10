@@ -4,6 +4,10 @@
 // For each line, upstream compiles the input with the `from` option, builds each list of
 // candidates, and gives the source map: the decoded map of `buildSourceMap()` and the JSON text
 // of `toSourceMap(...)` of `@tailwindcss/node`.
+// Each build also has `optimized` and `minified`: the `code` and the `map` of
+// `optimize(css, { file, minify, map })` of `@tailwindcss/node` (Lightning CSS in two passes,
+// and the replacement of `@media not (` that keeps the map correct). `file` is the `from`
+// of the line, or `input.css` when the `from` is empty.
 // Each line also has `locations`: the `[start, end]` of the `src` of each node of
 // `parse(input, { from })`, in document order (`null` for a node with no `src`).
 // A line with `error` is an input that upstream rejects: the message has the position.
@@ -137,6 +141,10 @@ let cases = {
   'an empty from': { from: '', input: '@import "./a.css";\n.x {\n  color: red;\n}\n' + UTILITIES, files: { './a.css': '.a {\n  color: red;\n}\n' }, builds: [['grid']] },
   'legacy utilities and the default theme': { input: THEME + UTILITIES + '.a {\n  color: theme(colors.red.500);\n}\n', builds: [['max-w-screen-md', 'flex-shrink', 'start-4']] },
   'container': { input: '@theme {\n  --breakpoint-sm: 40rem;\n  --breakpoint-md: 48rem;\n}\n' + UTILITIES, builds: [['container', 'md:container']] },
+  'optimizer: media rules with not': { input: '@theme {\n  --breakpoint-sm: 40rem;\n  --breakpoint-md: 48rem;\n}\n' + UTILITIES + '@media not (width >= 48rem) {\n  .é\u{1F600} {\n    content: "\u{1F600}";\n  }\n}\n@media not (hover: hover) {\n  .a { color: red }\n}\n@media not print {\n  .b { color: red }\n}\n', builds: [['not-sm:flex', 'not-md:hover:underline', 'not-print:hidden', 'max-md:not-sm:p-4', 'not-hover:flex', 'not-dark:grid', 'not-motion-safe:flex', 'content-["\u{1F600}"]', 'not-supports-[display:grid]:flex']] },
+  'optimizer: media rules with not at the start and at the end': { input: '@media not (width >= 48rem) {\n  .a { color: red }\n}\n.b { color: blue }\n@media not (width < 10px) {\n  .c { color: red }\n}', builds: [[]] },
+  'optimizer: media rules with not in imported files': { input: '@import "./a.css";\n@import "./b.css" layer(b);\n@import "tailwindcss/theme.css" layer(theme);\n' + UTILITIES, files: { './a.css': '@media not (width >= 48rem) {\n  .a {\n    color: red;\n    &:hover { color: blue }\n  }\n}\n', './b.css': '.b {\n  @media not (min-width: 10px) {\n    color: red;\n  }\n  @apply not-md:flex;\n}\n' }, builds: [['not-md:flex', 'not-lg:p-4', 'not-sm:not-hover:underline']] },
+  'optimizer: nesting and equal rules': { input: '.a {\n  color: red;\n  .b {\n    color: blue;\n  }\n}\n.a {\n  background: red;\n}\n.c { color: red }\n.d { color: red }\n@media (width >= 10px) {\n  .a { color: red }\n}\n@media (width >= 10px) {\n  .e { color: red }\n}\n' + UTILITIES, builds: [['flex', 'md:flex', 'hover:flex']] },
   'keyframes of a utility': { input: UTILITIES + '@utility wiggle {\n  animation: wiggle 1s;\n  @keyframes wiggle {\n    to {\n      rotate: 3deg;\n    }\n  }\n}\n@keyframes top {\n  from {\n    opacity: 0;\n  }\n}\n', builds: [['wiggle', 'hover:wiggle']] },
 }
 
@@ -168,7 +176,10 @@ function decoded(map, css) {
 }
 
 function raw(map) {
-  let text = toSourceMap(map).raw
+  return placeholders(toSourceMap(map).raw)
+}
+
+function placeholders(text) {
   for (let [content, name] of cssFiles) {
     text = text.replaceAll(JSON.stringify(content), JSON.stringify(`@@css:${name}@@`))
   }
@@ -223,7 +234,16 @@ async function run({ name, input, from, base, polyfills, builds }, load) {
   for (let candidates of builds) {
     let css = compiler.build(candidates)
     let map = compiler.buildSourceMap()
-    record.builds.push({ candidates, css, map: decoded(map, css), raw: raw(map) })
+    let build = { candidates, css, map: decoded(map, css), raw: raw(map) }
+    for (let [key, minify] of [['optimized', false], ['minified', true]]) {
+      try {
+        let result = upstream.optimize(css, { file: from || 'input.css', minify, map: toSourceMap(map).raw })
+        build[key] = { code: result.code, map: placeholders(result.map) }
+      } catch (err) {
+        build[key] = { error: message(err) }
+      }
+    }
+    record.builds.push(build)
   }
   return record
 }

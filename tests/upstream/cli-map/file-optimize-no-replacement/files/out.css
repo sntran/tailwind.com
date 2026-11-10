@@ -1,0 +1,44 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+/*! A license comment */
+:root, :host {
+  --color-brand: #3b82f6;
+  --spacing: .25rem;
+}
+
+.btn {
+  padding-inline: calc(var(--spacing) * 4);
+  padding-block: calc(var(--spacing) * 2);
+  color: var(--color-brand);
+}
+
+@media (hover: hover) {
+  .btn:hover {
+    text-decoration-line: underline;
+  }
+}
+
+.btn {
+  border-radius: 4px;
+}
+
+.nested {
+  color: red;
+}
+
+.dark .nested {
+  color: #3b82f680;
+}
+
+@supports (color: color-mix(in lab, red, red)) {
+  .dark .nested {
+    color: color-mix(in oklab, var(--color-brand) 50%, transparent);
+  }
+}
+
+@media (min-width: 48rem) {
+  .nested {
+    color: #00f;
+  }
+}
+
+/*# sourceMappingURL=out.css.map */

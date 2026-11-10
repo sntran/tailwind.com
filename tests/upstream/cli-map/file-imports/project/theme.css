@@ -1,0 +1,12 @@
+@theme {
+  --color-red-500: oklch(63.7% 0.237 25.331);
+  --color-brand: #3b82f6;
+  --spacing: 0.25rem;
+  --breakpoint-md: 48rem;
+  --font-sans: ui-sans-serif, system-ui,
+    sans-serif;
+}
+@custom-variant pointer (@media (pointer: fine));
+@utility card {
+  padding: --spacing(4);
+}

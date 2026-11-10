@@ -185,7 +185,9 @@ pub fn resolve_css_id(id: &str, base: &str) -> Option<PathBuf> {
         return as_file(path);
     }
     if id.starts_with("./") || id.starts_with("../") || id == "." || id == ".." {
-        return as_file(&base.join(path));
+        // A path with no `.` and `..` parts, as the resolver of Node.js
+        // gives it: a source map has this path.
+        return as_file(&super::resolve_path(base, id));
     }
     from_packages(id, base)
 }

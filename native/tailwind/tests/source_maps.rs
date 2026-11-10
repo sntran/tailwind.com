@@ -4,8 +4,9 @@
 //!
 //! For each record, the test compiles the input with the `from` option,
 //! builds each list of candidates, and compares the CSS, the decoded map
-//! (`Compiler::build_source_map`) and the JSON text of the map
-//! (`cli::source_maps::to_source_map`).
+//! (`Compiler::build_source_map`), the JSON text of the map
+//! (`cli::source_maps::to_source_map`), and the code and the map of the
+//! optimizer with and without `minify` (`cli::optimize_css::optimize`).
 //!
 //! Environment:
 //! - `MAPS_SHOW`: the number of failures to print (default 5).
@@ -21,6 +22,7 @@ use std::cell::Cell;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use tailwind::ast::AstNode;
+use tailwind::cli::optimize_css::optimize;
 use tailwind::cli::source_maps::{json_string, to_source_map};
 use tailwind::css_parser::{parse, parse_with_source};
 use tailwind::source_maps::DecodedSourceMap;
@@ -69,12 +71,22 @@ struct RecordedMap {
     mappings: Vec<[i64; 5]>,
 }
 
+/// The result of the optimizer of Tailwind CSS.
+#[derive(Deserialize)]
+struct Optimized {
+    code: Option<String>,
+    map: Option<String>,
+    error: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct Build {
     candidates: Vec<String>,
     css: String,
     map: RecordedMap,
     raw: String,
+    optimized: Optimized,
+    minified: Optimized,
 }
 
 #[derive(Deserialize)]
@@ -237,28 +249,53 @@ fn check(record: &Record) -> Result<(), String> {
             ));
         }
 
-        let mut expected_raw = build.raw.clone();
-        for name in CSS_NAMES {
-            let marker = format!("\"@@css:{name}@@\"");
-            if expected_raw.contains(&marker) {
-                let mut content = String::new();
-                json_string(&css_file(name), &mut content);
-                expected_raw = expected_raw.replace(&marker, &content);
-            }
-        }
         let raw = to_source_map(&map).raw;
-        if raw != expected_raw {
-            let at = raw.bytes().zip(expected_raw.bytes()).position(|(a, b)| a != b).unwrap_or(0);
-            let start = at.saturating_sub(60);
-            let side = |text: &str| String::from_utf8_lossy(&text.as_bytes()[start..(at + 60).min(text.len())]).into_owned();
-            return Err(format!(
-                "build {index}: the JSON text is different at byte {at}\n    - {}\n    + {}",
-                side(&expected_raw),
-                side(&raw)
-            ));
+        compare_text(&raw, &with_css_files(&build.raw)).map_err(|e| format!("build {index}: the JSON text {e}"))?;
+
+        // The optimizer, with the map.
+        let file = record.from.as_deref().filter(|from| !from.is_empty()).unwrap_or("input.css");
+        for (name, minify, expected) in [("optimized", false, &build.optimized), ("minified", true, &build.minified)] {
+            let result = optimize(&css, file, minify, Some(&raw));
+            match (result, &expected.code, &expected.map) {
+                (Ok(result), Some(code), Some(expected_map)) => {
+                    compare_text(&result.code, code).map_err(|e| format!("build {index}: {name}: the code {e}"))?;
+                    let actual = result.map.ok_or_else(|| format!("build {index}: {name}: no map"))?;
+                    compare_text(&actual, &with_css_files(expected_map))
+                        .map_err(|e| format!("build {index}: {name}: the map {e}"))?;
+                }
+                (Err(_), None, _) if expected.error.is_some() => {}
+                (Ok(_), _, _) => return Err(format!("build {index}: {name}: no error, expected {:?}", expected.error)),
+                (Err(e), _, _) => return Err(format!("build {index}: {name}: the optimizer failed: {e}")),
+            }
         }
     }
     Ok(())
+}
+
+/// Put the stylesheets of Tailwind CSS at the places of their markers in
+/// the JSON text of a map.
+fn with_css_files(text: &str) -> String {
+    let mut text = text.to_string();
+    for name in CSS_NAMES {
+        let marker = format!("\"@@css:{name}@@\"");
+        if text.contains(&marker) {
+            let mut content = String::new();
+            json_string(&css_file(name), &mut content);
+            text = text.replace(&marker, &content);
+        }
+    }
+    text
+}
+
+/// The description of the first difference of two texts.
+fn compare_text(actual: &str, expected: &str) -> Result<(), String> {
+    if actual == expected {
+        return Ok(());
+    }
+    let at = actual.bytes().zip(expected.bytes()).position(|(a, b)| a != b).unwrap_or(actual.len().min(expected.len()));
+    let start = at.saturating_sub(70);
+    let side = |text: &str| String::from_utf8_lossy(&text.as_bytes()[start.min(text.len())..(at + 70).min(text.len())]).into_owned();
+    Err(format!("is different at byte {at}\n    - {}\n    + {}", side(expected), side(actual)))
 }
 
 #[test]
@@ -525,8 +562,12 @@ mod properties {
                         shift = 0;
                     }
                 }
-                assert_eq!(fields.len(), 4, "a segment has four fields");
                 generated_column += fields[0];
+                // A segment of Lightning CSS can have no source.
+                if fields.len() == 1 {
+                    continue;
+                }
+                assert_eq!(fields.len(), 4, "a segment has four fields");
                 source += fields[1];
                 line += fields[2];
                 column += fields[3];
@@ -588,6 +629,37 @@ mod properties {
         Ok(())
     }
 
+    /// The optimizer gives the same code with and without a map, and each
+    /// mapping of its map is in the lines of the output and in a source.
+    fn check_optimizer(css: &str, raw: &str) -> Result<(), TestCaseError> {
+        for minify in [false, true] {
+            let plain = tailwind::cli::optimize_css::optimize(css, "/root/input.css", minify, None);
+            let mapped = tailwind::cli::optimize_css::optimize(css, "/root/input.css", minify, Some(raw));
+            let (Ok(plain), Ok(mapped)) = (plain, mapped) else {
+                return Err(TestCaseError::fail("the optimizer failed"));
+            };
+            prop_assert!(plain.map.is_none());
+            prop_assert_eq!(&plain.code, &mapped.code);
+            let map = mapped.map.expect("the map of the optimizer");
+            let json: serde_json::Value = serde_json::from_str(&map).expect("the map is JSON");
+            let sources = json["sources"].as_array().expect("the sources");
+            let contents = json["sourcesContent"].as_array().expect("the contents");
+            prop_assert_eq!(sources.len(), contents.len());
+            let lines = mapped.code.split('\n').count() as i64;
+            for [generated_line, _, source, line, _] in decode_mappings(&map) {
+                prop_assert!(generated_line >= 1 && generated_line <= lines, "generated line {generated_line}");
+                prop_assert!(source >= 0 && (source as usize) < sources.len());
+                let content = contents[source as usize].as_str().unwrap_or("");
+                prop_assert!(line >= 1 && line <= content.split('\n').count() as i64, "original line {line}");
+            }
+            // A source of the optimizer is a path with no first slash.
+            for source in sources {
+                prop_assert!(!source.as_str().unwrap_or("/").starts_with('/'));
+            }
+        }
+        Ok(())
+    }
+
     proptest! {
         #![proptest_config(ProptestConfig { cases: 96, failure_persistence: None, ..ProptestConfig::default() })]
 
@@ -611,7 +683,9 @@ mod properties {
             for list in [first, second] {
                 let css = tracked.build(&list);
                 prop_assert_eq!(&css, &plain.build(&list));
-                check_map(&css, &tracked.build_source_map())?;
+                let map = tracked.build_source_map();
+                check_map(&css, &map)?;
+                check_optimizer(&css, &to_source_map(&map).raw)?;
                 // Without `from`, the map is empty.
                 prop_assert!(plain.build_source_map().mappings.is_empty());
             }

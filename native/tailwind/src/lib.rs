@@ -34,11 +34,14 @@ pub use index::{compile, CompileOptions, Compiler, Root, Source, Stylesheet, VER
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
     pub message: String,
+    /// The name of the error class of Tailwind CSS: `Error`, or
+    /// `CssSyntaxError` for an error of the CSS parser.
+    pub name: &'static str,
 }
 
 impl Error {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into() }
+        Self { message: message.into(), name: "Error" }
     }
 }
 
@@ -52,7 +55,7 @@ impl std::error::Error for Error {}
 
 impl From<css_parser::CssSyntaxError> for Error {
     fn from(e: css_parser::CssSyntaxError) -> Self {
-        Error::new(e.message)
+        Error { message: e.message, name: "CssSyntaxError" }
     }
 }
 
