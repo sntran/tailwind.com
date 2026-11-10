@@ -10,9 +10,27 @@ repository = "https://github.com/sntran/tailwind.com"
 [lib]
 name = "tailwind"
 path = "src/lib.rs"
+crate-type = ["rlib", "staticlib"]
+
+[[bin]]
+name = "tailwind"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+# The command line program: the scanner of Tailwind CSS, and Lightning CSS
+# for --minify and --optimize.
+cli = ["dep:tailwindcss-oxide", "dep:lightningcss", "dep:serde_json"]
 
 [dependencies]
 indexmap = "2"
+# The scanner of Tailwind CSS, from the same release as the compiler.
+tailwindcss-oxide = { git = "https://github.com/tailwindlabs/tailwindcss.git", tag = "v4.3.5", optional = true }
+# The version that the npm package lightningcss 1.33.0 has: the optimizer
+# of Tailwind CSS 4.3.5.
+lightningcss = { version = "=1.0.0-alpha.72", default-features = false, optional = true }
+serde_json = { version = "1", optional = true }
 
 [dev-dependencies]
 proptest = "1"
