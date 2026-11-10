@@ -49,6 +49,12 @@ program (`tests/upstream/cli`): automatic source detection with
 a Phoenix project, and two errors. CI runs it with `tailwind.com` on
 Linux, macOS and Windows, on x86_64 and aarch64.
 
+`tests/watch.sh PROGRAM [--poll=ms]` tests the watch: an edit of a
+source file, a new file in a new directory, a file replaced by a
+rename, an edit of the input, an error and its repair, and the end of
+stdin. CI runs it with the file events of each system and with the
+poll.
+
 `node tests/wasi.mjs build/tailwind.wasm` runs the same cases with the
 WASI program in Node.js.
 

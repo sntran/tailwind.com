@@ -61,7 +61,9 @@ let css = compiler.build(&["flex".to_string(), "md:p-4".to_string()]);
 
 ## The Erlang and Elixir modules
 
-`mix compile` builds the two (Elixir 1.14 or later). `rebar3 compile`
+`mix compile` builds the two. They need Erlang/OTP 29 and Elixir 1.20
+or later, the versions of BEAM.com: the Erlang module uses `-doc`
+attributes and `maybe`. `rebar3 compile`
 builds the Erlang module only. They do not build the Rust code: they
 download or find `tailwind.com`.
 

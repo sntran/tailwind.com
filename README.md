@@ -39,7 +39,8 @@ tailwind.com [--input input.css] [--output output.css] [--watch] [--poll=ms] [op
 -o, --output     Output file (default: stdout)
 -w, --watch      Watch for changes and rebuild as needed; --watch=always
                  keeps the watch when stdin closes
-    --poll       The interval of the watch in milliseconds (default 250)
+    --poll       Use polling instead of file system events (--poll=ms
+                 sets the interval)
 -m, --minify     Optimize and minify the output
     --optimize   Optimize the output without minifying
     --cwd        The current working directory
@@ -111,8 +112,9 @@ version of Lightning CSS with the same options.
 - **No JavaScript**: `@plugin` and `@config` are errors. A plugin that
   is only CSS (`@utility`, `@custom-variant`, `@theme`) works.
 - **No source maps**: `--map` is an error.
-- **The watch polls**: it reads the times of the files at an interval,
-  and does not use the events of the file system.
+- **The watch on Windows polls**: there, it reads the times of the files
+  at an interval. On the other systems it uses the events of the file
+  system (inotify, kqueue), as the file watcher of BEAM.com.
 - `canonicalize`, the second command of the official program, is not
   there.
 

@@ -12,8 +12,8 @@ The sequence is by value for a Phoenix project.
    (`@utility`, `@custom-variant`), or keeps the official program.
 2. **Source maps** (`--map`): source locations in the parser, and
    `source-maps/` of Tailwind CSS.
-3. **The watch with the events of the file system**, where the system
-   has them, with the poll as the fallback.
+3. **File events for the watch on Windows** (`ReadDirectoryChangesW`).
+   The watch polls there.
 4. **`tailwind.wasm` in the BEAM**: run the compiler in the WebAssembly
    runtime of BEAM.com, so a Phoenix app on Cloudflare Workers or in a
    browser can build its CSS.

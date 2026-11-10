@@ -28,7 +28,6 @@ defmodule Mix.Tasks.Tailwind.Install do
   """
 
   @shortdoc "Installs tailwind.com"
-  @compile {:no_warn_undefined, Mix}
 
   use Mix.Task
 
@@ -60,10 +59,8 @@ defmodule Mix.Tasks.Tailwind.Install do
     if opts[:if_missing] && latest_version?() do
       :ok
     else
-      if function_exported?(Mix, :ensure_application!, 1) do
-        Mix.ensure_application!(:inets)
-        Mix.ensure_application!(:ssl)
-      end
+      Mix.ensure_application!(:inets)
+      Mix.ensure_application!(:ssl)
 
       Mix.Task.run("loadpaths")
       Tailwind.install(base_url)

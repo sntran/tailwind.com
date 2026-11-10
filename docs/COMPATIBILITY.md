@@ -33,7 +33,8 @@ finds in the source files are the same by construction.
   does not support `@plugin` and `@config`."`` The errors of Tailwind CSS
   for a wrong `@plugin` or `@config` rule come first, as upstream.
 - **Source maps**: `--map` is an error.
-- **The watch** polls. `--poll` only sets the interval.
+- **The watch** uses inotify or kqueue, and polls on Windows. The
+  official program uses `@parcel/watcher`. `--poll` is the same.
 - **`canonicalize`**, the class list, and the sort of classes for
   editors are not there.
 - **An invalid `@variant` in a custom variant**: Tailwind CSS throws

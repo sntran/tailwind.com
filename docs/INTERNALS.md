@@ -7,7 +7,7 @@ native/tailwind/        the compiler and the command line program (Rust)
   src/*.rs              the compiler: one file for each file of Tailwind CSS
   src/cli/              the command line program
   assets/*.css          the stylesheets of Tailwind CSS, in the program
-c_src/                  the entry in C, and the calls of Rust for Cosmopolitan
+c_src/                  the entry in C, the calls of Rust for Cosmopolitan, the file events
 scripts/build.sh        the link of the Rust library into tailwind.com
 src/tailwind.erl        Erlang: install and run tailwind.com
 lib/                    Elixir: the module Tailwind and the Mix tasks
@@ -62,6 +62,7 @@ The compiler is single-threaded and has no dependency except `indexmap`.
 `src/cli/` follows `@tailwindcss/cli` and `@tailwindcss/node`:
 
 - `mod.rs`: the options, the build, the write of the output, the watch.
+- `events.rs`: the file events of `c_src/watch.c` for the watch.
 - `resolve.rs`: the paths of `@import` (relative files, packages in
   `node_modules` with the `style` condition, and the stylesheets of
   Tailwind CSS in the program).
@@ -73,7 +74,8 @@ The compiler is single-threaded and has no dependency except `indexmap`.
 
 ### The watch
 
-The watch polls (`--poll=ms`, default 250). At each tick:
+A tick of the watch starts at a file event of the system, or at the end
+of an interval. At each tick:
 
 1. When the stamp (the time and the size) of the input or of an imported
    stylesheet changed: make a new compiler and a new scanner, scan,
@@ -82,9 +84,30 @@ The watch polls (`--poll=ms`, default 250). At each tick:
    files) and build. The compiler gives the same output when there is
    no new candidate, and the program then writes nothing.
 
+The program compares the files itself at each tick, so an event only
+wakes it. A lost event or a false event changes the time of a build, not
+its result.
+
+The events are in `c_src/watch.c`. It uses the method of the file
+watcher of BEAM.com (`c_src/cosmo/beam_com_watch.c`):
+
+| System | Events | Interval |
+|---|---|---|
+| Linux | inotify on the directories of the files. Cosmopolitan has no wrappers for inotify, so the calls are direct system calls. | 500 ms |
+| macOS, FreeBSD, NetBSD, OpenBSD | kqueue on the directories and, while there are descriptors (half of the open file limit, at most 4096), on the files. `struct kevent` has four layouts, and the code selects one at run time. | 500 ms |
+| Windows | None. | 250 ms |
+| With `--poll[=ms]`, and in a build that is not `tailwind.com` | None. | `--poll` (default 250 ms) |
+
+After an event, the program waits until no more events come for 20 ms
+(at most 0.2 s), because an editor often writes a file in more than one
+step. The interval finds the changes that have no event: a file in a
+directory that has no scanned file yet, and files above the limit of
+kqueue.
+
 The program records the stamp of a file before it reads the file. The
 model `specs/Watch.tla` shows why: with the other order, an edit between
-the read and the stamp is lost.
+the read and the stamp is lost. A tick of the model is a tick from an
+event or from the interval: the model does not need the difference.
 
 The end of stdin stops the watch (not with `--watch=always`), so the
 program stops with the process that started it.

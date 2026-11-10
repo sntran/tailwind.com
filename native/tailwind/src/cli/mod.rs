@@ -4,6 +4,7 @@
 //! so this program can replace it.
 
 pub mod args;
+pub mod events;
 pub mod optimize_css;
 pub mod resolve;
 
@@ -19,6 +20,10 @@ use tailwindcss_oxide::{PublicSourceEntry, Scanner};
 pub const PROGRAM_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const DEFAULT_POLL_INTERVAL_MS: u64 = 250;
+/// The interval of the watch when the system gives file events: the
+/// events wake the watch at once, and the interval finds the changes that
+/// have no event (as the file watcher of BEAM.com).
+const EVENTS_INTERVAL_MS: u64 = 500;
 const DEFAULT_INPUT: &str = "@import 'tailwindcss';";
 
 /// The text styles of the messages. They are empty when stderr is not a
@@ -73,7 +78,7 @@ fn help_text(style: &Style) -> String {
         ("-i, --input", "Input file"),
         ("-o, --output", "Output file [default: `-`]"),
         ("-w, --watch", "Watch for changes and rebuild as needed, and use `always` to keep watching when stdin is closed"),
-        ("    --poll", "The interval of the watch in milliseconds [default: `250`]"),
+        ("    --poll", "Use polling instead of filesystem events when watching"),
         ("-m, --minify", "Optimize and minify the output"),
         ("    --optimize", "Optimize the output without minifying"),
         ("    --cwd", "The current working directory [default: `.`]"),
@@ -153,7 +158,9 @@ struct Options {
     /// `None`: no watch. `Some(always)`: watch; with `always`, also after
     /// the end of stdin.
     watch: Option<bool>,
-    poll: Duration,
+    /// The interval of `--poll`. `None`: use the file events of the system
+    /// when it has them.
+    poll: Option<Duration>,
 }
 
 /// The state of the last write.
@@ -355,9 +362,10 @@ fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options,
     }
 
     let poll = match parsed.flag_or_text("poll", None) {
-        None | Some(Value::Bool(_)) => DEFAULT_POLL_INTERVAL_MS,
+        None | Some(Value::Bool(false)) => None,
+        Some(Value::Bool(true)) => Some(DEFAULT_POLL_INTERVAL_MS),
         Some(Value::Text(t)) => match t.parse::<u64>() {
-            Ok(ms) if ms > 0 => ms,
+            Ok(ms) if ms > 0 => Some(ms),
             _ => return Err("Specified polling interval must be a positive number.".into()),
         },
     };
@@ -381,7 +389,7 @@ fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options,
         optimize: parsed.flag("optimize", None),
         silent: parsed.flag("silent", None),
         watch,
-        poll: Duration::from_millis(poll),
+        poll: poll.map(Duration::from_millis),
     })
 }
 
@@ -393,7 +401,32 @@ fn build_once(build: &mut Build, options: &Options, previous: &mut Previous) -> 
     Ok(())
 }
 
-/// The watch: at each interval, make a full build when the input or an
+/// Give the paths of a build to the events: the input and the imported
+/// stylesheets, the scanned files, and their directories. The directories
+/// come first: see `tw_watch_add` in `c_src/watch.c`.
+fn watch_paths(build: &mut Build, events: &events::Events) {
+    if !events.active() {
+        return;
+    }
+    let mut files: Vec<PathBuf> = build.full_rebuild_paths.iter().map(|(path, _)| path.clone()).collect();
+    files.extend(build.scanner.get_files().into_iter().map(PathBuf::from));
+    let mut dirs: std::collections::BTreeSet<&Path> = std::collections::BTreeSet::new();
+    for file in &files {
+        if let Some(dir) = file.parent() {
+            dirs.insert(dir);
+        }
+    }
+    for dir in dirs {
+        events.add(dir, true);
+    }
+    for file in &files {
+        events.add(file, false);
+    }
+}
+
+/// The watch. A tick starts at a file event of the system, or at the end
+/// of the interval (`--poll`, or a system with no events: only the
+/// interval). At each tick, make a full build when the input or an
 /// imported stylesheet changed, else scan the changed source files and
 /// build when they have new candidates. See `specs/Watch.tla`.
 fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &Style, stdin_text: &Option<String>) -> i32 {
@@ -417,11 +450,22 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
         });
     }
 
+    let mut events = events::Events::start(options.poll.is_none());
+    watch_paths(&mut build, &events);
+
     loop {
         if stdin_closed.load(std::sync::atomic::Ordering::SeqCst) {
             return 0;
         }
-        std::thread::sleep(options.poll);
+        let interval = match options.poll {
+            Some(interval) => interval,
+            None if events.active() => Duration::from_millis(EVENTS_INTERVAL_MS),
+            None => Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
+        };
+        let woke = events.wait(interval);
+        if stdin_closed.load(std::sync::atomic::Ordering::SeqCst) {
+            return 0;
+        }
 
         let start = Instant::now();
         let full = build.full_rebuild_paths.iter().any(|(path, old)| stamp(path) != *old);
@@ -442,6 +486,11 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
             let before = previous.output.clone();
             build_once(&mut build, options, previous).map(|_| previous.output != before)
         };
+
+        // New files and directories can be there after a change.
+        if woke || full {
+            watch_paths(&mut build, &events);
+        }
 
         match result {
             Ok(true) if !options.silent => eprintln!("Done in {}", format_duration(start.elapsed())),

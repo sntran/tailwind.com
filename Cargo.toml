@@ -2,8 +2,14 @@
 resolver = "2"
 members = ["native/tailwind"]
 
+# The compiler builds for speed. Its dependencies build for size: Lightning
+# CSS (for --minify and --optimize) is the largest part of the program, and
+# the program has two copies of all the code, for x86_64 and for aarch64.
 [profile.release]
 lto = "fat"
 codegen-units = 1
+opt-level = "s"
+strip = "symbols"
+
+[profile.release.package.tailwind]
 opt-level = 3
-strip = "debuginfo"

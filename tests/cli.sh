@@ -18,9 +18,11 @@ cases=$root/tests/upstream/cli
 work=$(mktemp -d "${TMPDIR:-/tmp}/tailwind-cli.XXXXXX")
 [ $# -gt 0 ] || set -- $(ls "$cases")
 
-# An APE file needs the shell to start it on some systems.
+# An APE file needs the shell to start it, except on Windows, where it is
+# a program.
 run() {
-    case "$program" in
+    case "$(uname -s):$program" in
+        MINGW*|MSYS*|CYGWIN*) "$program" "$@" ;;
         *.com) sh "$program" "$@" ;;
         *) "$program" "$@" ;;
     esac

@@ -22,6 +22,9 @@ default = ["cli"]
 # The command line program: the scanner of Tailwind CSS, and Lightning CSS
 # for --minify and --optimize.
 cli = ["dep:tailwindcss-oxide", "dep:lightningcss", "dep:serde_json"]
+# The build of tailwind.com (scripts/build.sh): the file events of
+# c_src/watch.c are linked into the program.
+ape = ["cli"]
 
 [dependencies]
 indexmap = "2"

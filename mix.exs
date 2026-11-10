@@ -13,11 +13,16 @@ defmodule TailwindCom.MixProject do
   # this project in place of the Hex package tailwind.
   @version "0.1.0"
 
+  # The code uses Erlang/OTP 29 and Elixir 1.20: the versions of BEAM.com.
+  if String.to_integer(System.otp_release()) < 29 do
+    Mix.raise("tailwind.com needs Erlang/OTP 29 or later, not #{System.otp_release()}")
+  end
+
   def project do
     [
       app: :tailwind,
       version: @version,
-      elixir: "~> 1.14",
+      elixir: "~> 1.20",
       erlc_paths: ["src"],
       test_paths: ["tests"],
       test_pattern: "*_test.exs",

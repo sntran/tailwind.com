@@ -1,16 +1,21 @@
-%% Install and run tailwind.com, the Tailwind CSS compiler in one file.
-%%
-%% Configuration (the application environment of tailwind):
-%%
-%%   {version, "4.3.5"}      the version of Tailwind CSS to download
-%%   {path, "PATH"}          the path of tailwind.com (default:
-%%                           "_build/tailwind.com")
-%%   {url, "URL"}            the URL of the download; "$version" in it is
-%%                           the version
-%%   {sha256, "HEX"}         the SHA-256 that the download must have
-%%   {PROFILE, [{args, [...]}, {cd, "DIR"}, {env, #{...}}]}
-%%                           the arguments of a profile for run/2
 -module(tailwind).
+-moduledoc """
+Install and run tailwind.com, the Tailwind CSS compiler in one file.
+
+Configuration (the application environment of `tailwind`):
+
+- `{version, "4.3.5"}`: the version of Tailwind CSS to download.
+- `{path, "PATH"}`: the path of tailwind.com (default:
+  `"_build/tailwind.com"`).
+- `{url, "URL"}`: the URL of the download. `$version` in it is the
+  version.
+- `{sha256, "HEX"}`: the SHA-256 that the download must have.
+- `{PROFILE, [{args, [...]}, {cd, "DIR"}, {env, #{...}}]}`: the arguments
+  of a profile for `run/2`.
+
+The module needs Erlang/OTP 29 or later.
+""".
+
 
 -export([
     bin_path/0,
@@ -30,20 +35,27 @@
 
 -type profile() :: atom().
 
-%% The version of Tailwind CSS that this package installs when the
-%% configuration has no version.
+-doc """
+The version of Tailwind CSS that this package installs when the
+configuration has no version.
+""".
 -spec latest_version() -> string().
 latest_version() -> ?LATEST.
 
-%% The version of the configuration.
+-doc """
+The version of the configuration.
+""".
 -spec configured_version() -> string().
 configured_version() ->
     to_list(application:get_env(tailwind, version, ?LATEST)).
 
+-doc "The default URL of the download. `$version` in it is the version.".
 -spec default_base_url() -> string().
 default_base_url() -> ?BASE_URL.
 
-%% The configuration of a profile, as a map with args, cd and env.
+-doc """
+The configuration of a profile, as a map with `args`, `cd` and `env`.
+""".
 -spec config_for(profile()) -> #{args := [string()], cd := string(), env := #{string() => string()}}.
 config_for(Profile) when is_atom(Profile) ->
     case application:get_env(tailwind, Profile) of
@@ -61,7 +73,9 @@ config_for(Profile) when is_atom(Profile) ->
             erlang:error({unknown_tailwind_profile, Profile})
     end.
 
-%% The path of tailwind.com.
+-doc """
+The path of tailwind.com.
+""".
 -spec bin_path() -> string().
 bin_path() ->
     case application:get_env(tailwind, path) of
@@ -69,11 +83,14 @@ bin_path() ->
         undefined -> filename:absname(filename:join("_build", "tailwind.com"))
     end.
 
-%% The executable and its arguments for a run of the program. tailwind.com
-%% is an Actually Portable Executable (its first bytes are "MZ"): on
-%% Windows it is a program, and on the other systems the shell starts it,
-%% because the kernel does not start such a file in all cases. A file of
-%% another type (a program for this system only) starts directly.
+-doc """
+The executable and its arguments for a run of the program.
+
+tailwind.com is an Actually Portable Executable (its first bytes are
+`MZ`): on Windows it is a program, and on the other systems the shell
+starts it, because the kernel does not start such a file in all cases. A
+file of another type (a program for this system only) starts directly.
+""".
 -spec command([string()]) -> {string(), [string()]}.
 command(Args) ->
     Path = bin_path(),
@@ -93,7 +110,9 @@ is_ape(Path) ->
             false
     end.
 
-%% The version of Tailwind CSS of the installed file.
+-doc """
+The version of Tailwind CSS of the installed file.
+""".
 -spec bin_version() -> {ok, string()} | error.
 bin_version() ->
     case filelib:is_regular(bin_path()) of
@@ -113,10 +132,14 @@ bin_version() ->
             end
     end.
 
-%% Run tailwind.com with the arguments of the profile and the extra
-%% arguments. The output goes to the group leader. The result is the exit
-%% status. When this process ends, the standard input of the program
-%% closes, and a watch (--watch) stops.
+-doc """
+Run tailwind.com with the arguments of the profile and the extra
+arguments.
+
+The output goes to the group leader. The result is the exit status. When
+this process ends, the standard input of the program closes, and a watch
+(`--watch`) stops.
+""".
 -spec run(profile(), [string()]) -> non_neg_integer().
 run(Profile, ExtraArgs) when is_atom(Profile), is_list(ExtraArgs) ->
     #{args := Args, cd := Cd, env := Env} = config_for(Profile),
@@ -139,29 +162,26 @@ loop(Port, Fun, Acc) ->
         {Port, {exit_status, Status}} -> {Status, Acc}
     end.
 
-%% Download tailwind.com to bin_path/0.
+-doc """
+Download tailwind.com to `bin_path/0`, from the URL of the configuration.
+""".
 -spec install() -> ok | {error, term()}.
 install() ->
     install(to_list(application:get_env(tailwind, url, ?BASE_URL))).
 
+-doc "Download tailwind.com to `bin_path/0`, from this URL.".
 -spec install(string() | binary()) -> ok | {error, term()}.
 install(BaseUrl) ->
     Url = re:replace(to_list(BaseUrl), "\\$version", configured_version(), [global, {return, list}]),
-    case fetch(Url) of
-        {ok, Body} ->
-            case check_sha256(Body) of
-                ok ->
-                    Path = bin_path(),
-                    ok = filelib:ensure_dir(Path),
-                    Tmp = Path ++ ".download",
-                    ok = file:write_file(Tmp, Body),
-                    ok = file:change_mode(Tmp, 8#755),
-                    file:rename(Tmp, Path);
-                Error ->
-                    Error
-            end;
-        Error ->
-            Error
+    Path = bin_path(),
+    Tmp = Path ++ ".download",
+    maybe
+        {ok, Body} ?= fetch(Url),
+        ok ?= check_sha256(Body),
+        ok ?= filelib:ensure_dir(Path),
+        ok ?= file:write_file(Tmp, Body),
+        ok ?= file:change_mode(Tmp, 8#755),
+        file:rename(Tmp, Path)
     end.
 
 check_sha256(Body) ->
@@ -169,7 +189,7 @@ check_sha256(Body) ->
         undefined ->
             ok;
         {ok, Expected} ->
-            Actual = string:lowercase(binary_to_list(binary:encode_hex(crypto:hash(sha256, Body)))),
+            Actual = binary_to_list(binary:encode_hex(crypto:hash(sha256, Body), lowercase)),
             case string:lowercase(to_list(Expected)) of
                 Actual -> ok;
                 _ -> {error, {sha256_mismatch, Actual}}
@@ -197,7 +217,7 @@ set_proxy(Url) ->
             "https" ++ _ -> {["HTTPS_PROXY", "https_proxy"], https_proxy};
             _ -> {["HTTP_PROXY", "http_proxy"], proxy}
         end,
-    case [V || N <- Names, (V = os:getenv(N)) =/= false, V =/= ""] of
+    case [V || N <- Names, V <- [os:getenv(N)], V =/= false, V =/= ""] of
         [Proxy | _] ->
             case uri_string:parse(Proxy) of
                 #{host := Host} = Uri ->
@@ -214,7 +234,7 @@ set_proxy(Url) ->
 ssl_options() ->
     CaCerts =
         case os:getenv("TAILWIND_CACERTFILE") of
-            false -> try public_key:cacerts_get() catch _:_ -> [] end;
+            false -> public_key:cacerts_get();
             File -> File
         end,
     Verify = [
