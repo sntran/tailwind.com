@@ -1,0 +1,154 @@
+name: Build
+
+# The tests of the compiler, the build of tailwind.com (one file for all
+# the systems), and the tests of that file on each system.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore: ["**.md", "docs/**"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COSMOCC_VERSION: "4.0.2"
+  RUST_NIGHTLY: nightly-2026-11-01
+
+jobs:
+  test:
+    name: Tests of the compiler
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: The tests, against the record of Tailwind CSS
+        run: cargo test --release
+      - name: The program, against the record of the official program
+        run: |
+          cargo build --release
+          sh tests/cli.sh target/release/tailwind
+
+  wasm:
+    name: The program for WASI
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: rustup target add wasm32-wasip1
+      - run: make wasm
+      - name: The program in Node.js, against the record
+        run: node tests/wasi.mjs build/tailwind.wasm
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: tailwind.wasm
+          path: build/tailwind.wasm
+          if-no-files-found: error
+
+  tlc:
+    name: The TLA+ models
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: sh scripts/tlc.sh
+
+  build:
+    name: Build tailwind.com
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Cache cosmocc
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: build/cosmocc
+          key: cosmocc-${{ env.COSMOCC_VERSION }}
+      # x86_64: the std of stable Rust. aarch64: a std built again with x18
+      # and x28 reserved, with a nightly Rust (scripts/build.sh).
+      - name: The Rust toolchains
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component rust-src
+      - run: make
+      - run: sh tests/cli.sh build/tailwind.com
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: tailwind.com
+          path: build/tailwind.com
+          if-no-files-found: error
+
+  systems:
+    name: tailwind.com on ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-26, macos-15-intel, windows-2025]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: tailwind.com
+          path: build
+      - name: The program, against the record of the official program
+        run: |
+          chmod +x build/tailwind.com
+          sh tests/cli.sh build/tailwind.com
+
+  mix:
+    name: The Erlang and Elixir modules
+    needs: build
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: tailwind.com
+          path: build
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1
+        with:
+          otp-version: "28"
+          elixir-version: "1.19"
+      - run: chmod +x build/tailwind.com
+      - run: mix format --check-formatted
+      - run: TAILWIND_COM=$PWD/build/tailwind.com mix test
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, wasm, tlc, systems, mix]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          merge-multiple: true
+      - run: sha256sum tailwind.com tailwind.wasm > SHA256SUMS
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            tailwind.com
+            tailwind.wasm
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm SHA256SUMS --repo "$GITHUB_REPOSITORY" --generate-notes

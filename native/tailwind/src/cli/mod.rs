@@ -102,7 +102,9 @@ pub fn format_duration(duration: Duration) -> String {
 /// An error in the box of the official program.
 fn format_error(style: &Style, error: &str) -> String {
     let mut lines = vec![style.red("Error:"), style.dim("\u{250c}")];
-    for line in error.split('\n') {
+    // The official program prints the error object of JavaScript, whose
+    // text starts with `Error: `.
+    for line in format!("Error: {error}").split('\n') {
         lines.push(format!("{} {line}", style.dim("\u{2502}")));
     }
     lines.push(style.dim("\u{2514}"));
