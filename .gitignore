@@ -6,3 +6,6 @@
 /node_modules/
 erl_crash.dump
 *.beam
+# The generated part of the npm package (scripts/npm.sh), and npm itself.
+/runtime/
+/tailwind.com-*.tgz

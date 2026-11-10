@@ -110,3 +110,11 @@ An edit between the read and the stamp was then lost.
 version of the file, a build, the extra arguments, the exit status of an
 error, the environment, the end of a watch with its process, the install
 from a URL with the SHA-256 check, and the two Mix tasks.
+
+## The npm package
+
+`node --test tests/npm.mjs` tests `js/`: the cache directory, the URL of
+the download, a download from a local server, the SHA-256 check, a
+status that is not 200, a download that stops, the start of the file by
+the shell, `run()`, the exit status of `npx tailwind.com`, and
+`runWasm()` with the WebAssembly module.

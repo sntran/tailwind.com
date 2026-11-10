@@ -86,6 +86,41 @@ An Erlang project uses the module `tailwind` (`tailwind:install/0`,
 `tailwind:run/2`), with the same configuration in the application
 environment.
 
+## npm
+
+This repository is also the npm package `tailwind.com`:
+
+```sh
+npx tailwind.com -i app.css -o dist/app.css --minify
+```
+
+The package does not hold `tailwind.com`. At the first run,
+`npx tailwind.com` downloads the file of its release from GitHub, and
+checks its SHA-256 against the value that the package holds. Then the
+file stays in the cache (`~/.cache/tailwind.com/npm/`).
+
+- `TAILWIND_COM`: the path of a `tailwind.com` to use. Then nothing is
+  downloaded.
+- `TAILWIND_COM_DOWNLOAD`: the URL of a directory with the file
+  `tailwind.com`, in place of the GitHub release.
+- `TAILWIND_COM_CACHE`: the cache directory.
+
+The package has the WebAssembly module too, so a program in Node.js 22
+or later can run the compiler in its own process, with no download:
+
+```js
+import { run, runWasm } from 'tailwind.com';
+
+// The native program:
+await run(['-i', 'app.css', '-o', 'dist/app.css', '--minify']);
+
+// The same program as WebAssembly. The directory `cwd` is all that it sees.
+const { status, stdout, stderr } = await runWasm(['-i', 'app.css'], { cwd: 'project' });
+```
+
+`import wasm from 'tailwind.com/tailwind.wasm'` gives the module itself,
+for another WASI host.
+
 ## Compatibility
 
 The output of the official compiler is the specification. `cargo test`

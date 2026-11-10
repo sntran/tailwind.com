@@ -1,0 +1,30 @@
+{
+  "name": "tailwind.com",
+  "version": "0.1.0",
+  "description": "Tailwind CSS in one executable file, with no Node.js at run time: npx tailwind.com, and the same compiler as WebAssembly",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sntran/tailwind.com.git"
+  },
+  "homepage": "https://github.com/sntran/tailwind.com#readme",
+  "keywords": ["tailwindcss", "css", "cli", "wasm", "wasi", "cosmopolitan"],
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "tailwind.com": "js/tailwind.com.mjs"
+  },
+  "exports": {
+    ".": "./js/node.mjs",
+    "./tailwind.wasm": "./runtime/tailwind.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "js/",
+    "runtime/",
+    "LICENSE",
+    "NOTICE",
+    "licenses/"
+  ]
+}
