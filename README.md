@@ -123,6 +123,10 @@ const { status, stdout, stderr } = await runWasm(['-i', 'app.css'], { cwd: 'proj
 `import wasm from 'tailwind.com/tailwind.wasm'` gives the module itself,
 for another WASI host.
 
+Each release also publishes the package to GitHub Packages, with the
+name `@sntran/tailwind.com` (registry `https://npm.pkg.github.com`), and
+holds the package file itself.
+
 ## Compatibility
 
 The output of the official compiler is the specification. `cargo test`

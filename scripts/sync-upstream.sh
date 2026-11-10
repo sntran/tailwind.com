@@ -55,7 +55,12 @@ check() {
     expect src/tailwind.erl "-define(LATEST, \"$v\")."
     expect tests/upstream/README.md "\`v$v\`"
     expect tests/upstream/README.md "$TAILWINDCSS_COMMIT"
-    [ $status = 0 ] && log "all the files agree with UPSTREAM (Tailwind CSS $v)"
+    # The packages have one version of their own.
+    p=$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' package.json)
+    expect mix.exs "@version \"$p\""
+    expect src/tailwind.app.src "{vsn, \"$p\"}"
+    expect native/tailwind/Cargo.toml "version = \"$p\""
+    [ $status = 0 ] && log "all the files agree with UPSTREAM (Tailwind CSS $v), and the packages have the version $p"
     return $status
 }
 

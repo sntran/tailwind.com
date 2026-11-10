@@ -113,8 +113,23 @@ download or find `tailwind.com`.
 
 ## A release
 
-A tag `v*` starts the release job of CI. It publishes `tailwind.com`,
-`tailwind.wasm` and `SHA256SUMS`, with a signed provenance. The tag has
-the version of Tailwind CSS that the compiler follows (for example
-`v4.3.5`), so the `version` of a Phoenix configuration gives the URL of
-the download.
+The packages have one version of their own: `package.json`, `mix.exs`,
+`src/tailwind.app.src` and the crate (`sh scripts/sync-upstream.sh check`
+compares them). The version of Tailwind CSS that the compiler follows is
+in `UPSTREAM`. `tailwind.com --version` prints the two.
+
+A tag `vX.Y.Z` with the version of the packages starts the release job
+of CI. The job:
+
+1. Publishes the GitHub release `vX.Y.Z` with `tailwind.com`,
+   `tailwind.wasm`, the file of the npm package and `SHA256SUMS`, with a
+   signed provenance.
+2. Makes the release with the version of Tailwind CSS again (for example
+   `v4.3.5`), with the same files. The Erlang and Elixir modules download
+   from this release, so the `version` of a Phoenix configuration gives
+   the newest file for that version of Tailwind CSS.
+3. Publishes the npm package `tailwind.com` to npm, when the repository
+   has the secret `NPM_TOKEN`.
+4. Publishes the same package to GitHub Packages, with the name
+   `@OWNER/tailwind.com` (GitHub Packages accepts only a name with the
+   scope of the owner).

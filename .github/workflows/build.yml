@@ -176,26 +176,121 @@ jobs:
       - run: mix format --check-formatted
       - run: TAILWIND_COM=$PWD/build/tailwind.com mix test
 
+  npm:
+    name: The npm package
+    needs: [build, wasm]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: build
+          merge-multiple: true
+      - name: The generated part and the package
+        run: |
+          chmod +x build/tailwind.com
+          version=$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' package.json)
+          sh scripts/npm.sh build/tailwind.com build/tailwind.wasm "v$version"
+          npm pack
+      - name: The tests of the package
+        run: TAILWIND=build/tailwind.com TAILWIND_WASM=build/tailwind.wasm node --test tests/npm.mjs
+      # The package as a user installs it: npx tailwind.com with a download
+      # from a local server, in place of the GitHub release.
+      - name: npx tailwind.com from the package file
+        run: |
+          mkdir -p "$RUNNER_TEMP/serve" "$RUNNER_TEMP/app"
+          cp build/tailwind.com "$RUNNER_TEMP/serve/tailwind.com"
+          (cd "$RUNNER_TEMP/serve" && python3 -m http.server 8377 > /dev/null 2>&1 &)
+          cd "$RUNNER_TEMP/app"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$GITHUB_WORKSPACE"/tailwind.com-*.tgz
+          export TAILWIND_COM_DOWNLOAD=http://127.0.0.1:8377 TAILWIND_COM_CACHE="$RUNNER_TEMP/cache"
+          npx tailwind.com --version
+          echo '<p class="flex"></p>' > index.html
+          npx tailwind.com | grep -q '^  \.flex {'
+          node --input-type=module -e "import { runWasm } from 'tailwind.com'; const r = await runWasm([]); if (r.status !== 0 || !r.stdout.includes('.flex {')) process.exit(1);"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: npm
+          path: tailwind.com-*.tgz
+          if-no-files-found: error
+
+  # A tag vX.Y.Z with the version of the packages (package.json, mix.exs,
+  # the crate) makes the release vX.Y.Z. The job also makes the release
+  # with the version of Tailwind CSS (for example v4.3.5) again, with the
+  # same files: the Erlang and Elixir modules download from it, by the
+  # `version` of the configuration of a project.
   release:
     name: Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, wasm, tlc, systems, mix]
+    needs: [test, wasm, tlc, systems, mix, npm]
     runs-on: ubuntu-26.04
     permissions:
       contents: write
       id-token: write
       attestations: write
+      packages: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: The tag is the version of the packages
+        run: |
+          sh scripts/sync-upstream.sh check
+          version=$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' package.json)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "The tag $GITHUB_REF_NAME is not v$version, the version of package.json." >&2
+            exit 1
+          fi
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
+          path: dist
           merge-multiple: true
-      - run: sha256sum tailwind.com tailwind.wasm > SHA256SUMS
+      - run: cd dist && sha256sum tailwind.com tailwind.wasm tailwind.com-*.tgz > SHA256SUMS
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            tailwind.com
-            tailwind.wasm
+            dist/tailwind.com
+            dist/tailwind.wasm
+            dist/tailwind.com-*.tgz
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm SHA256SUMS --repo "$GITHUB_REPOSITORY" --generate-notes
+        run: |
+          . ./UPSTREAM
+          cd dist
+          gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --generate-notes \
+            --title "$GITHUB_REF_NAME (Tailwind CSS $TAILWINDCSS_VERSION)"
+          # The release with the version of Tailwind CSS: the newest files
+          # for that version.
+          moving="v$TAILWINDCSS_VERSION"
+          gh release delete "$moving" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2> /dev/null || true
+          gh release create "$moving" tailwind.com tailwind.wasm SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
+            --title "Tailwind CSS $TAILWINDCSS_VERSION" \
+            --notes "The files of the release $GITHUB_REF_NAME, for Tailwind CSS $TAILWINDCSS_VERSION. A newer release for the same version of Tailwind CSS replaces these files."
+      # npm: with the secret NPM_TOKEN. With no secret, the step does
+      # nothing: the package file is in the release.
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "No NPM_TOKEN secret: the package is not published to npm."
+            exit 0
+          fi
+          echo "//registry.npmjs.org/:_authToken=$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/npmrc"
+          npm publish dist/tailwind.com-*.tgz --access public --provenance --userconfig "$RUNNER_TEMP/npmrc"
+      # GitHub Packages accepts only a name with the scope of the owner:
+      # the same package, with the name @OWNER/tailwind.com.
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          mkdir "$RUNNER_TEMP/ghp" && tar xzf dist/tailwind.com-*.tgz -C "$RUNNER_TEMP/ghp"
+          cd "$RUNNER_TEMP/ghp/package"
+          sed -i "s|^  \"name\": \"tailwind.com\",|  \"name\": \"@$owner/tailwind.com\",|" package.json
+          grep -q "\"name\": \"@$owner/tailwind.com\"" package.json
+          printf '@%s:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$owner" "$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/ghp/npmrc"
+          npm publish --userconfig "$RUNNER_TEMP/ghp/npmrc" --registry https://npm.pkg.github.com
