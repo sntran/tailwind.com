@@ -69,20 +69,28 @@ bin_path() ->
         undefined -> filename:absname(filename:join("_build", "tailwind.com"))
     end.
 
-%% The executable and its arguments for a run of tailwind.com. The file is
-%% an Actually Portable Executable: on Windows it is a program, and on the
-%% other systems the shell starts it.
+%% The executable and its arguments for a run of the program. tailwind.com
+%% is an Actually Portable Executable (its first bytes are "MZ"): on
+%% Windows it is a program, and on the other systems the shell starts it,
+%% because the kernel does not start such a file in all cases. A file of
+%% another type (a program for this system only) starts directly.
 -spec command([string()]) -> {string(), [string()]}.
 command(Args) ->
     Path = bin_path(),
-    case os:type() of
-        {win32, _} ->
-            {Path, Args};
+    case {os:type(), is_ape(Path), os:find_executable("sh")} of
+        {{win32, _}, _, _} -> {Path, Args};
+        {_, true, Sh} when Sh =/= false -> {Sh, [Path | Args]};
+        _ -> {Path, Args}
+    end.
+
+is_ape(Path) ->
+    case file:open(Path, [read, raw, binary]) of
+        {ok, File} ->
+            Head = file:read(File, 2),
+            ok = file:close(File),
+            Head =:= {ok, <<"MZ">>};
         _ ->
-            case os:find_executable("sh") of
-                false -> {Path, Args};
-                Sh -> {Sh, [Path | Args]}
-            end
+            false
     end.
 
 %% The version of Tailwind CSS of the installed file.
