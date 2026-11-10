@@ -304,6 +304,10 @@ impl Variants {
                 }
 
                 let nodes = r.children_mut()?;
+                // Upstream puts the same nodes at each `@slot`.
+                if ds.track_sources.get() {
+                    crate::ast::share_identity(nodes);
+                }
                 if uses_at_scope {
                     let user = context(source_context("user"), std::mem::take(nodes));
                     substitute_at_slot(&mut body, std::slice::from_ref(&user));
@@ -416,9 +420,13 @@ fn collect_selectors(ast: &[AstNode], selectors: &mut Vec<String>, uses_at_varia
 }
 
 /// Put `nodes` around the children of the rule, one time for each selector.
-fn wrap_children(r: &mut AstNode, selectors: &[&str]) -> Option<()> {
+fn wrap_children(r: &mut AstNode, selectors: &[&str], track_sources: bool) -> Option<()> {
     let nodes = r.children_mut()?;
-    let body = std::mem::take(nodes);
+    let mut body = std::mem::take(nodes);
+    // Upstream puts the same nodes in each rule.
+    if track_sources && selectors.len() > 1 {
+        crate::ast::share_identity(&mut body);
+    }
     let last = selectors.len().saturating_sub(1);
     let mut body = Some(body);
     *nodes = selectors
@@ -435,7 +443,7 @@ fn wrap_children(r: &mut AstNode, selectors: &[&str]) -> Option<()> {
 /// Register a static variant such as `hover`.
 fn static_variant(variants: &mut Variants, name: &str, selectors: &'static [&'static str], compounds: Option<Compounds>) {
     let compounds = compounds.unwrap_or_else(|| compounds_for_selectors(selectors));
-    variants.r#static(name, move |r, _, _| wrap_children(r, selectors), VariantOptions { compounds: Some(compounds), order: None });
+    variants.r#static(name, move |r, _, ds| wrap_children(r, selectors, ds.track_sources.get()), VariantOptions { compounds: Some(compounds), order: None });
 }
 
 /// Replace the children of the rule with one node that has them.
@@ -806,14 +814,25 @@ pub fn create_variants(theme: &Theme) -> Variants {
 
             let mut state = NotWalk::default();
             not_visit(rule_node, &mut Vec::new(), &mut state);
+            // Upstream changes the rule in place (`Object.assign`): the
+            // rule keeps its source locations when the new node has none.
+            let keep_loc = |rule_node: &mut AstNode, new: AstNode| {
+                let old = rule_node.loc().cloned();
+                *rule_node = new;
+                if let (Some(old), Some(loc)) = (old, rule_node.loc_mut()) {
+                    if !loc.is_some() {
+                        *loc = old;
+                    }
+                }
+            };
             if let Some(rules) = state.rules.take() {
-                *rule_node = style_rule("&", rules);
+                keep_loc(rule_node, style_rule("&", rules));
             }
 
             if let AstNode::Rule(r) = rule_node {
                 if r.selector == "&" && r.nodes.len() == 1 {
                     let only = r.nodes.pop()?;
-                    *rule_node = only;
+                    keep_loc(rule_node, only);
                 }
             }
 
@@ -1098,7 +1117,10 @@ pub fn substitute_at_slot(ast: &mut Vec<AstNode>, nodes: &[AstNode]) {
             return WalkAction::ReplaceSkip(nodes.to_vec());
         }
         if r.name == "@keyframes" || r.name == "@property" {
-            let inner = AstNode::AtRule(std::mem::take(r));
+            // Upstream makes a new at-rule: it has no source location.
+            let mut inner = std::mem::take(r);
+            inner.loc = Default::default();
+            let inner = AstNode::AtRule(inner);
             *node = at_root(vec![inner]);
             return WalkAction::Skip;
         }
@@ -1155,7 +1177,7 @@ pub fn substitute_at_variant(ast: &mut Vec<AstNode>, design_system: &DesignSyste
             }
 
             match node {
-                AstNode::Rule(StyleRule { selector, nodes: children }) if selector == "&" => nodes.extend(children),
+                AstNode::Rule(StyleRule { selector, nodes: children, .. }) if selector == "&" => nodes.extend(children),
                 other => nodes.push(other),
             }
         }

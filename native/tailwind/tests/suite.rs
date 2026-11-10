@@ -36,6 +36,7 @@ use tailwind::{compile, CompileOptions, Compiler, Error, Root, Stylesheet, POLYF
 #[derive(Deserialize)]
 struct Options {
     base: Option<String>,
+    from: Option<String>,
     polyfills: Option<u8>,
 }
 
@@ -221,6 +222,7 @@ fn replay(record: &Record) -> Outcome {
         polyfills: record.options.polyfills.unwrap_or(POLYFILLS_ALL),
         load_stylesheet: Some(&loader),
         test_mode: true,
+        from: record.options.from.clone(),
         module_loader: None,
     };
 
@@ -305,6 +307,7 @@ fn replay_with_modules(record: &Record) -> Outcome {
         polyfills: record.options.polyfills.unwrap_or(POLYFILLS_ALL),
         load_stylesheet: Some(&loader),
         test_mode: true,
+        from: record.options.from.clone(),
         module_loader: None,
     };
     match compile(&record.input, options) {

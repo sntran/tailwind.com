@@ -1,0 +1,112 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+/*! A license comment */
+@layer properties;
+:root, :host {
+  --color-red-500: oklch(63.7% 0.237 25.331);
+  --color-brand: #3b82f6;
+  --spacing: 0.25rem;
+}
+.flex {
+  display: flex;
+}
+.w-1\/2 {
+  width: calc(1 / 2 * 100%);
+}
+.translate-x-4 {
+  --tw-translate-x: calc(var(--spacing) * 4);
+  translate: var(--tw-translate-x) var(--tw-translate-y);
+}
+.bg-red-500\/50 {
+  background-color: color-mix(in srgb, oklch(63.7% 0.237 25.331) 50%, transparent);
+  @supports (color: color-mix(in lab, red, red)) {
+    background-color: color-mix(in oklab, var(--color-red-500) 50%, transparent);
+  }
+}
+.card {
+  padding: calc(var(--spacing) * 4);
+  &:hover {
+    color: red;
+  }
+}
+.\[color\:red\] {
+  color: red;
+}
+.text-brand {
+  color: var(--color-brand);
+}
+@media not (width >= 48rem) {
+  .not-md\:hidden {
+    display: none;
+  }
+}
+@media (hover: hover) {
+  :is(:where(.group):hover .group-hover\:text-red-500) {
+    color: var(--color-red-500);
+  }
+  .hover\:card:hover {
+    padding: calc(var(--spacing) * 4);
+  }
+  .hover\:card:hover:hover {
+    color: red;
+  }
+}
+@media (width >= 48rem) {
+  .md\:p-4 {
+    padding: calc(var(--spacing) * 4);
+  }
+}
+@media (pointer: fine) {
+  .pointer\:underline {
+    text-decoration-line: underline;
+  }
+}
+.btn {
+  padding-inline: calc(var(--spacing) * 4);
+  padding-block: calc(var(--spacing) * 2);
+  color: var(--color-brand);
+  &:hover {
+    @media (hover: hover) {
+      text-decoration-line: underline;
+    }
+  }
+  border-radius: 4px;
+}
+.nested {
+  color: red;
+  .dark & {
+    color: color-mix(in srgb, #3b82f6 50%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      color: color-mix(in oklab, var(--color-brand) 50%, transparent);
+    }
+  }
+  @media (width >= 48rem) {
+    color: blue;
+  }
+}
+@property --tw-translate-x {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-translate-y {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-translate-z {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --tw-translate-x: 0;
+      --tw-translate-y: 0;
+      --tw-translate-z: 0;
+    }
+  }
+}
+
+/*# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpbIi9QUk9KRUNUL2FwcC5jc3MiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IjtBQVdBLHdCQUF3QjtBQUZ4QixpQkFBbUI7QUFUbkIsYUFBTztFQUNMLDBDQUEwQztFQUMxQyxzQkFBc0I7RUFDdEIsa0JBQWtCOztBQU1wQixNQUFtQjtFQUFuQixhQUFtQjs7QUFBbkIsUUFBbUI7RUFBbkIseUJBQW1COztBQUFuQixlQUFtQjtFQUFuQiwwQ0FBbUI7RUFBbkIsc0RBQW1COztBQUFuQixnQkFBbUI7RUFBbkIsZ0ZBQW1CO0VBQW5CLCtDQUFtQjtJQUFuQiw0RUFBbUI7OztBQUFuQixNQUFtQjtFQVNqQixpQ0FBcUI7RUFDckIsUUFBUTtJQUNOLFVBQVU7OztBQVhkLGdCQUFtQjtFQUFuQixVQUFtQjs7QUFBbkIsWUFBbUI7RUFBbkIseUJBQW1COztBQUFuQiw0QkFBbUI7RUFBbkIsZ0JBQW1CO0lBQW5CLGFBQW1COzs7QUFBbkIsc0JBQW1CO0VBQW5CLHFEQUFtQjtJQUFuQiwyQkFBbUI7O0VBQW5CLG1CQUFtQjtJQVNqQixpQ0FBcUI7O0VBQ3JCLHlCQUFRO0lBQ04sVUFBVTs7O0FBWGQsd0JBQW1CO0VBQW5CLFNBQW1CO0lBQW5CLGlDQUFtQjs7O0FBQW5CLHVCQUFtQjtFQUFuQixvQkFBbUI7SUFBbkIsK0JBQW1COzs7QUFHbkIsS0FBSztFQUNJLHdDQUFJO0VBQUMsdUNBQUk7RUFBQyx5QkFBVTtFQUFDLFFBQWU7SUFBZixzQkFBZTtNQUFmLCtCQUFlOzs7RUFDM0Msa0JBQWtCOztBQVlwQixRQUFRO0VBQ04sVUFBVTtFQUNWLFFBQVE7SUFDTixtREFBK0Q7SUFBL0QsK0NBQStEO01BQS9ELCtEQUErRDs7O0VBRWpFLHdCQUF3QjtJQUN0QixXQUFXOzs7QUF2QmYsMkJBQW1CO0VBQW5CLFdBQW1CO0VBQW5CLGVBQW1CO0VBQW5CLGdCQUFtQjs7QUFBbkIsMkJBQW1CO0VBQW5CLFdBQW1CO0VBQW5CLGVBQW1CO0VBQW5CLGdCQUFtQjs7QUFBbkIsMkJBQW1CO0VBQW5CLFdBQW1CO0VBQW5CLGVBQW1CO0VBQW5CLGdCQUFtQjs7QUFBbkIsa0JBQW1CO0VBQW5CLG9JQUFtQjtJQUFuQixpQ0FBbUI7TUFBbkIsbUJBQW1CO01BQW5CLG1CQUFtQjtNQUFuQixtQkFBbUIiLCJzb3VyY2VzQ29udGVudCI6WyJAdGhlbWUge1xuICAtLWNvbG9yLXJlZC01MDA6IG9rbGNoKDYzLjclIDAuMjM3IDI1LjMzMSk7XG4gIC0tY29sb3ItYnJhbmQ6ICMzYjgyZjY7XG4gIC0tc3BhY2luZzogMC4yNXJlbTtcbiAgLS1icmVha3BvaW50LW1kOiA0OHJlbTtcbiAgLS1mb250LXNhbnM6IHVpLXNhbnMtc2VyaWYsIHN5c3RlbS11aSxcbiAgICBzYW5zLXNlcmlmO1xufVxuXG5AdGFpbHdpbmQgdXRpbGl0aWVzO1xuXG4vKiEgQSBsaWNlbnNlIGNvbW1lbnQgKi9cbi5idG4ge1xuICBAYXBwbHkgcHgtNCBweS0yIHRleHQtYnJhbmQgaG92ZXI6dW5kZXJsaW5lO1xuICBib3JkZXItcmFkaXVzOiA0cHg7XG59XG5cbkB1dGlsaXR5IGNhcmQge1xuICBwYWRkaW5nOiAtLXNwYWNpbmcoNCk7XG4gICY6aG92ZXIge1xuICAgIGNvbG9yOiByZWQ7XG4gIH1cbn1cblxuQGN1c3RvbS12YXJpYW50IHBvaW50ZXIgKEBtZWRpYSAocG9pbnRlcjogZmluZSkpO1xuXG4ubmVzdGVkIHtcbiAgY29sb3I6IHJlZDtcbiAgLmRhcmsgJiB7XG4gICAgY29sb3I6IGNvbG9yLW1peChpbiBva2xhYiwgdmFyKC0tY29sb3ItYnJhbmQpIDUwJSwgdHJhbnNwYXJlbnQpO1xuICB9XG4gIEBtZWRpYSAod2lkdGggPj0gNDhyZW0pIHtcbiAgICBjb2xvcjogYmx1ZTtcbiAgfVxufVxuIl19 */
+

@@ -8,7 +8,7 @@ use proptest::prelude::*;
 use tailwind::ast::{
     at_root, at_rule, comment, context, decl, decl_full, style_rule, AstNode, ContextMap,
 };
-use tailwind::css_parser::{parse, parse_at_rule};
+use tailwind::css_parser::{parse, parse_at_rule, parse_with_source};
 use tailwind::to_css::to_css;
 
 /// A declaration with the `!important` flag.
@@ -63,6 +63,18 @@ fn check_error(eol: &str, input: &str, message: &str) {
     let error = parse(&input).expect_err("the parse must fail");
     assert_eq!(error.message, with_eol(message, eol), "input: {input:?}");
     assert_eq!(error.to_string(), error.message);
+}
+
+/// The error without a source, and with the source `input.css`: the
+/// message then starts with the position (`parseWithLoc` upstream).
+fn check_error_at(eol: &str, input: &str, position: &str, message: &str) {
+    check_error(eol, input, message);
+    let input = with_eol(input, eol);
+    let error = parse_with_source(&input, Some("input.css")).expect_err("the parse must fail");
+    assert_eq!(error.message, format!("input.css:{position}: {}", with_eol(message, eol)), "input: {input:?}");
+    let loc = error.loc.expect("the location of the error");
+    assert_eq!(loc.source.file.as_deref(), Some("input.css"));
+    assert_eq!(loc.source.code, input);
 }
 
 /// Make two tests for each case: one for each type of line end.
@@ -1048,39 +1060,39 @@ fn only_ignore_cdo_and_cdc_at_the_top_level(eol: &str) {
 // Upstream group: errors.
 
 fn error_when_curly_brackets_are_unbalanced_open(eol: &str) {
-    check_error(eol, "\n          .foo {\n            color: red;\n          }\n\n          .bar\n            /* ^ Missing opening { */\n            color: blue;\n          }\n        ", "Missing opening {");
+    check_error_at(eol, "\n          .foo {\n            color: red;\n          }\n\n          .bar\n            /* ^ Missing opening { */\n            color: blue;\n          }\n        ", "9:11", "Missing opening {");
 }
 
 fn error_when_curly_brackets_are_unbalanced_close(eol: &str) {
-    check_error(eol, "\n          .foo {\n            color: red;\n          }\n\n          .bar {\n            color: blue;\n\n       /* ^ Missing closing } */\n        ", "Missing closing } at .bar");
+    check_error_at(eol, "\n          .foo {\n            color: red;\n          }\n\n          .bar {\n            color: blue;\n\n       /* ^ Missing closing } */\n        ", "6:11", "Missing closing } at .bar");
 }
 
 fn error_when_an_unterminated_string_is_used(eol: &str) {
-    check_error(eol, "\n        .foo {\n          content: \"Hello world!\n          /*                    ^ missing \" */\n          font-weight: bold;\n        }\n      ", "Unterminated string: \"Hello world!\"");
+    check_error_at(eol, "\n        .foo {\n          content: \"Hello world!\n          /*                    ^ missing \" */\n          font-weight: bold;\n        }\n      ", "3:20", "Unterminated string: \"Hello world!\"");
 }
 
 fn error_when_an_unterminated_string_is_used_with_a_semicolon(eol: &str) {
-    check_error(eol, "\n        .foo {\n          content: \"Hello world!;\n          /*                    ^ missing \" */\n          font-weight: bold;\n        }\n      ", "Unterminated string: \"Hello world!;\"");
+    check_error_at(eol, "\n        .foo {\n          content: \"Hello world!;\n          /*                    ^ missing \" */\n          font-weight: bold;\n        }\n      ", "3:20", "Unterminated string: \"Hello world!;\"");
 }
 
 fn error_when_incomplete_custom_properties_are_used(eol: &str) {
-    check_error(eol, "--foo", "Invalid custom property, expected a value");
+    check_error_at(eol, "--foo", "1:1", "Invalid custom property, expected a value");
 }
 
 fn error_when_incomplete_custom_properties_are_used_inside_rules(eol: &str) {
-    check_error(
+    check_error_at(
         eol,
         ".foo { --bar }",
-        "Invalid custom property, expected a value",
+        "1:8", "Invalid custom property, expected a value",
     );
 }
 
 fn error_when_an_unterminated_string_is_used_in_a_custom_property(eol: &str) {
-    check_error(eol, "\n        .foo {\n          --bar: 'Hello world!\n          /*                  ^ missing ' * /;\n        }\n      ", "Unterminated string: 'Hello world!'");
+    check_error_at(eol, "\n        .foo {\n          --bar: 'Hello world!\n          /*                  ^ missing ' * /;\n        }\n      ", "3:18", "Unterminated string: 'Hello world!'");
 }
 
 fn error_when_a_declaration_is_incomplete(eol: &str) {
-    check_error(eol, ".foo { bar }", "Invalid declaration: `bar`");
+    check_error_at(eol, ".foo { bar }", "1:8", "Invalid declaration: `bar`");
 }
 
 // Upstream group: top level.

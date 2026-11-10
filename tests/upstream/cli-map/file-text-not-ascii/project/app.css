@@ -1,0 +1,6 @@
+/* héllo 😀 */
+@tailwind utilities;
+.é😀 {
+  content: "😀";
+  @apply flex content-["é"];
+}

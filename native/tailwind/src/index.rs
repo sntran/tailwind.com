@@ -14,14 +14,15 @@
 //!   utility reads a shared copy of the rule. The compiler copies the rule
 //!   to the shared copy after each step that can change it.
 //!
-//! Source maps and the `from` option are not in this port.
+//! With the `from` option, the nodes have source locations, and
+//! `build_source_map` gives the source map of the last output.
 
 use crate::apply::substitute_at_apply;
 use crate::ast::{
-    at_root, at_rule, comment, context, css_context, css_parent, decl, rule, style_rule, AstNode, AtRule, ContextMap,
-    ContextValue,
+    at_root, at_rule, comment, context, css_context, css_parent, decl, rule, share_identity, style_rule, AstNode,
+    AtRule, ContextMap, ContextValue,
 };
-use crate::at_import::{substitute_at_imports, LoadStylesheet};
+use crate::at_import::{substitute_at_imports_tracked, LoadStylesheet};
 use crate::compat::module_loader::ModuleLoader;
 use crate::compat::{apply_compatibility_hooks, CompatOptions};
 use crate::compile::compile_candidates;
@@ -29,8 +30,9 @@ use crate::css_functions::substitute_functions;
 use crate::css_parser;
 use crate::design_system::{build_design_system, DesignSystem};
 use crate::optimize::optimize_ast;
+use crate::source_maps::{create_source_map, DecodedSourceMap, SourceLocation};
 use crate::theme::{self, Theme, ThemeOptions};
-use crate::to_css::to_css;
+use crate::to_css::{to_css, to_css_tracked};
 use crate::utilities::css_utility::{create_css_utility_shared, RegisterUtility, SharedAtRule};
 use crate::utils::brace_expansion::expand;
 use crate::utils::escape::{escape, unescape};
@@ -68,6 +70,9 @@ pub struct CompileOptions<'a> {
     /// False: the output has the license comment at the top, as the CLI of
     /// Tailwind CSS prints it (upstream: `process.env.NODE_ENV !== 'test'`).
     pub test_mode: bool,
+    /// The path of the stylesheet. With a path, the compiler keeps the
+    /// source locations, and `Compiler::build_source_map` gives a map.
+    pub from: Option<String>,
     /// The file system for the JavaScript modules of `@plugin` and
     /// `@config`. `None`: these rules are errors, as upstream with no
     /// `loadModule`.
@@ -76,7 +81,14 @@ pub struct CompileOptions<'a> {
 
 impl Default for CompileOptions<'_> {
     fn default() -> Self {
-        Self { base: String::new(), polyfills: POLYFILLS_ALL, load_stylesheet: None, test_mode: false, module_loader: None }
+        Self {
+            base: String::new(),
+            polyfills: POLYFILLS_ALL,
+            load_stylesheet: None,
+            test_mode: false,
+            from: None,
+            module_loader: None,
+        }
     }
 }
 
@@ -120,6 +132,12 @@ pub struct Compiler {
     compiled: Option<String>,
     previous_ast_node_count: usize,
     default_did_change: bool,
+    /// True when `from` is a path: the compiler keeps the source locations.
+    track: bool,
+    /// The location of `@tailwind utilities`.
+    utilities_src: Option<SourceLocation>,
+    /// The printed tree of the last compilation, for the source map.
+    compiled_ast: Option<Vec<AstNode>>,
 }
 
 impl Compiler {
@@ -177,7 +195,7 @@ impl Compiler {
         }
 
         let mut invalid: Vec<String> = Vec::new();
-        let new_nodes: Vec<AstNode> = compile_candidates(
+        let mut new_nodes: Vec<AstNode> = compile_candidates(
             &self.all_valid_candidates,
             &self.design_system,
             &mut |candidate| invalid.push(candidate.to_string()),
@@ -187,6 +205,14 @@ impl Compiler {
         .map(|sorted| sorted.node)
         .collect();
         self.design_system.invalid_candidates.borrow_mut().extend(invalid);
+
+        // A rule of a candidate comes from `@tailwind utilities`. The nodes
+        // from `@utility` and `@custom-variant` keep their locations.
+        if self.track {
+            if let Some(src) = &self.utilities_src {
+                set_missing_src(&mut new_nodes, src);
+            }
+        }
 
         // No new rule: the output is the same.
         if !did_add_external_variable && self.previous_ast_node_count == new_nodes.len() {
@@ -206,15 +232,51 @@ impl Compiler {
     /// The output of the last compilation. Compile when there is none.
     fn cached(&mut self) -> String {
         if self.compiled.is_none() {
-            let optimized = optimize_ast(&self.ast, &self.design_system, self.polyfills);
-            self.compiled = Some(to_css(&optimized));
+            let mut optimized = optimize_ast(&self.ast, &self.design_system, self.polyfills);
+            if self.track {
+                self.compiled = Some(to_css_tracked(&mut optimized));
+                self.compiled_ast = Some(optimized);
+            } else {
+                self.compiled = Some(to_css(&optimized));
+            }
         }
         self.compiled.clone().unwrap_or_default()
+    }
+
+    /// The source map of the last output of `build` (`buildSourceMap`).
+    /// It has mappings only when `compile` got the `from` option.
+    pub fn build_source_map(&self) -> DecodedSourceMap {
+        match &self.compiled_ast {
+            Some(ast) => create_source_map(ast),
+            // No compilation yet, or the stylesheet uses no feature: the
+            // tree is the tree of the input.
+            None => match self.ast.iter().find_map(|node| match node {
+                AstNode::Context(root) => Some(&root.nodes),
+                _ => None,
+            }) {
+                Some(nodes) => create_source_map(nodes),
+                None => DecodedSourceMap::default(),
+            },
+        }
     }
 
     /// The design system of the stylesheet.
     pub fn design_system(&self) -> &DesignSystem {
         &self.design_system
+    }
+}
+
+/// Set the `src` of each node that has none (`node.src ??= src`).
+fn set_missing_src(nodes: &mut [AstNode], src: &SourceLocation) {
+    for node in nodes {
+        if let Some(loc) = node.loc_mut() {
+            if loc.src().is_none() {
+                loc.set_src(Some(src.clone()));
+            }
+        }
+        if let Some(children) = node.children_mut() {
+            set_missing_src(children, src);
+        }
     }
 }
 
@@ -229,7 +291,7 @@ fn node_at_mut<'a>(tree: &'a mut [AstNode], path: &[usize]) -> Option<&'a mut As
 
 /// Compile a stylesheet.
 pub fn compile(css: &str, options: CompileOptions) -> Result<Compiler> {
-    let ast = css_parser::parse(css)?;
+    let ast = css_parser::parse_with_source(css, options.from.as_deref())?;
     let mut parsed = parse_css(ast, &options)?;
 
     if !options.test_mode {
@@ -266,6 +328,9 @@ pub fn compile(css: &str, options: CompileOptions) -> Result<Compiler> {
         compiled: None,
         previous_ast_node_count: 0,
         default_did_change,
+        track: options.from.as_deref().is_some_and(|from| !from.is_empty()),
+        utilities_src: parsed.utilities_src,
+        compiled_ast: None,
     })
 }
 
@@ -291,7 +356,7 @@ fn find_utilities(nodes: &mut [AstNode], path: &mut Vec<usize>) -> Option<Vec<us
 
 /// The design system of a stylesheet (`__unstable__loadDesignSystem`).
 pub fn load_design_system(css: &str, options: CompileOptions) -> Result<DesignSystem> {
-    Ok(parse_css(css_parser::parse(css)?, &options)?.design_system)
+    Ok(parse_css(css_parser::parse_with_source(css, options.from.as_deref())?, &options)?.design_system)
 }
 
 /// `parseThemeOptions`
@@ -356,6 +421,7 @@ struct Parsed {
     root: Root,
     features: Features,
     inline_candidates: Vec<String>,
+    utilities_src: Option<SourceLocation>,
 }
 
 /// What the walk of the at-rules collects.
@@ -368,6 +434,7 @@ struct Collector {
     custom_utilities: Vec<(SharedAtRule, RegisterUtility)>,
     has_first_theme_rule: bool,
     has_utilities_node: bool,
+    utilities_src: Option<SourceLocation>,
     sources: Vec<Source>,
     inline_candidates: Vec<String>,
     ignored_candidates: Vec<String>,
@@ -382,7 +449,12 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
     let mut features = FEATURES_NONE;
     let mut ast = vec![context(context_with("base", ContextValue::Str(options.base.clone())), ast)];
 
-    features |= substitute_at_imports(&mut ast, &options.base, options.load_stylesheet.unwrap_or(&no_stylesheet_loader))?;
+    features |= substitute_at_imports_tracked(
+        &mut ast,
+        &options.base,
+        options.load_stylesheet.unwrap_or(&no_stylesheet_loader),
+        options.from.is_some(),
+    )?;
 
     let mut collector = Collector {
         features: FEATURES_NONE,
@@ -393,6 +465,7 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
         custom_utilities: Vec::new(),
         has_first_theme_rule: false,
         has_utilities_node: false,
+        utilities_src: None,
         sources: Vec::new(),
         inline_candidates: Vec::new(),
         ignored_candidates: Vec::new(),
@@ -420,6 +493,7 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
         custom_variant_dependencies,
         custom_utilities,
         has_first_theme_rule,
+        utilities_src,
         mut sources,
         inline_candidates,
         ignored_candidates,
@@ -429,6 +503,7 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
     features |= collected_features;
 
     let mut design_system = build_design_system(theme);
+    design_system.track_sources.set(options.from.as_deref().is_some_and(|from| !from.is_empty()));
 
     if important {
         design_system.important = true;
@@ -503,7 +578,7 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
             if value.options & theme::REFERENCE != 0 {
                 continue;
             }
-            nodes.push(decl(escape(&key).into_owned(), value.value));
+            nodes.push(decl(escape(&key).into_owned(), value.value).with_src(value.src.as_ref()));
         }
 
         // An `AtRoot` moves the `@keyframes` out of `:root`. They are at
@@ -533,7 +608,7 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
         _ => WalkAction::Continue,
     });
 
-    Ok(Parsed { design_system, ast, sources, root, features, inline_candidates })
+    Ok(Parsed { design_system, ast, sources, root, features, inline_candidates, utilities_src })
 }
 
 /// Call the function for each `@utility` rule of the tree, in document
@@ -628,6 +703,7 @@ impl Collector {
             }
 
             self.has_utilities_node = true;
+            self.utilities_src = at.loc.src().cloned();
             self.features |= FEATURES_UTILITIES;
             let params = at.params.clone();
             *node = context(context_with(UTILITIES_KEY, params.into()), Vec::new());
@@ -797,9 +873,13 @@ impl Collector {
                     let at_rule_params = at_rule_params.clone();
                     design_system.variants.r#static(
                         variant_name.clone(),
-                        move |r, _, _| {
+                        move |r, _, ds| {
                             let children = r.children_mut()?;
-                            let body = std::mem::take(children);
+                            let mut body = std::mem::take(children);
+                            // Upstream puts the same nodes in each rule.
+                            if ds.track_sources.get() && style_rule_selectors.len().min(1) + at_rule_params.len() > 1 {
+                                share_identity(&mut body);
+                            }
                             let slot = if uses_at_scope {
                                 vec![context(context_with("source", "user".into()), body)]
                             } else {
@@ -972,7 +1052,8 @@ impl Collector {
                 AstNode::Comment(_) => return WalkAction::Continue,
                 AstNode::Declaration(declaration) if declaration.property.starts_with("--") => {
                     let value = declaration.value.as_deref().unwrap_or("");
-                    if let Err(e) = theme.add(&unescape(&declaration.property), value, theme_options) {
+                    let src = declaration.loc.src().cloned();
+                    if let Err(e) = theme.add_with_src(&unescape(&declaration.property), value, theme_options, src) {
                         error = Some(e);
                         return WalkAction::Stop;
                     }
@@ -1007,7 +1088,7 @@ impl Collector {
         if !self.has_first_theme_rule {
             self.has_first_theme_rule = true;
             let marker = context(context_with("theme", true.into()), Vec::new());
-            Ok(WalkAction::ReplaceSkip(vec![style_rule(":root, :host", vec![marker])]))
+            Ok(WalkAction::ReplaceSkip(vec![style_rule(":root, :host", vec![marker]).with_src(at.loc.src())]))
         } else {
             Ok(WalkAction::ReplaceSkip(Vec::new()))
         }

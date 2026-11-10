@@ -23,7 +23,7 @@ required-features = ["cli"]
 default = ["cli"]
 # The command line program: the scanner of Tailwind CSS, and Lightning CSS
 # for --minify and --optimize.
-cli = ["dep:tailwindcss-oxide", "dep:lightningcss", "dep:serde_json", "js"]
+cli = ["dep:tailwindcss-oxide", "dep:lightningcss", "dep:serde_json", "dep:parcel_sourcemap", "js"]
 # `@plugin` and `@config`: the QuickJS engine (c_src/quickjs, c_src/js.c)
 # and the plugin layer of Tailwind CSS (assets/compat.js). build.rs
 # compiles the C files. For wasm32-wasip1 it needs WASI_SDK_PATH: with no
@@ -40,7 +40,10 @@ indexmap = "2"
 tailwindcss-oxide = { git = "https://github.com/tailwindlabs/tailwindcss.git", tag = "v4.3.5", optional = true }
 # The version that the npm package lightningcss 1.33.0 has: the optimizer
 # of Tailwind CSS 4.3.5.
-lightningcss = { version = "=1.0.0-alpha.72", default-features = false, optional = true }
+lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["sourcemap"], optional = true }
+# The source maps of Lightning CSS, for --map with --minify or --optimize:
+# the version that Lightning CSS uses.
+parcel_sourcemap = { version = "=2.1.1", optional = true }
 # `preserve_order`: the sequence of the conditions of `exports` in a
 # package.json has a meaning.
 serde_json = { version = "1", optional = true, features = ["preserve_order"] }

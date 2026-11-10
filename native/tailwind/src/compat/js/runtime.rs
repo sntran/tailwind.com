@@ -15,7 +15,7 @@
 
 use super::engine::{Engine, HostResult, JsError, Limits};
 use super::json::{
-    ast_from_json, ast_to_json, functional_candidate_to_json, node_from_json, node_to_json, static_candidate_to_json,
+    ast_from_json, ast_to_json, LocTable, functional_candidate_to_json, node_from_json, node_to_json, static_candidate_to_json,
     variant_from_json, variant_to_json,
 };
 use super::resolve::{self, ResolveKind};
@@ -82,6 +82,8 @@ pub struct JsRuntime {
     stash: RefCell<Vec<VariantFn>>,
     /// The first exception of a plugin function in a build.
     error: RefCell<Option<Error>>,
+    /// The source locations of the nodes that are in JavaScript.
+    locs: LocTable,
 }
 
 /// Sets a flag or a counter back at the end of a host operation.
@@ -94,7 +96,7 @@ impl<T: Copy> Drop for Reset<'_, T> {
 }
 
 fn to_error(error: JsError) -> Error {
-    Error { message: error.message, name: error.name.filter(|name| name != "Error") }
+    Error { message: error.message, name: error.name.map_or(std::borrow::Cow::Borrowed("Error"), std::borrow::Cow::Owned) }
 }
 
 fn text_arg(value: &Value) -> std::result::Result<&str, String> {
@@ -156,6 +158,7 @@ impl JsRuntime {
             exclusive: Cell::new(false),
             stash: RefCell::new(Vec::new()),
             error: RefCell::new(None),
+            locs: LocTable::default(),
         });
         *slot.borrow_mut() = Rc::downgrade(&runtime);
         runtime.engine.eval(COMPAT_JS, "tailwindcss/compat.js").map_err(to_error)?;
@@ -265,7 +268,7 @@ impl JsRuntime {
         };
         match serde_json::from_str::<Value>(&text) {
             Ok(Value::Null) => Compiled::Null,
-            Ok(value) => match ast_from_json(&value) {
+            Ok(value) => match ast_from_json(&value, &self.locs) {
                 Ok(nodes) => Compiled::Nodes(nodes),
                 Err(message) => {
                     self.set_error(message);
@@ -281,10 +284,10 @@ impl JsRuntime {
 
     /// The function of a variant of a plugin.
     fn apply_variant(&self, id: i64, node: &mut AstNode, variant: &Variant, design_system: &DesignSystem) -> Option<()> {
-        let argument = json!({ "id": id, "rule": node_to_json(node), "variant": variant_to_json(variant) });
+        let argument = json!({ "id": id, "rule": node_to_json(node, &self.locs), "variant": variant_to_json(variant) });
         let result = self.call(design_system, "__tw_variant", &argument).and_then(|text| {
             let value: Value = serde_json::from_str(&text.unwrap_or_default()).map_err(|error| error.to_string())?;
-            let rule = node_from_json(value.get("rule").unwrap_or(&Value::Null))?;
+            let rule = node_from_json(value.get("rule").unwrap_or(&Value::Null), &self.locs)?;
             Ok((rule, value.get("applies").and_then(Value::as_bool).unwrap_or(false)))
         });
         match result {
@@ -414,7 +417,7 @@ impl JsRuntime {
                 ))
             }
             "theme.addKeyframes" => {
-                let AstNode::AtRule(rule) = node_from_json(arg)? else {
+                let AstNode::AtRule(rule) = node_from_json(arg, &self.locs)? else {
                     return Err("`addKeyframes` needs an at-rule.".to_string());
                 };
                 self.with(|ds| {
@@ -425,7 +428,7 @@ impl JsRuntime {
             "theme.getKeyframes" => {
                 let rules = self.with(|ds| Ok(ds.theme.get_keyframes()))?;
                 let nodes: Vec<AstNode> = rules.into_iter().map(AstNode::AtRule).collect();
-                done(ast_to_json(&nodes))
+                done(ast_to_json(&nodes, &self.locs))
             }
 
             // The utilities.
@@ -477,7 +480,7 @@ impl JsRuntime {
             }
             "variants.fromAst" => {
                 let name = field(arg, "name")?.to_string();
-                let ast = ast_from_json(arg.get("ast").unwrap_or(&Value::Null))?;
+                let ast = ast_from_json(arg.get("ast").unwrap_or(&Value::Null), &self.locs)?;
                 self.with_mut(|ds| {
                     ds.variants.from_ast(name, ast);
                     Ok(None)
@@ -524,10 +527,10 @@ impl JsRuntime {
             "variants.apply" => {
                 let index = number(arg.get("stash")).unwrap_or(-1);
                 let apply_fn = self.stash.borrow().get(index as usize).cloned().ok_or("The variant function is not there.")?;
-                let mut rule = node_from_json(arg.get("rule").unwrap_or(&Value::Null))?;
+                let mut rule = node_from_json(arg.get("rule").unwrap_or(&Value::Null), &self.locs)?;
                 let variant = variant_from_json(arg.get("variant").unwrap_or(&Value::Null))?;
                 let applies = self.with(|ds| Ok(apply_fn(&mut rule, &variant, ds).is_some()))?;
-                done(json!({ "rule": node_to_json(&rule), "applies": applies }))
+                done(json!({ "rule": node_to_json(&rule, &self.locs), "applies": applies }))
             }
             "variants.compoundsWith" => {
                 let parent = field(arg, "parent")?;
@@ -631,12 +634,12 @@ impl JsRuntime {
                 Ok(None)
             }),
             "substituteAtApply" | "substituteFunctions" => {
-                let mut ast = ast_from_json(arg)?;
+                let mut ast = ast_from_json(arg, &self.locs)?;
                 let features = self.with(|ds| {
                     if op == "substituteAtApply" { substitute_at_apply(&mut ast, ds, None) } else { substitute_functions(&mut ast, ds) }
                         .map_err(|error| error.message)
                 })?;
-                done(json!({ "ast": ast_to_json(&ast), "features": features }))
+                done(json!({ "ast": ast_to_json(&ast, &self.locs), "features": features }))
             }
 
             // The modules and the files.
@@ -727,15 +730,20 @@ pub fn apply_compatibility_hooks(
 ) -> Result<Features> {
     let runtime = JsRuntime::new(loader)?;
 
+    // With source locations, JavaScript must give each object an identity.
+    if design_system.track_sources.get() {
+        runtime.engine.call("__tw_track", "true").map_err(to_error)?;
+    }
+
     let source_list: Vec<Value> =
         sources.iter().map(|source| json!({ "base": source.base, "pattern": source.pattern, "negated": source.negated })).collect();
-    let argument = json!({ "base": base, "ast": ast_to_json(ast), "sources": source_list }).to_string();
+    let argument = json!({ "base": base, "ast": ast_to_json(ast, &runtime.locs), "sources": source_list }).to_string();
 
     let pointer: *mut DesignSystem = design_system;
     let result = runtime.scope(Access::Setup(pointer), || runtime.engine.call("__tw_compat", &argument)).map_err(to_error)?;
 
     let value: Value = serde_json::from_str(&result.unwrap_or_default()).map_err(|error| Error::new(error.to_string()))?;
-    *ast = ast_from_json(value.get("ast").unwrap_or(&Value::Null)).map_err(Error::new)?;
+    *ast = ast_from_json(value.get("ast").unwrap_or(&Value::Null), &runtime.locs).map_err(Error::new)?;
     if let Some(Value::Array(items)) = value.get("sources") {
         *sources = items
             .iter()

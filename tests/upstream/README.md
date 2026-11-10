@@ -13,6 +13,9 @@ The Rust tests replay them. The tests do not need Node.js.
 | npm packages for the CLI cases | `tailwindcss@4.3.5`, `@tailwindcss/cli@4.3.5`, `@tailwindcss/oxide@4.3.5` |
 | lightningcss (npm) | `1.33.0`, for the unit tests and for the CLI |
 | lightningcss (Rust crate) | `1.0.0-alpha.72` (the `Cargo.toml` at the lightningcss tag `v1.33.0`) |
+| parcel_sourcemap (Rust crate) | `2.1.1` (the `Cargo.lock` at the lightningcss tag `v1.33.0`) |
+| For the source maps of the clone | `source-map-js` 1.2.1, `magic-string` 1.1.0, `@jridgewell/remapping` 2.3.5 |
+| For the source maps of the CLI cases (the npm install) | `source-map-js` 1.2.2, `magic-string` 1.4.5, `@jridgewell/remapping` 2.3.5 |
 | Node.js | 22 |
 | pnpm | 11.9.0 |
 | vitest | 4.1.10 |
@@ -173,6 +176,67 @@ Git also obeys these nested `.gitignore` files. Use `git add -f tests/upstream/c
 
 The `-m`/`--minify` and `--optimize` outputs come from lightningcss.
 
+### `cli-map/`
+
+Cases for the official CLI with `--map`, in the layout of `cli/`. A case can also have:
+
+- `stdin.txt`: the text for the standard input of the CLI.
+- `files/`: each file that the CLI made in `project/`: the output file of `-o` and the source map of `--map FILE`.
+
+A source map has the absolute path of the project. `tools/run-cli.mjs` writes `/PROJECT` at its place
+in `stdout.css` and in the files, also in the JSON text of a map that is in a comment as Base64 text.
+Lightning CSS gives the paths without the first slash: there the record has `PROJECT`.
+`tests/cli.sh` does the same with the output of the program before the comparison.
+In `stderr.txt`, the text `<project>` replaces the path of the project, as in `cli-js/`.
+
+| Case | Content |
+| --- | --- |
+| `inline-stdout` | `--map` with no `-o`: the map is in a comment of the output. The source is the input file. |
+| `inline-stdin`, `inline-output` | `-i -` with `-o -` and with `-o out.css`: the source is `stdin.css`. |
+| `inline-stdin-minify`, `inline-stdin-optimize`, `inline-stdin-minify-no-replacement` | The same with the optimizer. |
+| `inline-file-minify` | `-o out.css --map --minify` with an input file. |
+| `file` | `-o dist/out.css --map dist/out.css.map`. |
+| `file-other-directory` | `--map=maps/x.map` with the output in `dist/css/`: the comment has `../../maps/x.map`. |
+| `file-stdout` | `--map out.map` with no `-o`. |
+| `file-cwd` | `--cwd sub` with relative paths. |
+| `file-minify`, `file-optimize` | `--minify` and `--optimize`. The output has `@media not (`, so the replacement makes a new map. |
+| `file-minify-no-replacement`, `file-optimize-no-replacement` | The same with no `@media not (`: the map is the map of Lightning CSS. |
+| `file-imports`, `file-imports-minify` | Imports of four files, one with `layer()`, one with a media query, and a nested import. |
+| `file-text-not-ascii` | Text that is not ASCII in the input and in a class. |
+| `plugin-file`, `plugin-file-minify` | `@plugin` with a file: `addBase`, `addComponents`, `addUtilities` (also `@keyframes`), `matchUtilities`, and `addVariant` with two selectors. The map is a file. Plain and `--minify`. |
+| `config-file`, `config-file-minify` | `@config` with a file: theme values, keyframes, and a plugin function in `plugins`. The map is a file. Plain and `--minify`. |
+| `plugin-config-inline`, `plugin-config-inline-minify` | `@plugin` and `@config` in one stylesheet, in the two sequences. The map is in the output. Plain and `--minify`. |
+| `error-map-dash`, `error-map-dash-value` | `--map=-` and `--map -`: the exit code is 1. |
+| `error-syntax-stdout`, `error-syntax-with-output`, `error-syntax-in-import` | A CSS syntax error: the message has the path, the line and the column. |
+
+The cases use no stylesheet of Tailwind CSS: the official CLI gives the path in `node_modules` for it,
+and the Rust program has these stylesheets in the program.
+The six cases with `@plugin` or `@config` need a program with JavaScript.
+
+### `source-maps.jsonl.gz`
+
+One JSON line for each stylesheet (317 lines, 331 builds), from `tools/gen-source-maps.mjs`.
+Upstream compiles the input with the `from` option. Fields:
+
+- `name`, `input`, `from`, `base`, `polyfills`, and `stylesheets` (the loader calls, as in `suite.jsonl.gz`).
+- `locations`: the `[start, end]` of the `src` of each node of `parse(input, { from })`, in document order
+  (`null` for a node with no `src`). The offsets are UTF-16 code units.
+- `builds`: for each `build(candidates)`: `candidates`, `css`, and
+  - `map`: the decoded map of `buildSourceMap()`: `sources` (`url`, `content`) and `mappings`
+    (`[generated line, generated column, source index, original line, original column]`; lines start at 1),
+  - `raw`: the JSON text of `toSourceMap(map)` of `@tailwindcss/node`,
+  - `optimized`, `minified`: the `code` and the `map` of `optimize(css, { file, minify, map: raw })`.
+- `error`: for an input that upstream rejects, the message with its position (23 lines).
+
+A content that is equal to a stylesheet of `css/` is `{"css": NAME}`, and `"@@css:NAME@@"` in the JSON text of a map.
+The content of the generated source of a decoded map is `{"generated": true}`: it is the `css` of the build.
+
+The inputs: each 13th record of `suite.jsonl.gz` that uses no JavaScript module and has no error (150 lines),
+the six records of `source-maps/source-map.test.ts`, the 33 records of `suite-extra.jsonl.gz` with no error,
+the two entries of `full.json.gz`, 73 cases of the script (`@theme`, `@apply`, `@utility`, `@custom-variant`, `@variant`,
+`@reference`, imports of more than one file, fallbacks, nesting, text that is not ASCII, CRLF, the optimizer),
+and 30 lists of random candidates of `classes.jsonl.gz` (the seed is `20260405`).
+`SOURCE_MAPS_STEP=1` uses each record of the suite (about 2,100 lines): the Rust test reads such a file with `MAPS_FILE`.
 ### `cli-js/`
 
 Cases for the official CLI with JavaScript plugins and JavaScript configs (`@plugin` and `@config`).
@@ -332,6 +396,10 @@ npm install --no-package-lock --ignore-scripts --legacy-peer-deps
 
 The option `--legacy-peer-deps` keeps the peer package `tailwindcss` out of the project.
 
+After the install, delete the directory `node_modules/.bin` of the project. Its entries are symbolic links,
+and a copy of a symbolic link fails on Windows. The fixtures keep no symbolic link:
+`find tests/upstream -type l` must print nothing.
+
 Some projects contain a `.gitignore` file, a `node_modules` directory or a `deps` directory.
 Use `git add -f tests/upstream/cli-js` to add all the files.
 
@@ -380,8 +448,12 @@ node tests/upstream/tools/gen-classes.mjs /path/to/tw tests/upstream
 # full.json.gz and css/
 node tests/upstream/tools/gen-full.mjs /path/to/tw tests/upstream
 
-# cli/*/stdout.css and cli/*/exit.txt
+# cli/*/stdout.css and cli/*/exit.txt, and the same for cli-map with files/
 node tests/upstream/tools/run-cli.mjs /path/to/scratch/cli tests/upstream/cli 4.3.5
+node tests/upstream/tools/run-cli.mjs /path/to/scratch/cli tests/upstream/cli-map 4.3.5
+
+# source-maps.jsonl.gz (it reads suite.jsonl.gz, suite-extra.jsonl.gz, full.json.gz and classes.jsonl.gz)
+node tests/upstream/tools/gen-source-maps.mjs /path/to/tw tests/upstream
 
 # cli-js/*/stdout.css and cli-js/*/exit.txt
 node tests/upstream/tools/run-cli.mjs /path/to/scratch/cli tests/upstream/cli-js 4.3.5
@@ -414,7 +486,8 @@ python3 tests/upstream/tools/check.py tests/upstream
 | `tools/candidate-lists.mjs` | The hand-made lists: arbitrary forms, variants for the random stacks, modifiers, edge candidates. |
 | `tools/gen-classes.mjs` | Makes `classes.jsonl.gz` and `classes-all.json.gz`. |
 | `tools/gen-full.mjs` | Makes `full.json.gz` and `css/`. |
-| `tools/run-cli.mjs` | Installs the npm packages into the scratch directory, copies each project there, runs the CLI. It records `cli/` and `cli-js/`. |
+| `tools/run-cli.mjs` | Installs the npm packages into the scratch directory, copies each project there, runs the CLI. It records `cli/`, `cli-js/` and `cli-map/`, also the files that the CLI made. |
+| `tools/gen-source-maps.mjs` | Makes `source-maps.jsonl.gz`: `node tests/upstream/tools/gen-source-maps.mjs /path/to/tw tests/upstream`. |
 | `tools/bun-interop.mjs` | The module interop of the standalone program, for the `cli-js/` cases with a `standalone.txt` file. |
 | `tools/gen-extra.mjs` | Makes `suite-extra.jsonl.gz`: `node tests/upstream/tools/gen-extra.mjs /path/to/tw tests/upstream`. |
 | `tools/gen-default-theme.mjs` | Makes `native/tailwind/src/compat/default_theme.rs` from `compat/default-theme.ts`: `node tests/upstream/tools/gen-default-theme.mjs /path/to/tw native/tailwind/src/compat/default_theme.rs`. |

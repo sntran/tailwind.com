@@ -21,6 +21,16 @@ Lightning CSS 1.0.0-alpha.72 (the optimizer of --minify and --optimize)
   Mozilla Public License 2.0 (licenses/mpl-2.0.txt). The source is at
   https://github.com/parcel-bundler/lightningcss
 
+source-map-js 1.2, magic-string 1, and @jridgewell/remapping 2.3 with
+@jridgewell/trace-mapping, @jridgewell/gen-mapping, @jridgewell/resolve-uri
+and @jridgewell/sourcemap-codec (native/tailwind/src/cli/source_maps.rs
+and native/tailwind/src/cli/remapping.rs follow the parts of these
+packages that Tailwind CSS uses for its source maps)
+  Copyright (c) 2009-2011, Mozilla Foundation and contributors.
+  BSD 3-Clause License (licenses/source-map-js.txt).
+  Copyright 2018 Rich Harris. MIT License (licenses/magic-string.txt).
+  Copyright 2019-2024 Justin Ridgewell. MIT License
+  (licenses/jridgewell.txt).
 QuickJS 2026-06-04 (the JavaScript engine for @plugin and @config, in
 c_src/quickjs)
   Copyright (c) 2017-2021 Fabrice Bellard; Copyright (c) 2017-2021

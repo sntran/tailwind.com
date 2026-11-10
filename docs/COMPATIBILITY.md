@@ -21,6 +21,9 @@ bug, except the items of "Known differences".
 | `@utility`: 222 stylesheets, 35,044 candidates | the same |
 | The last pass of the compiler, as trees | 1,739 of 1,739 the same |
 | The official command line program on 17 projects (also `--minify` and `--optimize`) | 17 of 17 the same, with the native program, with `tailwind.com` and with `tailwind.wasm` |
+| The source maps of 317 stylesheets (331 builds): the decoded map of `buildSourceMap()`, the JSON text of `@tailwindcss/node`, and the code and the map of the optimizer, plain and minified | 317 of 317 the same |
+| The source locations of the parser for these stylesheets, and the position in the message of 23 syntax errors | the same |
+| The official command line program with `--map` on 29 projects (the map in the output and in a file, `--minify`, `--optimize`, imports, stdin, a JavaScript plugin and a JavaScript config, errors): the output and the map file | 29 of 29 the same, with the native program, with `tailwind.com` and with `tailwind.wasm`, on Linux. The test replaces the path of the project in the maps. |
 | The official command line program on 88 projects with JavaScript plugins and configs: the plugin API, config files, `@tailwindcss/typography`, `@tailwindcss/forms`, `tailwindcss-animate`, `@tailwindcss/container-queries`, daisyUI, a Phoenix 1.8 project, 18 errors | 88 of 88 the same output and exit status, with the native program, with `tailwind.com` and with `tailwind.wasm`. 17 of the 18 error messages are the same, line for line. |
 | The JSON of a candidate, as a plugin function gets it, against `parseCandidate` | 10,983 of 10,983 the same |
 | Lightning CSS from Rust against the optimizer of `@tailwindcss/node`, on 322 outputs of the unit tests, plain and minified | 644 of 644 the same |
@@ -34,7 +37,29 @@ finds in the source files are the same by construction.
   or Bun. The plugin layer is the JavaScript of Tailwind CSS with no
   change, so the plugin API has no known difference. The differences
   are in the environment of a module: see "JavaScript modules" below.
-- **Source maps**: `--map` is an error.
+- **Source maps of the stylesheets in the program**: a stylesheet of
+  Tailwind CSS that is in the program has the source path
+  `/$tailwindcss/NAME.css` in a source map. The official program from
+  npm gives the path in `node_modules`. With `node_modules/tailwindcss`
+  in the project, the paths are the same.
+- **Source locations without `--map`**: the official program always
+  gives the path of the input to the compiler. This program does it only
+  with `--map`, because the locations have a cost. The output is the
+  same. For the position in the message of a syntax error, the program
+  compiles the stylesheet a second time when the first time fails.
+- **The source map before the first build**: `build_source_map` of the
+  library gives the map of the tree of the input then. No record
+  compares this map with `buildSourceMap()` of Tailwind CSS before
+  `build`. The program always builds first.
+- **The source map in the watch with the optimizer**: in the official
+  program, a build that gives the same CSS as the build before it
+  writes the map from before the optimizer, with `--minify` and with
+  `--optimize`. This program keeps the map of the optimizer.
+- **A symbolic link in the path of an imported stylesheet**: the
+  official program gives the real path as the source. This program gives
+  the path with the link.
+- **Source maps on Windows**: no test compares them with the official
+  program there.
 - **The watch** uses inotify or kqueue, and polls on Windows. The
   official program uses `@parcel/watcher`. `--poll` is the same.
 - **`canonicalize`**, the class list, and the sort of classes for
@@ -123,6 +148,29 @@ JavaScript engine."`` The errors of Tailwind CSS for a wrong `@plugin`
 or `@config` rule come first, as upstream. With the engine and no
 module loader, the error is the error of upstream: ``No `loadModule`
 function provided to `compile` ``.
+
+## What is the same on purpose in the source maps
+
+- Tailwind CSS can put one node object at two places of the tree (a
+  custom variant with two selectors, a compound variant on such a
+  variant, a `@slot` used two times). The printer then gives the node
+  the position of its last place, and the map has two equal mappings
+  there and none at the first place. The port gives its copies of such
+  a node one identity, and the same result.
+- A node that a JavaScript plugin or config makes (`addBase`,
+  `addUtilities` with `@keyframes`) has the location of its `@plugin` or
+  `@config` rule, as upstream. The tree goes between the compiler and
+  JavaScript as JSON: a node has the numbers of its locations there,
+  and each declaration that comes from JavaScript has the number of its
+  object. So a node that a plugin puts at two places (`addVariant` with
+  a list of selectors) is one node for the printer, as upstream.
+- The optimizer gives source paths with no first slash
+  (`tmp/project/app.css`), because Lightning CSS makes them relative to
+  the root directory.
+- With no match of `@media not (` in the output of the optimizer, the
+  map is the JSON text of Lightning CSS (`sourceRoot`, then `mappings`).
+  With a match, it is the JSON text of `@jridgewell/remapping`
+  (`mappings`, `names`, `ignoreList`, then `sources`).
 
 ## What is the same on purpose
 

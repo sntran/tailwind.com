@@ -43,6 +43,8 @@ tailwind.com [--input input.css] [--output output.css] [--watch] [--poll=ms] [op
                  sets the interval)
 -m, --minify     Optimize and minify the output
     --optimize   Optimize the output without minifying
+    --map        Generate a source map: in the output, or with --map=FILE
+                 in a file
     --cwd        The current working directory
     --silent     Suppress non-error output
 -h, --help       Display usage information
@@ -134,6 +136,8 @@ expects the same text, byte for byte:
 | The same candidates in one build (the sort of the output) | 24 MB of CSS |
 | `@import "tailwindcss"` with real-world classes, also through the optimizer | 686 candidates |
 | The official command line program on small projects | 17 projects |
+| The source maps of the official compiler and of its optimizer | 317 stylesheets |
+| The official command line program with `--map`, also with a JavaScript plugin and config | 29 projects |
 | The official command line program on projects with JavaScript plugins and configs (daisyUI, heroicons, `@tailwindcss/typography`, `@tailwindcss/forms`, a Phoenix project) | 88 projects |
 | The `compile` calls of the unit tests of Tailwind CSS that load a JavaScript plugin or config | 296 calls |
 
@@ -180,7 +184,11 @@ What does not work:
 
 ## Limits
 
-- **No source maps**: `--map` is an error.
+- **Source maps of the stylesheets in the file**: with `--map`, a
+  source of a stylesheet of Tailwind CSS that is in the program has the
+  path `/$tailwindcss/NAME.css`. With `node_modules/tailwindcss` in the
+  project, the path is the path of the file, as with the official
+  program.
 - **The watch on Windows polls**: there, it reads the times of the files
   at an interval. On the other systems it uses the events of the file
   system (inotify, kqueue), as the file watcher of BEAM.com.

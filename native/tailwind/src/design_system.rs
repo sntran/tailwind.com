@@ -38,6 +38,9 @@ pub struct DesignSystem {
     pub important: bool,
     /// When set, `resolve_theme_value` calls this function.
     pub resolve_theme_value_hook: Option<ResolveThemeValueFn>,
+    /// True when the compiler keeps the source locations (the `from`
+    /// option), for source maps.
+    pub track_sources: std::cell::Cell<bool>,
     /// The JavaScript engine with the plugins of `@plugin` and `@config`.
     /// The utilities and variants of the plugins call it.
     #[cfg(tw_js)]
@@ -61,6 +64,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         invalid_candidates: RefCell::new(HashSet::new()),
         important: false,
         resolve_theme_value_hook: None,
+        track_sources: std::cell::Cell::new(false),
         #[cfg(tw_js)]
         js: None,
         parsed_variants: RefCell::new(indexmap::IndexMap::new()),

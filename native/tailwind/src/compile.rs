@@ -185,7 +185,7 @@ pub fn compile_ast_nodes(candidate: &Candidate, design_system: &DesignSystem, fl
             apply_important(&mut nodes);
         }
 
-        let mut node = AstNode::Rule(StyleRule { selector: selector.clone(), nodes });
+        let mut node = AstNode::Rule(StyleRule { selector: selector.clone(), nodes, loc: Default::default() });
 
         for variant in candidate.variants() {
             if apply_variant(&mut node, variant, design_system, 0).is_none() {
@@ -255,7 +255,11 @@ pub fn apply_variant(node: &mut AstNode, variant: &Variant, design_system: &Desi
         // Put the nodes of the rule at the place of the slot: each rule
         // with no children.
         let mut isolated_nodes = std::mem::take(isolated_nodes);
-        let body = std::mem::take(node.children_mut()?);
+        let mut body = std::mem::take(node.children_mut()?);
+        // Upstream puts the same nodes in each empty rule.
+        if design_system.track_sources.get() {
+            crate::ast::share_identity(&mut body);
+        }
         walk(&mut isolated_nodes, |child, _| match child {
             AstNode::Rule(StyleRule { nodes, .. }) | AstNode::AtRule(crate::ast::AtRule { nodes, .. })
                 if nodes.is_empty() =>

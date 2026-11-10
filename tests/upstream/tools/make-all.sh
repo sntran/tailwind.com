@@ -23,10 +23,10 @@ node "$TOOLS/gen-classes.mjs" "$CLONE" "$OUT"
 # 3. full.json.gz and css/
 node "$TOOLS/gen-full.mjs" "$CLONE" "$OUT"
 
-# 4. cli/*/stdout.css and cli/*/exit.txt
+# 4. cli/*/stdout.css and cli/*/exit.txt, and the same for cli-map (with
+# files/) and cli-js
 node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli" 4.3.5
-
-# 4b. cli-js/*/stdout.css and cli-js/*/exit.txt
+node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli-map" 4.3.5
 node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli-js" 4.3.5
 
 # 5. plugin-suite.jsonl.gz: the unit tests again, with each JavaScript
@@ -39,5 +39,6 @@ node "$TOOLS/gen-candidates.mjs" "$CLONE" "$OUT"
 # 7. native/tailwind/assets/compat.js: the plugin layer for the program
 node "$TOOLS/build-compat-bundle.mjs" "$CLONE"
 
-# 8. Check
+# 8. Check. source-maps.jsonl.gz uses the records of gen-extra.mjs:
+# scripts/sync-upstream.sh makes it after this script.
 python3 "$TOOLS/check.py" "$OUT"

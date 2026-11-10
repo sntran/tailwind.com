@@ -117,6 +117,7 @@ fn replay(record: &Record) -> Result<(), String> {
             polyfills: record.options.polyfills.unwrap_or(POLYFILLS_ALL),
             load_stylesheet: Some(&load_stylesheet),
             test_mode: true,
+            from: None,
             module_loader: Some(Rc::new(loader)),
         },
     );

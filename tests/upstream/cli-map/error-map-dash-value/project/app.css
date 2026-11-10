@@ -1,0 +1,35 @@
+@theme {
+  --color-red-500: oklch(63.7% 0.237 25.331);
+  --color-brand: #3b82f6;
+  --spacing: 0.25rem;
+  --breakpoint-md: 48rem;
+  --font-sans: ui-sans-serif, system-ui,
+    sans-serif;
+}
+
+@tailwind utilities;
+
+/*! A license comment */
+.btn {
+  @apply px-4 py-2 text-brand hover:underline;
+  border-radius: 4px;
+}
+
+@utility card {
+  padding: --spacing(4);
+  &:hover {
+    color: red;
+  }
+}
+
+@custom-variant pointer (@media (pointer: fine));
+
+.nested {
+  color: red;
+  .dark & {
+    color: color-mix(in oklab, var(--color-brand) 50%, transparent);
+  }
+  @media (width >= 48rem) {
+    color: blue;
+  }
+}

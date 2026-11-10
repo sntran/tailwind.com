@@ -3,8 +3,10 @@
 //! The parser reads bytes. Each character of the CSS structure is ASCII, so
 //! a byte offset at such a character is a correct limit of a slice.
 
-use crate::ast::{comment, decl_full, rule, AstNode, AtRule};
+use crate::ast::{comment, decl_full, rule, AstNode, AtRule, Loc};
+use crate::source_maps::{LineTable, Source, SourceLocation};
 use std::fmt;
+use std::rc::Rc;
 
 const BACKSLASH: u8 = b'\\';
 const SLASH: u8 = b'/';
@@ -33,15 +35,81 @@ const IMPORTANT: &str = "!important";
 /// An error in the CSS input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CssSyntaxError {
+    /// The message. With a location, it starts with `file:line:column: `.
     pub message: String,
+    /// The location of the error, when the parser has a source.
+    pub loc: Option<SourceLocation>,
 }
 
 impl CssSyntaxError {
-    fn new(message: impl Into<String>) -> Self {
-        CssSyntaxError {
-            message: message.into(),
+    fn new(message: impl Into<String>, loc: Option<SourceLocation>) -> Self {
+        let mut message = message.into();
+        if let Some(loc) = &loc {
+            let start = LineTable::new(&loc.source.code).find(loc.start);
+            let file = loc.source.file.as_deref().unwrap_or("null");
+            message = format!("{}:{}:{}: {}", file, start.line, start.column + 1, message);
+        }
+        CssSyntaxError { message, loc }
+    }
+}
+
+/// The source of the parser, and the offsets of UTF-16 code units for
+/// byte offsets.
+struct Tracker {
+    source: Rc<Source>,
+    /// The UTF-16 offset of each byte offset. An ASCII text has no table:
+    /// the two offsets are the same.
+    table: Option<Vec<u32>>,
+}
+
+impl Tracker {
+    fn new(file: &str, input: &str) -> Self {
+        let source = Rc::new(Source { file: Some(file.to_string()), code: input.to_string() });
+        let table = if input.is_ascii() {
+            None
+        } else {
+            let mut table = Vec::with_capacity(input.len() + 1);
+            let mut units = 0u32;
+            for c in input.chars() {
+                for _ in 0..c.len_utf8() {
+                    table.push(units);
+                }
+                units += c.len_utf16() as u32;
+            }
+            table.push(units);
+            Some(table)
+        };
+        Tracker { source, table }
+    }
+
+    fn offset(&self, byte: usize) -> usize {
+        match &self.table {
+            Some(table) => table[byte.min(table.len() - 1)] as usize,
+            None => byte,
         }
     }
+
+    /// The location of a range of bytes.
+    fn at(&self, start: usize, end: usize) -> SourceLocation {
+        SourceLocation { source: Rc::clone(&self.source), start: self.offset(start), end: self.offset(end) }
+    }
+}
+
+/// The location of a range of bytes, when the parser has a source.
+#[inline]
+fn location(tracker: &Option<Tracker>, start: usize, end: usize) -> Option<SourceLocation> {
+    tracker.as_ref().map(|tracker| tracker.at(start, end))
+}
+
+/// Set the locations of a new node, when the parser has a source.
+#[inline]
+fn track(tracker: &Option<Tracker>, mut node: AstNode, start: usize, end: usize) -> AstNode {
+    if let Some(tracker) = tracker {
+        if let Some(loc) = node.loc_mut() {
+            *loc = Loc::new(tracker.at(start, end));
+        }
+    }
+    node
 }
 
 impl fmt::Display for CssSyntaxError {
@@ -92,10 +160,23 @@ fn attach(stack: &mut [AstNode], ast: &mut Vec<AstNode>, node: AstNode) {
     }
 }
 
-/// Parse CSS into a syntax tree.
+/// Parse CSS into a syntax tree. The nodes have no source locations.
 pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
+    parse_with_source(input, None)
+}
+
+/// Parse CSS into a syntax tree. With `from` (the path of the stylesheet,
+/// not empty), each node has its source location, and the message of an
+/// error starts with `file:line:column: `.
+pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>, CssSyntaxError> {
     let bytes = input.as_bytes();
     let len = bytes.len();
+
+    let source: Option<Tracker> = from.filter(|from| !from.is_empty()).map(|from| Tracker::new(from, input));
+    let source = &source;
+    // The start of the buffer. Upstream sets it only at an escape and at a
+    // plain character.
+    let mut buffer_start = 0;
 
     let mut ast: Vec<AstNode> = Vec::new();
     let mut license_comments: Vec<AstNode> = Vec::new();
@@ -125,6 +206,9 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
                     Some(next) => i + 1 + utf8_len(next),
                     None => i + 1,
                 };
+                if buffer.is_empty() {
+                    buffer_start = i;
+                }
                 buffer.push_str(&input[i..end]);
                 i = end - 1;
             }
@@ -133,14 +217,15 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
                 // A comment with no end removes only its `/`.
                 if let Some(end) = comment_end(bytes, i) {
                     if bytes[i + 2] == EXCLAMATION_MARK {
-                        license_comments.push(comment(&input[i + 2..end - 1]));
+                        let node = comment(&input[i + 2..end - 1]);
+                        license_comments.push(track(source, node, i, end + 1));
                     }
                     i = end;
                 }
             }
             // A string.
             else if current == SINGLE_QUOTE || current == DOUBLE_QUOTE {
-                let end = parse_string(input, i, current)?;
+                let end = parse_string(input, i, current, source)?;
                 buffer.push_str(&input[i..=end]);
                 i = end;
             }
@@ -187,7 +272,7 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
                     if peek == BACKSLASH {
                         j += 1;
                     } else if peek == SINGLE_QUOTE || peek == DOUBLE_QUOTE {
-                        j = parse_string(input, j, peek)?;
+                        j = parse_string(input, j, peek, source)?;
                     } else if peek == SLASH && at(bytes, j + 1) == Some(ASTERISK) {
                         if let Some(end) = comment_end(bytes, j) {
                             j = end;
@@ -236,25 +321,26 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
                 let Some(declaration) = parse_declaration(text, colon_idx, value_end) else {
                     return Err(CssSyntaxError::new(
                         "Invalid custom property, expected a value",
+                        location(source, start, i),
                     ));
                 };
-                attach(&mut stack, &mut ast, declaration);
+                attach(&mut stack, &mut ast, track(source, declaration, start, i));
             }
             // The end of an at-rule with no block.
             else if current == SEMICOLON && buffer.as_bytes().first() == Some(&AT_SIGN) {
                 let node = AstNode::AtRule(parse_at_rule(&buffer, Vec::new()));
-                attach(&mut stack, &mut ast, node);
+                attach(&mut stack, &mut ast, track(source, node, buffer_start, i));
                 buffer.clear();
             }
             // The end of a declaration.
             else if current == SEMICOLON && closing_bracket_stack.last() != Some(&CLOSE_PAREN) {
                 match parse_declaration(&buffer, buffer.find(':'), buffer.len()) {
-                    Some(declaration) => attach(&mut stack, &mut ast, declaration),
+                    Some(declaration) => attach(&mut stack, &mut ast, track(source, declaration, buffer_start, i)),
                     None => {
                         if buffer.is_empty() {
                             break 'step;
                         }
-                        return Err(invalid_declaration(&buffer));
+                        return Err(invalid_declaration(&buffer, location(source, buffer_start, i)));
                     }
                 }
                 buffer.clear();
@@ -262,13 +348,13 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
             // The start of a block.
             else if current == OPEN_CURLY && closing_bracket_stack.last() != Some(&CLOSE_PAREN) {
                 closing_bracket_stack.push(CLOSE_CURLY);
-                stack.push(rule(js_trim(&buffer), Vec::new()));
+                stack.push(track(source, rule(js_trim(&buffer), Vec::new()), buffer_start, i));
                 buffer.clear();
             }
             // The end of a block.
             else if current == CLOSE_CURLY && closing_bracket_stack.last() != Some(&CLOSE_PAREN) {
                 if closing_bracket_stack.pop().is_none() {
-                    return Err(CssSyntaxError::new("Missing opening {"));
+                    return Err(CssSyntaxError::new("Missing opening {", location(source, i, i)));
                 }
 
                 // A filled buffer is a last node with no `;`.
@@ -278,10 +364,10 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
                     } else {
                         match parse_declaration(&buffer, buffer.find(':'), buffer.len()) {
                             Some(declaration) => declaration,
-                            None => return Err(invalid_declaration(&buffer)),
+                            None => return Err(invalid_declaration(&buffer, location(source, buffer_start, i))),
                         }
                     };
-                    attach(&mut stack, &mut ast, node);
+                    attach(&mut stack, &mut ast, track(source, node, buffer_start, i));
                     buffer.clear();
                 }
 
@@ -295,7 +381,7 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
                 buffer.push('(');
             } else if current == CLOSE_PAREN {
                 if closing_bracket_stack.last() != Some(&CLOSE_PAREN) {
-                    return Err(CssSyntaxError::new("Missing opening ("));
+                    return Err(CssSyntaxError::new("Missing opening (", location(source, i, i)));
                 }
                 closing_bracket_stack.pop();
                 buffer.push(')');
@@ -307,6 +393,9 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
                     && (current == SPACE || current == LINE_BREAK || current == TAB)
                 {
                     break 'step;
+                }
+                if buffer.is_empty() {
+                    buffer_start = i;
                 }
                 if current < 0x80 {
                     buffer.push(current as char);
@@ -323,29 +412,30 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
 
     // An at-rule with no `;` at the end of the input.
     if buffer.as_bytes().first() == Some(&AT_SIGN) {
-        ast.push(AstNode::AtRule(parse_at_rule(&buffer, Vec::new())));
+        let node = AstNode::AtRule(parse_at_rule(&buffer, Vec::new()));
+        ast.push(track(source, node, buffer_start, len));
     }
     // A declaration with no `;` at the end of the input. Open brackets
     // make the declaration incomplete.
     else if !buffer.is_empty() && closing_bracket_stack.is_empty() {
         if let Some(declaration) = parse_declaration(&buffer, buffer.find(':'), buffer.len()) {
-            attach(&mut stack, &mut ast, declaration);
+            attach(&mut stack, &mut ast, track(source, declaration, buffer_start, len));
         }
     }
 
     // A block that is open at the end of the input is an error.
     match stack.last() {
         Some(AstNode::Rule(parent)) => {
-            return Err(CssSyntaxError::new(format!(
-                "Missing closing }} at {}",
-                parent.selector
-            )));
+            return Err(CssSyntaxError::new(
+                format!("Missing closing }} at {}", parent.selector),
+                parent.loc.src().map(|src| SourceLocation { end: src.start, ..src.clone() }),
+            ));
         }
         Some(AstNode::AtRule(parent)) => {
-            return Err(CssSyntaxError::new(format!(
-                "Missing closing }} at {} {}",
-                parent.name, parent.params
-            )));
+            return Err(CssSyntaxError::new(
+                format!("Missing closing }} at {} {}", parent.name, parent.params),
+                parent.loc.src().map(|src| SourceLocation { end: src.start, ..src.clone() }),
+            ));
         }
         _ => {}
     }
@@ -357,8 +447,8 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
     Ok(license_comments)
 }
 
-fn invalid_declaration(buffer: &str) -> CssSyntaxError {
-    CssSyntaxError::new(format!("Invalid declaration: `{}`", js_trim(buffer)))
+fn invalid_declaration(buffer: &str, loc: Option<SourceLocation>) -> CssSyntaxError {
+    CssSyntaxError::new(format!("Invalid declaration: `{}`", js_trim(buffer)), loc)
 }
 
 /// An at-rule from its text, for example `@media (width >= 40rem)`.
@@ -396,6 +486,7 @@ pub fn parse_at_rule(buffer: &str, nodes: Vec<AstNode>) -> AtRule {
         name: js_trim(name).to_string(),
         params: js_trim(params).to_string(),
         nodes,
+        loc: Loc::default(),
     }
 }
 
@@ -456,7 +547,12 @@ fn is_escaped(value: &str, idx: usize) -> bool {
 
 /// The index of the quote that ends the string that starts at `start_idx`.
 /// The result is `start_idx` when the input ends before the string ends.
-fn parse_string(input: &str, start_idx: usize, quote_char: u8) -> Result<usize, CssSyntaxError> {
+fn parse_string(
+    input: &str,
+    start_idx: usize,
+    quote_char: u8,
+    source: &Option<Tracker>,
+) -> Result<usize, CssSyntaxError> {
     let bytes = input.as_bytes();
     let mut i = start_idx + 1;
 
@@ -474,13 +570,13 @@ fn parse_string(input: &str, start_idx: usize, quote_char: u8) -> Result<usize, 
                 || (at(bytes, i + 1) == Some(CARRIAGE_RETURN)
                     && at(bytes, i + 2) == Some(LINE_BREAK)))
         {
-            return Err(unterminated_string(&input[start_idx..=i], quote_char));
+            return Err(unterminated_string(&input[start_idx..=i], quote_char, location(source, start_idx, i + 1)));
         }
         // The end of the line, and no end of the string.
         else if peek == LINE_BREAK
             || (peek == CARRIAGE_RETURN && at(bytes, i + 1) == Some(LINE_BREAK))
         {
-            return Err(unterminated_string(&input[start_idx..i], quote_char));
+            return Err(unterminated_string(&input[start_idx..i], quote_char, location(source, start_idx, i + 1)));
         }
 
         i += 1;
@@ -489,11 +585,8 @@ fn parse_string(input: &str, start_idx: usize, quote_char: u8) -> Result<usize, 
     Ok(start_idx)
 }
 
-fn unterminated_string(text: &str, quote_char: u8) -> CssSyntaxError {
-    CssSyntaxError::new(format!(
-        "Unterminated string: {}{}",
-        text, quote_char as char
-    ))
+fn unterminated_string(text: &str, quote_char: u8, loc: Option<SourceLocation>) -> CssSyntaxError {
+    CssSyntaxError::new(format!("Unterminated string: {}{}", text, quote_char as char), loc)
 }
 
 /// True for the characters that `String.prototype.trim` of JavaScript

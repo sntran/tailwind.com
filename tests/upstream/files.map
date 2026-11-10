@@ -27,6 +27,7 @@ packages/tailwindcss/src/at-import.ts	native/tailwind/src/at_import.rs	port
 packages/tailwindcss/src/css-functions.ts	native/tailwind/src/css_functions.rs	port
 packages/tailwindcss/src/property-order.ts	native/tailwind/src/property_order.rs	gen
 packages/tailwindcss/src/utils/	native/tailwind/src/utils/	port
+packages/tailwindcss/src/source-maps/	native/tailwind/src/source_maps/ native/tailwind/tests/source_maps.rs	port
 packages/tailwindcss/src/compat/default-theme.ts	native/tailwind/src/compat/default_theme.rs	gen
 packages/tailwindcss/src/compat/legacy-utilities.ts	native/tailwind/src/compat/legacy_utilities.rs	port
 packages/tailwindcss/src/compat/plugin-functions.ts	native/tailwind/src/compat/theme_fn.rs	port
@@ -38,7 +39,8 @@ packages/tailwindcss/preflight.css	native/tailwind/assets/preflight.css	copy
 packages/tailwindcss/utilities.css	native/tailwind/assets/utilities.css	copy
 packages/@tailwindcss-cli/src/	native/tailwind/src/cli/mod.rs native/tailwind/src/cli/args.rs	port
 packages/@tailwindcss-node/src/compile.ts	native/tailwind/src/cli/resolve.rs native/tailwind/src/cli/mod.rs	port
-packages/@tailwindcss-node/src/optimize.ts	native/tailwind/src/cli/optimize_css.rs	port
+packages/@tailwindcss-node/src/optimize.ts	native/tailwind/src/cli/optimize_css.rs native/tailwind/src/cli/remapping.rs	port
+packages/@tailwindcss-node/src/source-maps.ts	native/tailwind/src/cli/source_maps.rs	port
 packages/@tailwindcss-standalone/src/index.ts	native/tailwind/src/cli/resolve.rs	port
 crates/oxide/	native/tailwind/Cargo.toml	dep
 crates/ignore/	native/tailwind/Cargo.toml	dep
@@ -48,7 +50,6 @@ packages/tailwindcss/src/canonicalize-candidates.ts	-	skip
 packages/tailwindcss/src/canonicalize-calc-expressions.ts	-	skip
 packages/tailwindcss/src/constant-fold-declaration.ts	-	skip
 packages/tailwindcss/src/expand-declaration.ts	-	skip
-packages/tailwindcss/src/source-maps/	-	skip
 packages/tailwindcss/src/cartesian.ts	-	skip
 packages/tailwindcss/src/feature-flags.ts	-	skip
 packages/tailwindcss/src/test-utils/	-	skip

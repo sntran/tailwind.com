@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use tailwind::ast::{at_root, at_rule, comment, context, decl_full, style_rule, AstNode, ContextMap, ContextValue};
 use tailwind::compat::js::engine::{Engine, Limits};
-use tailwind::compat::js::json::{ast_from_json, ast_to_json, candidate_to_json};
+use tailwind::compat::js::json::{ast_from_json, ast_to_json, candidate_to_json, LocTable};
 use tailwind::compat::NO_LOAD_MODULE;
 use tailwind::{compile, CompileOptions, Compiler, Error, MemoryLoader, Stylesheet};
 
@@ -196,13 +196,13 @@ fn the_errors_of_the_loader() {
     );
 
     let thrown = error(&css, &[("/app/css/plugin.js", "throw new TypeError('bad module')")]);
-    assert_eq!((thrown.message.as_str(), thrown.name.as_deref()), ("bad module", Some("TypeError")));
+    assert_eq!((thrown.message.as_str(), thrown.name.as_ref()), ("bad module", "TypeError"));
 
     let in_plugin = error(&css, &[("/app/css/plugin.js", "module.exports = () => { throw new Error('bad plugin') }")]);
-    assert_eq!((in_plugin.message.as_str(), in_plugin.name), ("bad plugin", None));
+    assert_eq!((in_plugin.message.as_str(), in_plugin.name.as_ref()), ("bad plugin", "Error"));
 
     let syntax = error(&css, &[("/app/css/plugin.cjs", ""), ("/app/css/plugin.js", "module.exports = {\n  a: 1\n  b: 2\n}")]);
-    assert_eq!(syntax.name.as_deref(), Some("SyntaxError"));
+    assert_eq!(syntax.name.as_ref(), "SyntaxError");
     assert!(syntax.message.contains("/app/css/plugin.js:3"), "{}", syntax.message);
 
     let missing = error(&css, &[("/app/css/plugin.js", "require('./not-there.js')")]);
@@ -223,7 +223,7 @@ fn an_exception_of_a_plugin_function_in_a_build() {
     let mut compiler = compiler.unwrap();
     assert_eq!(compiler.try_build(&["boom-red".to_string()]).unwrap(), ".boom-red {\n  color: red;\n}\n");
     let error = compiler.try_build(&["boom-x".to_string()]).unwrap_err();
-    assert_eq!((error.message.as_str(), error.name.as_deref()), ("bad value x", Some("RangeError")));
+    assert_eq!((error.message.as_str(), error.name.as_ref()), ("bad value x", "RangeError"));
     // `build` gives the CSS without the candidate of the failure.
     assert_eq!(compiler.build(&["boom-x".to_string()]), ".boom-red {\n  color: red;\n}\n");
     // A plugin cannot register a utility in a build.
@@ -383,21 +383,21 @@ proptest! {
     /// A tree is the same after the change to JSON and back.
     #[test]
     fn a_tree_is_the_same_after_json(tree in tree()) {
-        let json = ast_to_json(&tree);
-        prop_assert_eq!(ast_from_json(&json).unwrap(), tree.clone());
+        let json = ast_to_json(&tree, &LocTable::default());
+        prop_assert_eq!(ast_from_json(&json, &LocTable::default()).unwrap(), tree.clone());
         // Also as text, as it goes to the engine.
         let parsed: serde_json::Value = serde_json::from_str(&json.to_string()).unwrap();
-        prop_assert_eq!(ast_from_json(&parsed).unwrap(), tree);
+        prop_assert_eq!(ast_from_json(&parsed, &LocTable::default()).unwrap(), tree);
     }
 
     /// A tree is the same after a pass through `JSON.parse` and
     /// `JSON.stringify` of the engine.
     #[test]
     fn a_tree_is_the_same_after_the_engine(tree in tree()) {
-        let text = ast_to_json(&tree).to_string();
+        let text = ast_to_json(&tree, &LocTable::default()).to_string();
         let echoed = ECHO.with(|engine| engine.call("echo", &text)).unwrap().unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&echoed).unwrap();
-        prop_assert_eq!(ast_from_json(&parsed).unwrap(), tree);
+        prop_assert_eq!(ast_from_json(&parsed, &LocTable::default()).unwrap(), tree);
     }
 
     /// Text is the same after a pass through the host function.
@@ -407,4 +407,39 @@ proptest! {
         engine.eval("globalThis.through = (text) => __host('echo', text)", "through.js").unwrap();
         prop_assert_eq!(engine.call("through", &text).unwrap().unwrap(), text);
     }
+}
+
+/// The source locations of a tree stay the same after the change to JSON
+/// and back, also after a pass through the engine. A node that JavaScript
+/// makes has no location.
+#[test]
+fn the_locations_are_the_same_after_json() {
+    type Range = Option<(usize, usize)>;
+    fn locations(nodes: &[tailwind::ast::AstNode], out: &mut Vec<(Range, Range)>) {
+        for node in nodes {
+            out.push((node.src().map(|src| (src.start, src.end)), node.dst().map(|dst| (dst.start, dst.end))));
+            if let Some(children) = node.children() {
+                locations(children, out);
+            }
+        }
+    }
+
+    let css = "@plugin \"./a.js\";\n.a { color: red; @media print { b: c } }\n/* d */\n";
+    let tree = tailwind::css_parser::parse_with_source(css, Some("app.css")).unwrap();
+    let table = LocTable::default();
+    let text = ast_to_json(&tree, &table).to_string();
+    let echoed = ECHO.with(|engine| engine.call("echo", &text)).unwrap().unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&echoed).unwrap();
+    let back = ast_from_json(&parsed, &table).unwrap();
+
+    let (mut before, mut after) = (Vec::new(), Vec::new());
+    locations(&tree, &mut before);
+    locations(&back, &mut after);
+    assert!(before.iter().all(|(src, dst)| src.is_some() && dst.is_some()));
+    assert_eq!(before, after);
+    // The same source object: the locations are equal.
+    assert_eq!(tree[0].src(), back[0].src());
+
+    let made = ast_from_json(&serde_json::json!([{ "kind": "declaration", "property": "a", "value": "b" }]), &table).unwrap();
+    assert!(made[0].src().is_none() && made[0].dst().is_none());
 }

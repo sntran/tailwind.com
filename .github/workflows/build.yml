@@ -49,6 +49,8 @@ jobs:
           sh tests/cli.sh target/release/tailwind
       - name: The program with JavaScript plugins and configs, against the record
         run: CASES=tests/upstream/cli-js sh tests/cli.sh target/release/tailwind
+      - name: The program with --map, against the record
+        run: CASES=tests/upstream/cli-map sh tests/cli.sh target/release/tailwind
       - name: The watch, with the poll
         run: sh tests/watch.sh target/release/tailwind
 
@@ -77,6 +79,8 @@ jobs:
         run: node tests/wasi.mjs build/tailwind.wasm
       - name: The program with JavaScript plugins and configs
         run: CASES=tests/upstream/cli-js node tests/wasi.mjs build/tailwind.wasm
+      - name: The program with --map
+        run: CASES=tests/upstream/cli-map node tests/wasi.mjs build/tailwind.wasm
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: tailwind.wasm
@@ -110,6 +114,7 @@ jobs:
       - run: ls -l build/tailwind.com
       - run: sh tests/cli.sh build/tailwind.com
       - run: CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com
+      - run: CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: tailwind.com
@@ -143,6 +148,10 @@ jobs:
           sh tests/cli.sh build/tailwind.com
       - name: The program with JavaScript plugins and configs, against the record
         run: CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com
+      # The script does not run these cases on Windows: the paths in a
+      # source map have another form there.
+      - name: The program with --map, against the record
+        run: CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com
       - name: The watch, with the file events of the system
         run: sh tests/watch.sh build/tailwind.com
       - name: The watch, with the poll

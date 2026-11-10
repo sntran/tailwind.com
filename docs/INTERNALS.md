@@ -41,6 +41,7 @@ Each file of `native/tailwind/src` follows one file of
 | `apply.rs` | `apply.ts` | `@apply`. |
 | `at_import.rs` | `at-import.ts` | `@import`. |
 | `index.rs` | `index.ts` | `compile`: all the at-rules of Tailwind CSS, and `build`. |
+| `source_maps/` | `source-maps/` | The source of a node, offsets to lines and columns, and the decoded source map of a tree. |
 | `compat.rs`, `compat/` | `compat/` | The parts of the compatibility layer that need no JavaScript, and the engine for the parts that are JavaScript: see "JavaScript plugins". |
 | `utils/` | `utils/` | Small functions. `utils/js.rs` has the number and string behavior of JavaScript. |
 
@@ -119,7 +120,7 @@ design system in `runtime.rs` (see below), the file events
 
 ### The bundle and the shims
 
-`assets/compat.js` is one JavaScript file (88 KB, minified), made by
+`assets/compat.js` is one JavaScript file (89 KB, minified), made by
 `tests/upstream/tools/build-compat-bundle.mjs` with esbuild from the
 source of Tailwind CSS and from `native/tailwind/js`. It is in the
 repository, so a build needs no Node.js.
@@ -209,6 +210,55 @@ the memory of the engine. It cannot write files, start a process, open
 a network connection, or read the environment except `NODE_ENV`. See
 [`SECURITY.md`](../SECURITY.md).
 
+### Source maps
+
+With the option `from` of `compile` (the path of the stylesheet), the
+compiler keeps the source locations, and `Compiler::build_source_map`
+gives the source map of the last output:
+
+1. **The parser** (`css_parser::parse_with_source`) gives each node its
+   `src`: the stylesheet (`Source`, shared with `Rc`) and the start and
+   the end offset. `@import` does the same for each imported file. All
+   offsets and columns are numbers of UTF-16 code units, as in
+   JavaScript, so the maps have the numbers of Tailwind CSS. The parser
+   reads bytes: for a text that is not ASCII, it has a table from byte
+   offsets to UTF-16 offsets.
+2. **Each step** that makes a node from another node copies or sets the
+   `src`, at the same places as Tailwind CSS: the theme rule, the
+   wrappers of an import, `@apply` (the location of the candidate in the
+   rule), the rules of the candidates (the location of
+   `@tailwind utilities`, unless the rule comes from `@utility` or
+   `@custom-variant`), the fallbacks of the last pass, and the rules
+   that the nesting step makes.
+3. **The printer** (`to_css::to_css_tracked`) gives each printed node
+   its `dst`: its place in the output.
+4. **`source_maps::create_source_map`** makes one mapping for each line
+   of the `src` of a node, and one for its end, and sorts them.
+
+A node holds its locations in one field, `loc` (`ast::Loc`): a pointer
+that is null when the compiler keeps no locations. So a build without
+`from` has almost no cost, and the constructors of `ast.rs` need no
+change. A comparison of two nodes ignores `loc`: a tree from the parser
+with a path is equal to the tree without one.
+
+Tailwind CSS sometimes puts one node object at two places of the tree,
+and the printer then gives it one `dst`. The Rust tree has copies. The
+steps that make such copies mark them with one identity
+(`ast::share_identity`, only when the compiler keeps locations), and
+the printer gives the copies of one identity the `dst` of the last one.
+
+The locations also go through JavaScript (`compat/js/json.rs`). A node
+in JSON has the keys `src` and `dst`, as upstream, but each value is a
+number: the index of the location in a table of the runtime
+(`LocTable`). The plugin layer only copies these values (`node.src =
+src` in `compat/plugin-api.ts`, `cloneAstNode`). The identity of a
+declaration or of a comment is the key `__id`. `host.ts` keeps the
+number of each object in a `WeakMap`, gives a new number to an object
+that has none, and writes the number only into the JSON text: a copy of
+an object in JavaScript is a new object. The compiler calls
+`__tw_track` before the first call when it keeps locations. With no
+source map, the JSON text has none of these keys.
+
 ## The command line program
 
 `src/cli/` follows `@tailwindcss/cli` and `@tailwindcss/node`:
@@ -221,7 +271,16 @@ a network connection, or read the environment except `NODE_ENV`. See
   `node_modules` with the `style` condition, and the stylesheets of
   Tailwind CSS in the program).
 - `optimize_css.rs`: Lightning CSS for `--minify` and `--optimize`: the
-  same version and options as Tailwind CSS, in two passes.
+  same version and options as Tailwind CSS, in two passes. With a
+  source map, each pass gets the map of its input (the crate
+  `parcel_sourcemap`, as the Node.js package of Lightning CSS).
+- `source_maps.rs`: the JSON text of a source map, as the package
+  `source-map-js` writes it, and the comment with the map or with its
+  URL.
+- `remapping.rs`: the replacement of `@media not (` after the
+  optimizer, with a new source map: the parts of `magic-string`
+  (`generateMap` with `hires: 'boundary'`) and of
+  `@jridgewell/remapping` that Tailwind CSS uses for it.
 - The scanner is the crate `tailwindcss-oxide` of Tailwind CSS: the
   detection of source files, `.gitignore`, and the extraction of
   candidates are the code of Tailwind CSS itself.
@@ -292,11 +351,15 @@ one for aarch64, of about 9 MB each. In one copy:
 
 | Part | Size |
 |---|---|
-| Lightning CSS with its CSS parser, for `--minify` and `--optimize` | about 3.5 MB |
+| Lightning CSS with its CSS parser, for `--minify` and `--optimize`, and its source maps | about 3.5 MB |
 | The compiler (the utilities, the variants, the default theme of v3) | about 1 MB |
 | The scanner of Tailwind CSS with its regular expressions and its `.gitignore` code | about 1 MB |
-| QuickJS with its Unicode tables, the JSON code, and the plugin layer of Tailwind CSS (88 KB) | about 1.5 MB |
+| QuickJS with its Unicode tables, the JSON code, and the plugin layer of Tailwind CSS (89 KB) | about 1.5 MB |
 | The Rust standard library, the unwind tables, the stylesheets, Cosmopolitan | the rest |
+
+The source maps (the code of the compiler and of the program, and the
+source maps of Lightning CSS with the crate `parcel_sourcemap`) are
+about 0.15 MB of one copy.
 
 The dependencies build for size (`opt-level = "s"`), and the compiler
 and QuickJS (`-O2`) build for speed. With all the code built for speed,

@@ -7,11 +7,14 @@ pub mod args;
 pub mod events;
 pub mod modules;
 pub mod optimize_css;
+pub mod remapping;
 pub mod resolve;
+pub mod source_maps;
 
 use crate::index::{compile, CompileOptions, Compiler, Root};
 use crate::{Error, Result};
 use args::{Parsed, Value};
+use source_maps::SourceMap;
 use std::io::{IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -83,6 +86,7 @@ fn help_text(style: &Style) -> String {
         ("    --poll", "Use polling instead of filesystem events when watching"),
         ("-m, --minify", "Optimize and minify the output"),
         ("    --optimize", "Optimize the output without minifying"),
+        ("    --map", "Generate a source map"),
         ("    --cwd", "The current working directory [default: `.`]"),
         ("    --silent", "Suppress non-error output"),
         ("-h, --help", "Display usage information"),
@@ -110,9 +114,9 @@ pub fn format_duration(duration: Duration) -> String {
 fn format_error(style: &Style, error: &Error) -> String {
     let mut lines = vec![style.red("Error:"), style.dim("\u{250c}")];
     // The official program prints the error object of JavaScript, whose
-    // text starts with the name of the error.
-    let name = error.name.as_deref().unwrap_or("Error");
-    for line in format!("{name}: {}", error.message).split('\n') {
+    // text starts with the name of the error: `Error`, `CssSyntaxError`,
+    // or the name of an exception of a plugin.
+    for line in format!("{}: {}", error.name, error.message).split('\n') {
         // The word wrap of the official program removes the spaces at the
         // start of a line.
         let line = line.trim_start_matches(' ');
@@ -149,6 +153,28 @@ fn relative(path: &Path) -> String {
     }
 }
 
+/// `path.relative(from, to)` of Node.js, for two absolute paths with no
+/// `.` and `..` parts.
+fn relative_path(from: &Path, to: &Path) -> String {
+    let from: Vec<_> = from.components().collect();
+    let to: Vec<_> = to.components().collect();
+    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let mut parts: Vec<String> = from[common..].iter().map(|_| "..".to_string()).collect();
+    parts.extend(to[common..].iter().map(|part| part.as_os_str().to_string_lossy().into_owned()));
+    parts.join(std::path::MAIN_SEPARATOR_STR)
+}
+
+/// The source map of `--map`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MapOption {
+    /// No source map.
+    None,
+    /// `--map`: the map is in a comment at the end of the output.
+    Inline,
+    /// `--map FILE`: the map is in this file, as an absolute path.
+    File(PathBuf),
+}
+
 /// The options of a build.
 struct Options {
     /// The current directory of the build, as an absolute path.
@@ -158,6 +184,10 @@ struct Options {
     input_is_stdin: bool,
     /// The output file. `None` is stdout.
     output: Option<PathBuf>,
+    /// The name of the input for the optimizer: the path of the input,
+    /// `-` for stdin, or `input.css`.
+    optimizer_file: String,
+    map: MapOption,
     minify: bool,
     optimize: bool,
     silent: bool,
@@ -172,8 +202,11 @@ struct Options {
 /// The state of the last write.
 #[derive(Default)]
 struct Previous {
+    /// The CSS of the compiler that `optimized_css` and `map` are for.
     css: Option<String>,
     optimized_css: String,
+    /// The source map of the output.
+    map: Option<SourceMap>,
     output: Option<String>,
 }
 
@@ -225,7 +258,30 @@ fn ensure_source_detection_root_exists(root: &Root) -> Result<()> {
     Ok(())
 }
 
-fn create_build(options: &Options, (css, input_stamp): &(String, Stamp)) -> Result<Build> {
+/// The `from` option of the compiler, as the official program gives it.
+fn compiler_from(options: &Options) -> String {
+    match &options.input {
+        Some(path) => path.to_string_lossy().into_owned(),
+        None => "stdin.css".to_string(),
+    }
+}
+
+fn create_build(options: &Options, input: &(String, Stamp)) -> Result<Build> {
+    // The compiler keeps the source locations only for a source map: they
+    // have a cost. The official program keeps them for each build, and
+    // thus the message of a syntax error has the position. On an error,
+    // compile again with the locations for that message.
+    let from = compiler_from(options);
+    if options.map != MapOption::None {
+        return create_build_from(options, input, Some(from));
+    }
+    match create_build_from(options, input, None) {
+        Err(error) => Err(create_build_from(options, input, Some(from)).err().unwrap_or(error)),
+        result => result,
+    }
+}
+
+fn create_build_from(options: &Options, (css, input_stamp): &(String, Stamp), from: Option<String>) -> Result<Build> {
     let input_base = match &options.input {
         Some(path) => path.parent().unwrap_or(Path::new("")).to_path_buf(),
         None => std::env::current_dir().unwrap_or_default(),
@@ -247,6 +303,7 @@ fn create_build(options: &Options, (css, input_stamp): &(String, Stamp)) -> Resu
             polyfills: crate::POLYFILLS_ALL,
             load_stylesheet: Some(&load),
             test_mode: false,
+            from,
             module_loader: Some(modules.clone()),
         },
     )?;
@@ -318,17 +375,63 @@ fn output_file(file: &Path, contents: &str) -> std::io::Result<()> {
     std::fs::write(file, contents)
 }
 
-/// Write the CSS to the output. The result is true when the output changed.
-fn write(css: &str, options: &Options, previous: &mut Previous) -> Result<bool> {
-    let mut output = css;
-    if options.minify || options.optimize {
-        if previous.css.as_deref() != Some(css) {
-            let file = options.input.as_ref().map_or("input.css".to_string(), |p| p.to_string_lossy().into_owned());
-            previous.optimized_css = optimize_css::optimize(css, &file, options.minify).map_err(Error::new)?;
-            previous.css = Some(css.to_string());
+/// Write the CSS to the output, with its source map for `--map`.
+/// `source_map` gives the source map of the CSS. The result is true when
+/// the output changed.
+fn write(
+    css: &str,
+    source_map: &dyn Fn() -> SourceMap,
+    options: &Options,
+    previous: &mut Previous,
+) -> Result<bool> {
+    let optimize = options.minify || options.optimize;
+    // The optimizer and the map run only for new CSS: the watch calls
+    // this function at each tick.
+    if (optimize || options.map != MapOption::None) && previous.css.as_deref() != Some(css) {
+        let mut map = (options.map != MapOption::None).then(source_map);
+        if optimize {
+            let optimized = optimize_css::optimize(
+                css,
+                &options.optimizer_file,
+                options.minify,
+                map.as_ref().map(|map| map.raw.as_str()),
+            )
+            .map_err(Error::new)?;
+            previous.optimized_css = optimized.code;
+            if let Some(raw) = optimized.map {
+                map = Some(source_maps::raw_source_map(raw));
+            }
         }
-        output = &previous.optimized_css;
+        previous.map = map;
+        previous.css = Some(css.to_string());
     }
+    let mut output = std::borrow::Cow::Borrowed(if optimize { previous.optimized_css.as_str() } else { css });
+
+    if let Some(map) = &previous.map {
+        match &options.map {
+            MapOption::None => {}
+            MapOption::Inline => {
+                let output = output.to_mut();
+                output.push('\n');
+                output.push_str(&map.inline());
+            }
+            MapOption::File(file) => {
+                let cwd;
+                let base_path = match &options.output {
+                    Some(output) => output.parent().unwrap_or(Path::new("")),
+                    None => {
+                        cwd = std::env::current_dir().unwrap_or_default();
+                        &cwd
+                    }
+                };
+                let output = output.to_mut();
+                output.push('\n');
+                output.push_str(&map.comment(&relative_path(base_path, file)));
+                output_file(file, &map.raw).map_err(|e| Error::new(format!("{}: {e}", file.display())))?;
+            }
+        }
+    }
+    let output: &str = &output;
 
     let did_change = previous.output.as_deref() != Some(output);
     match &options.output {
@@ -371,6 +474,18 @@ fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options,
         ));
     }
 
+    // `--map -` is possibly an attempt to get the map in the output.
+    let map = match parsed.flag_or_text("map", None) {
+        None | Some(Value::Bool(false)) => MapOption::None,
+        Some(Value::Bool(true)) => MapOption::Inline,
+        Some(Value::Text(t)) if t == "-" => {
+            return Err("Use --map without a value to inline the source map.".into());
+        }
+        // An empty value is not a file, as in JavaScript.
+        Some(Value::Text(t)) if t.is_empty() => MapOption::None,
+        Some(Value::Text(t)) => MapOption::File(resolve_path(&base, &t)),
+    };
+
     let poll = match parsed.flag_or_text("poll", None) {
         None | Some(Value::Bool(false)) => None,
         Some(Value::Bool(true)) => Some(DEFAULT_POLL_INTERVAL_MS),
@@ -386,15 +501,20 @@ fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options,
         Some(Value::Text(t)) => Some(t == "always"),
     };
 
-    if parsed.get("map", None).is_some_and(|v| *v != Value::Bool(false)) {
-        return Err("This program does not make source maps: remove --map.".into());
-    }
+
+    let optimizer_file = match (&input, input_is_stdin) {
+        (Some(path), _) => path.to_string_lossy().into_owned(),
+        (None, true) => "-".to_string(),
+        (None, false) => "input.css".to_string(),
+    };
 
     Ok(Options {
         base,
+        optimizer_file,
         input,
         input_is_stdin,
         output,
+        map,
         minify: parsed.flag("minify", Some("m")),
         optimize: parsed.flag("optimize", None),
         silent: parsed.flag("silent", None),
@@ -407,7 +527,8 @@ fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options,
 fn build_once(build: &mut Build, options: &Options, previous: &mut Previous) -> Result<()> {
     let candidates = build.scanner.scan();
     let css = build.compiler.try_build(&candidates)?;
-    write(&css, options, previous)?;
+    let compiler = &build.compiler;
+    write(&css, &|| source_maps::to_source_map(&compiler.build_source_map()), options, previous)?;
     Ok(())
 }
 

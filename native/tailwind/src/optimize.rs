@@ -5,7 +5,8 @@
 //! the new tree in an arena: each node and each list of children has an id.
 //! `handle_nesting` uses paths of child indices into its result.
 
-use crate::ast::{self, at_rule, style_rule, AstNode, AtRule, ContextMap, ContextValue, Declaration};
+use crate::ast::{self, at_rule, style_rule, AstNode, AtRule, ContextMap, ContextValue, Declaration, Loc};
+use crate::source_maps::SourceLocation;
 use crate::design_system::DesignSystem;
 use crate::selector_parser::{self, SelectorAstNode};
 use crate::theme::{self, Theme};
@@ -76,8 +77,8 @@ type Id = usize;
 enum Item {
     /// A finished subtree: a declaration, a comment, or a made rule.
     Node(AstNode),
-    Rule { selector: String, nodes: Vec<Id> },
-    AtRule { name: String, params: String, nodes: Vec<Id> },
+    Rule { selector: String, nodes: Vec<Id>, loc: Loc },
+    AtRule { name: String, params: String, nodes: Vec<Id>, loc: Loc },
     Context { context: ContextMap, nodes: Vec<Id> },
     /// A list that is not a node: the root, the at-roots, a temporary list.
     List(Vec<Id>),
@@ -125,8 +126,12 @@ impl Arena {
         let item = std::mem::replace(&mut self.entries[id].item, Item::List(Vec::new()));
         match item {
             Item::Node(node) => node,
-            Item::Rule { selector, nodes } => style_rule(selector, self.build_all(nodes)),
-            Item::AtRule { name, params, nodes } => at_rule(name, params, self.build_all(nodes)),
+            Item::Rule { selector, nodes, loc } => {
+                AstNode::Rule(ast::StyleRule { selector, nodes: self.build_all(nodes), loc })
+            }
+            Item::AtRule { name, params, nodes, loc } => {
+                AstNode::AtRule(AtRule { name, params, nodes: self.build_all(nodes), loc })
+            }
             Item::Context { context, nodes } => ast::context(context, self.build_all(nodes)),
             Item::List(_) => unreachable!("a list is not a node"),
         }
@@ -227,7 +232,7 @@ impl Optimizer<'_> {
             }
 
             AstNode::Rule(rule) => {
-                let copy = self.arena.add(Item::Rule { selector: rule.selector.clone(), nodes: Vec::new() });
+                let copy = self.arena.add(Item::Rule { selector: rule.selector.clone(), nodes: Vec::new(), loc: rule.loc.clone() });
                 for child in &rule.nodes {
                     self.transform(child, copy, context, depth + 1);
                 }
@@ -252,7 +257,8 @@ impl Optimizer<'_> {
                             inherits = prop.value.as_deref() == Some("true");
                         }
                     }
-                    let fallback = ast::decl(rule.params.clone(), initial_value.unwrap_or_else(|| "initial".to_string()));
+                    let fallback = ast::decl(rule.params.clone(), initial_value.unwrap_or_else(|| "initial".to_string()))
+                        .with_src(rule.loc.src());
                     if inherits {
                         self.property_fallbacks_root.push(fallback);
                     } else {
@@ -332,7 +338,12 @@ impl Optimizer<'_> {
     }
 
     fn copy_at_rule(&mut self, rule: &AtRule) -> Id {
-        self.arena.add(Item::AtRule { name: rule.name.clone(), params: rule.params.clone(), nodes: Vec::new() })
+        self.arena.add(Item::AtRule {
+            name: rule.name.clone(),
+            params: rule.params.clone(),
+            nodes: Vec::new(),
+            loc: rule.loc.clone(),
+        })
     }
 
     fn declaration(&self, id: Id) -> &Declaration {
@@ -430,12 +441,20 @@ impl Optimizer<'_> {
                     property: decl.property.clone(),
                     value: Some(fallback_value),
                     important: decl.important,
+                    loc: decl.loc.clone(),
                 });
+                let query_loc = Loc::from_src(decl.loc.src().cloned());
+                // The fallback is a new object of upstream.
+                let mut fallback = fallback;
+                if let Some(loc) = fallback.loc_mut() {
+                    loc.clear_identity();
+                }
                 let fallback = self.arena.add(Item::Node(fallback));
                 let query = self.arena.add(Item::AtRule {
                     name: "@supports".to_string(),
                     params: "(color: color-mix(in lab, red, red))".to_string(),
                     nodes: vec![declaration],
+                    loc: query_loc,
                 });
                 self.arena.entries[declaration].parent = Some(query);
                 self.arena.entries[fallback].parent = Some(parent);
@@ -504,10 +523,15 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
     if polyfills & crate::POLYFILLS_AT_PROPERTY != 0 {
         let mut fallback_ast = Vec::new();
         if !optimizer.property_fallbacks_root.is_empty() {
-            fallback_ast.push(style_rule(":root, :host", optimizer.property_fallbacks_root));
+            let src = optimizer.property_fallbacks_root[0].src().cloned();
+            fallback_ast.push(style_rule(":root, :host", optimizer.property_fallbacks_root).with_src(src.as_ref()));
         }
         if !optimizer.property_fallbacks_universal.is_empty() {
-            fallback_ast.push(style_rule("*, ::before, ::after, ::backdrop", optimizer.property_fallbacks_universal));
+            let src = optimizer.property_fallbacks_universal[0].src().cloned();
+            fallback_ast.push(
+                style_rule("*, ::before, ::after, ::backdrop", optimizer.property_fallbacks_universal)
+                    .with_src(src.as_ref()),
+            );
         }
 
         if !fallback_ast.is_empty() {
@@ -518,12 +542,20 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
                 AstNode::AtRule(rule) => rule.name != "@charset" && rule.name != "@import",
                 _ => true,
             });
-            new_ast.insert(first_valid_node_index.unwrap_or(new_ast.len()), at_rule("@layer", "properties", Vec::new()));
-            new_ast.push(at_rule(
-                "@layer",
-                "properties",
-                vec![at_rule("@supports", AT_PROPERTY_SUPPORTS, fallback_ast)],
-            ));
+            let src: Option<SourceLocation> = fallback_ast[0].src().cloned();
+            let src = src.as_ref();
+            new_ast.insert(
+                first_valid_node_index.unwrap_or(new_ast.len()),
+                at_rule("@layer", "properties", Vec::new()).with_src(src),
+            );
+            new_ast.push(
+                at_rule(
+                    "@layer",
+                    "properties",
+                    vec![at_rule("@supports", AT_PROPERTY_SUPPORTS, fallback_ast).with_src(src)],
+                )
+                .with_src(src),
+            );
         }
     }
 
@@ -710,6 +742,8 @@ fn color_mix_fallback(value: &str, theme: &Theme) -> Option<String> {
 struct SelectorEntry {
     selector: String,
     dead: bool,
+    /// The locations of the rule, for the rule that `emit` makes.
+    loc: Loc,
 }
 
 /// The list that `emit` adds to.
@@ -750,7 +784,7 @@ struct ParentInfo {
 
 struct Nesting {
     selector_stack: Vec<SelectorEntry>,
-    at_rule_stack: Vec<(String, String)>,
+    at_rule_stack: Vec<(String, String, Loc)>,
     current: Current,
     seen_declaration_properties: HashSet<String>,
     /// The paths of the lists that can have the same declaration two times.
@@ -1041,7 +1075,7 @@ impl Nesting {
                     // In an `@scope` rule, `&` is `:where(:scope)`.
                     let mut selector = None;
                     if rule.selector.contains('&') {
-                        let replacement = if self.at_rule_stack.iter().any(|(name, _)| name == "@scope") {
+                        let replacement = if self.at_rule_stack.iter().any(|(name, _, _)| name == "@scope") {
                             ":where(:scope)"
                         } else {
                             ":scope"
@@ -1054,7 +1088,11 @@ impl Nesting {
                         }
                     }
                     self.selector_stack
-                        .push(SelectorEntry { selector: selector.unwrap_or_else(|| rule.selector.clone()), dead: false });
+                        .push(SelectorEntry {
+                        selector: selector.unwrap_or_else(|| rule.selector.clone()),
+                        dead: false,
+                        loc: rule.loc.clone(),
+                    });
                 } else {
                     // A rule with only `&` is the same as its children.
                     if rule.selector == "&" {
@@ -1077,7 +1115,7 @@ impl Nesting {
                     // No selector can match. The declarations of the rule
                     // have no effect, but a nested rule can match.
                     if live_selectors.is_empty() {
-                        self.selector_stack.push(SelectorEntry { selector: selectors.join(", "), dead: true });
+                        self.selector_stack.push(SelectorEntry { selector: selectors.join(", "), dead: true, loc: rule.loc.clone() });
                         self.visit_all(rule.nodes);
                         self.current = Current::None;
                         self.selector_stack.pop();
@@ -1085,7 +1123,7 @@ impl Nesting {
                     }
 
                     let selector = live_selectors.join(", ");
-                    self.selector_stack.push(SelectorEntry { selector, dead: false });
+                    self.selector_stack.push(SelectorEntry { selector, dead: false, loc: rule.loc.clone() });
                 }
 
                 // A rule with a declaration keeps its nested rules as they
@@ -1213,7 +1251,7 @@ impl Nesting {
                     }
                 }
 
-                self.at_rule_stack.push((rule.name, params));
+                self.at_rule_stack.push((rule.name, params, rule.loc));
                 self.visit_all(rule.nodes);
                 self.current = Current::None;
                 self.at_rule_stack.pop();
@@ -1284,7 +1322,7 @@ impl Nesting {
         let mut at_rule_offset = 0;
         {
             let mut target = &self.result;
-            for (name, params) in &self.at_rule_stack {
+            for (name, params, _) in &self.at_rule_stack {
                 match target.last() {
                     Some(AstNode::AtRule(last)) if last.name == *name && last.params == *params => {
                         target_path.push(target.len() - 1);
@@ -1314,12 +1352,18 @@ impl Nesting {
                     }
                 }
             }
-            root = Some(ast::rule(entry.selector.clone(), pending.take().into_iter().collect()));
+            let mut made = ast::rule(entry.selector.clone(), pending.take().into_iter().collect());
+            if entry.loc.is_some() {
+                if let Some(loc) = made.loc_mut() {
+                    *loc = entry.loc.clone();
+                }
+            }
+            root = Some(made);
         }
 
-        for (name, params) in self.at_rule_stack[at_rule_offset..].iter().rev() {
+        for (name, params, loc) in self.at_rule_stack[at_rule_offset..].iter().rev() {
             let nodes: Vec<AstNode> = root.take().or_else(|| pending.take()).into_iter().collect();
-            root = Some(at_rule(name.clone(), params.clone(), nodes));
+            root = Some(AstNode::AtRule(AtRule { name: name.clone(), params: params.clone(), nodes, loc: loc.clone() }));
         }
 
         match root {

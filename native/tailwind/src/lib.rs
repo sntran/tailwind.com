@@ -19,6 +19,7 @@ pub mod index;
 pub mod optimize;
 pub mod property_order;
 pub mod selector_parser;
+pub mod source_maps;
 pub mod theme;
 pub mod to_css;
 pub mod utilities;
@@ -34,14 +35,15 @@ pub use index::{compile, CompileOptions, Compiler, Root, Source, Stylesheet, VER
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
     pub message: String,
-    /// The name of a JavaScript exception of a plugin, when it is not
-    /// `Error`: for example `TypeError`.
-    pub name: Option<String>,
+    /// The name of the error, as JavaScript gives it: `Error`,
+    /// `CssSyntaxError` for an error of the CSS parser, or the name of a
+    /// JavaScript exception of a plugin, for example `TypeError`.
+    pub name: std::borrow::Cow<'static, str>,
 }
 
 impl Error {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into(), name: None }
+        Self { message: message.into(), name: std::borrow::Cow::Borrowed("Error") }
     }
 }
 
@@ -55,7 +57,7 @@ impl std::error::Error for Error {}
 
 impl From<css_parser::CssSyntaxError> for Error {
     fn from(e: css_parser::CssSyntaxError) -> Self {
-        Error::new(e.message)
+        Error { message: e.message, name: std::borrow::Cow::Borrowed("CssSyntaxError") }
     }
 }
 
