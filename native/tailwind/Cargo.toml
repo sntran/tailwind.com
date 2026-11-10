@@ -1,0 +1,21 @@
+[package]
+name = "tailwind"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+description = "A Tailwind CSS compiler in one file"
+repository = "https://github.com/sntran/tailwind.com"
+
+[lib]
+name = "tailwind"
+path = "src/lib.rs"
+
+[dependencies]
+indexmap = "2"
+
+[dev-dependencies]
+proptest = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+flate2 = "1"

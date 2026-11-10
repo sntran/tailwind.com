@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme {
+  --tab-size-github: 8;
+  --stripe-wide: 2rem;
+}
+
+@utility content-auto {
+  content-visibility: auto;
+}
+
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility tab-* {
+  tab-size: --value(--tab-size-*, integer, [integer]);
+}
+
+@utility stripe-* {
+  --stripe-size: --value(--stripe-*, [length]);
+  --stripe-size: --spacing(--value(integer));
+  --stripe-opacity: --modifier(integer);
+  --stripe-opacity: calc(--modifier(integer) * 1%);
+  --stripe-opacity: --modifier([percentage]);
+  background-image: repeating-linear-gradient(45deg, currentColor 0 var(--stripe-size), transparent 0 calc(var(--stripe-size) * 2));
+}
+
+@utility opacity-* {
+  opacity: calc(--value(integer) * 1%);
+  opacity: --value([percentage], [number]);
+}
+
+@utility btn {
+  @apply inline-flex items-center rounded-md px-3 py-2 text-sm font-semibold hover:opacity-90 focus-visible:outline-2;
+}
+
+@utility button-* {
+  @apply btn;
+  background-color: --value(--color-*, [color]);
+  font-size: --value(--text-*, [length]);
+  aspect-ratio: --value(ratio, [ratio]);
+}
+
+@utility text-trim-* {
+  text-box-trim: --value("trim-both", "trim-start", "trim-end");
+}

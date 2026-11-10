@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #663399;
+}
+
+@utility pill {
+  border-radius: 9999px;
+  padding-inline: --spacing(3);
+}
+
+@custom-variant hocus (&:hover, &:focus);
+
+.from-theme-file {
+  color: red;
+}

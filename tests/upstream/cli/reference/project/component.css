@@ -1,0 +1,7 @@
+@reference "./theme.css";
+
+.badge {
+  @apply pill bg-brand text-white hocus:bg-brand/80 sm:text-sm;
+  margin: --spacing(2);
+  border-color: var(--color-brand);
+}

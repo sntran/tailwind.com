@@ -1,0 +1,10 @@
+@import "tailwindcss" prefix(tw) important;
+
+@theme {
+  --color-brand: #0af;
+}
+
+.card {
+  @apply tw:rounded-lg tw:p-4 tw:hover:bg-brand/20;
+  color: var(--tw-color-brand);
+}

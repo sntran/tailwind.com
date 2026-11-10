@@ -1,0 +1,35 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./views";
+
+@layer base {
+  :root {
+    --brand: rebeccapurple;
+  }
+  body {
+    margin: 0;
+    color: light-dark(#111, #eee);
+  }
+}
+
+@layer components {
+  .alert {
+    border: 1px solid var(--color-red-300);
+    padding: --spacing(4);
+
+    &.is-success {
+      border-color: var(--color-green-300);
+    }
+
+    .title {
+      font-weight: var(--font-weight-bold);
+    }
+  }
+}
+
+@layer utilities {
+  .legacy-util {
+    inset-inline: 0;
+  }
+}

@@ -1,0 +1,44 @@
+@import "tailwindcss" source(none);
+
+@theme {
+  --color-accent: #3b82f6;
+  --breakpoint-tablet: 48rem;
+}
+
+.a {
+  color: theme(colors.red.500);
+  background: theme(colors.blue.500 / 50%);
+  margin: theme(spacing.4);
+  font-family: theme(fontFamily.sans);
+  border-radius: theme(borderRadius.lg);
+  width: theme(--breakpoint-tablet);
+  outline-color: theme(--color-nope, hotpink);
+}
+
+.b {
+  color: --theme(--color-accent);
+  background: --theme(--color-accent / 25%);
+  border-color: --theme(--color-accent inline);
+  fill: --theme(--color-missing, currentColor);
+  padding: --spacing(4) --spacing(2.5);
+  margin: calc(--spacing(4) * -1);
+  inset: --spacing(0);
+}
+
+.c {
+  color: --alpha(var(--color-accent) / 50%);
+  background: --alpha(red / 0.25);
+  border-color: --alpha(--theme(--color-accent) / 10%);
+}
+
+@media (width >= theme(--breakpoint-tablet)) {
+  .d {
+    display: none;
+  }
+}
+
+@media (min-width: theme(--breakpoint-md)) and (max-width: theme(screens.xl)) {
+  .e {
+    gap: theme(spacing[2.5]);
+  }
+}

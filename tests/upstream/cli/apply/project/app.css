@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@layer components {
+  .btn {
+    @apply rounded-md px-4 py-2 font-medium transition-colors;
+    @apply hover:bg-blue-600 focus-visible:ring-2 dark:md:text-white;
+  }
+
+  .btn-primary {
+    @apply btn-base bg-blue-500 text-white!;
+  }
+
+  .card {
+    @apply rounded-lg bg-white p-6 shadow-md;
+
+    & > h2 {
+      @apply text-lg font-bold;
+    }
+
+    @media (min-width: 640px) {
+      @apply p-8;
+    }
+  }
+}
+
+@utility btn-base {
+  @apply inline-flex cursor-pointer items-center;
+}
+
+@layer base {
+  h1 {
+    @apply text-2xl font-bold;
+  }
+  a {
+    @apply text-blue-600 underline hover:no-underline;
+  }
+}
+
+.loose {
+  @apply mt-[13px] bg-[#123456]/50 [--x:1] w-1/3 -translate-x-2 group-hover:opacity-100;
+}

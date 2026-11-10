@@ -1,0 +1,6 @@
+@import "./shared/reset.css";
+
+.btn {
+  @apply rounded-md px-4 py-2 font-medium;
+  background-image: url(./img/bg.png);
+}

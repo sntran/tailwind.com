@@ -1,0 +1,8 @@
+/target/
+/build/
+/_build/
+/deps/
+/cover/
+/node_modules/
+erl_crash.dump
+*.beam

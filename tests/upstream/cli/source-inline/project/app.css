@@ -1,0 +1,6 @@
+@import "tailwindcss" source(none);
+@source inline("{hover:,focus:,}bg-red-{50,{100..300..100},950}");
+@source inline("p-{1..4} m-{0..8..4}");
+@source inline("{sm,md}:{flex,grid} underline");
+@source not inline("p-3");
+@source not inline("md:grid");
