@@ -1,0 +1,41 @@
+tailwind.com
+Copyright 2026 Sơn Trần-Nguyễn
+
+This product is licensed under the Apache License, Version 2.0 (see
+LICENSE).
+
+The compiler in native/tailwind is a port to Rust of the compiler of
+Tailwind CSS, and the file tailwind.com contains the software below. The
+source of this repository keeps the license texts in licenses/.
+
+Tailwind CSS 4.3.5 (the compiler that native/tailwind follows file by
+file, the stylesheets in native/tailwind/assets, the scanner crate
+tailwindcss-oxide, and the recorded test data in tests/upstream)
+  Copyright (c) Tailwind Labs, Inc.
+  MIT License (licenses/tailwindcss.txt).
+  https://github.com/tailwindlabs/tailwindcss
+
+Lightning CSS 1.0.0-alpha.72 (the optimizer of --minify and --optimize)
+  Copyright Devon Govett and the contributors of Lightning CSS.
+  Mozilla Public License 2.0 (licenses/mpl-2.0.txt). The source is at
+  https://github.com/parcel-bundler/lightningcss
+
+Cosmopolitan Libc 4.0.2 (the C runtime of the APE file)
+  Copyright 2020 Justine Alexandra Roberts Tunney.
+  ISC License (licenses/cosmopolitan.txt). Cosmopolitan also links code
+  of other projects under the licenses that its source names.
+  https://github.com/jart/cosmopolitan
+
+The Rust standard library and musl (in the Rust library of the file)
+  Copyright The Rust Project Developers; Copyright 2005-2020 Rich Felker
+  and the contributors of musl.
+  MIT License or Apache License 2.0 (Rust), MIT License
+  (licenses/musl.txt).
+
+The other Rust crates of Cargo.lock
+  Each crate has its license in its source (MIT, Apache-2.0, MPL-2.0,
+  BSD or Unlicense). "cargo tree" lists them.
+
+c_src/cosmo_rust.c, c_src/eh_frame_pad.ld and scripts/rust_link.sh come
+from BEAM.com (Apache License 2.0), by the same author.
+https://github.com/sntran/BEAM.com

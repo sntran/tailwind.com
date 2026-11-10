@@ -178,7 +178,7 @@ impl DesignSystem {
                 let mut was_valid = true;
                 let result = crate::compile::compile_candidates(&[class_name.to_string()], self, &mut |_| was_valid = false, true);
                 let nodes: Vec<AstNode> = result.into_iter().map(|c| c.node).collect();
-                let nodes = crate::optimize::optimize_ast(nodes, self, crate::POLYFILLS_NONE);
+                let nodes = crate::optimize::optimize_ast(&nodes, self, crate::POLYFILLS_NONE);
                 if was_valid && !nodes.is_empty() {
                     Some(crate::to_css::to_css(&nodes))
                 } else {
