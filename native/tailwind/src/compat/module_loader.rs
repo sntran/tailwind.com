@@ -59,6 +59,9 @@ pub trait ModuleLoader {
     }
 }
 
+/// One answer of `resolve_module`: `(id, base)` to `(path, base)`.
+pub type Resolution = ((String, String), (String, String));
+
 /// A file system in memory, for tests.
 #[derive(Default)]
 pub struct MemoryLoader {
@@ -67,7 +70,7 @@ pub struct MemoryLoader {
     pub console: std::cell::RefCell<Vec<String>>,
     /// The answers of `resolve_module`: `(id, base)` to `(path, base)`.
     /// An answer is used one time, in the sequence of the list.
-    pub resolutions: std::cell::RefCell<Vec<((String, String), (String, String))>>,
+    pub resolutions: std::cell::RefCell<Vec<Resolution>>,
 }
 
 impl MemoryLoader {

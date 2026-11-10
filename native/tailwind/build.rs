@@ -14,15 +14,14 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=WASI_SDK_PATH");
 
-    if std::env::var_os("CARGO_FEATURE_JS").is_none() {
-        return;
-    }
     if std::env::var_os("CARGO_FEATURE_APE").is_some() {
-        println!("cargo:rustc-cfg=tw_js");
-        return;
+        if std::env::var_os("CARGO_FEATURE_JS").is_some() {
+            println!("cargo:rustc-cfg=tw_js");
+        }
+    } else {
+        #[cfg(feature = "js")]
+        compile();
     }
-    #[cfg(feature = "js")]
-    compile();
 }
 
 #[cfg(feature = "js")]
