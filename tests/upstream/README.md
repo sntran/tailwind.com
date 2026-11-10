@@ -34,7 +34,8 @@ Fields:
 - `options`: `base`, `from`, `polyfills` (`null` when not set), `hasLoadModule`, `hasLoadStylesheet`.
 - `stylesheets`: each `loadStylesheet` call in order: `id`, `base`, and `result` (`path`, `base`, `content`) or `error`.
 - `modules`: the number of `loadModule` calls. `moduleRequests` gives the `id`, `base` and `hint` of each call.
-  A record with `modules` > 0 uses a JavaScript plugin or config. The Rust tests cannot replay such a record.
+  A record with `modules` > 0 uses a JavaScript plugin or config. The module is a JavaScript value of the test file,
+  so this file does not have it: `plugin-suite.jsonl.gz` has these records with the modules as source text.
 - `builds`: each `build(candidates)` call in order: `candidates`, and `css` or `error`.
   `optimized` is `optimize(css).code`. `minified` is `optimize(css, { minify: true }).code`.
   `optimizeError` is there when `optimize` throws.
@@ -47,6 +48,40 @@ The lines are in the order of the test files. In one test file, the lines are in
 Six tests in the `sorting` group of `index.test.ts` shuffle their candidates with `Math.random()`.
 Thus the `builds` of these six lines change from run to run. All the other lines are stable.
 The tests that call only `__unstable__loadDesignSystem`, the candidate parser or other internal functions give no lines.
+
+### `plugin-suite.jsonl.gz`
+
+The records of `suite.jsonl.gz` that load a JavaScript plugin or config, from `tools/gen-plugin-suite.mjs`.
+The file has 296 lines: 306 compile calls of the unit tests load a module, and 10 of them are not in the file (see below).
+
+The script runs the unit tests of `packages/tailwindcss` with the recorder, as for `suite.jsonl.gz`.
+The recorder writes each module that a test gives to `loadModule` as JavaScript source text (`tools/recorder.ts`, with `TW_ORACLE_MODULES=1`):
+
+- A function is its own source text (`toString()`). Objects and arrays are written item by item.
+- `plugin(handler, config)` gives a plain object, so it needs no special work.
+  For `plugin.withOptions(...)`, the script makes `plugin.ts` of the clone keep the two arguments, and the text is a call of `plugin.withOptions` with them.
+- Vitest changes the names of imports in the code of a test (`__vite_ssr_import_0__.default`). The recorder puts the names of the test file back.
+- The text starts with the names that the modules of the tests use: `plugin`, `css`, `html`, an `expect` and a `vi.fn` that do nothing,
+  and the default imports of `plugin`, `colors`, `default-theme` and `flatten-color-palette` with `require('tailwindcss/...')`.
+
+A function that uses a variable of its test is not complete as text.
+For this reason, the script runs each record again with the upstream compiler and the modules from their text, and keeps a record only when
+the error, the features, the sources and the CSS of each build are the same.
+For v4.3.5, 10 records fail this check: 9 use the local function `fn` of a group of tests in `plugin-api.test.ts`, and 1 uses a local variable `didCallPluginFn`.
+
+Fields: as `suite.jsonl.gz`, except:
+
+- `modules`: each `loadModule` call in order: `id`, `base`, `hint`, `source` (the CommonJS source text), `resultBase` (the `base` of the result),
+  or `error` when the function of the test throws.
+- `builds`: `candidates`, and `css` or `error`.
+
+The Rust test `native/tailwind/tests/plugin_suite.rs` gives each `source` to the compiler as a file in memory.
+
+### `candidates.jsonl.gz`
+
+From `tools/gen-candidates.mjs`: `parseCandidate` of the default design system as JSON, for 10,983 candidates of `classes.jsonl.gz`
+(each 25th candidate, and more of the candidates with variants or modifiers). Each line has `candidate` and `parsed` (a list: one item for each reading).
+A JavaScript plugin gets a candidate in this shape. The Rust test `tests/js_plugins.rs` compares its JSON with this file.
 
 ### `suite-extra.jsonl.gz`
 
@@ -300,6 +335,20 @@ The option `--legacy-peer-deps` keeps the peer package `tailwindcss` out of the 
 Some projects contain a `.gitignore` file, a `node_modules` directory or a `deps` directory.
 Use `git add -f tests/upstream/cli-js` to add all the files.
 
+## The plugin layer of the program
+
+`native/tailwind/assets/compat.js` is not a test file, but it comes from the same clone: it is the plugin layer of Tailwind CSS
+(`packages/tailwindcss/src/compat`) as one JavaScript file, for the JavaScript engine of the program.
+
+```sh
+node tests/upstream/tools/build-compat-bundle.mjs /path/to/tw
+```
+
+The script uses esbuild. It takes esbuild from `tests/upstream/tools/node_modules` (run `npm install` in `tests/upstream/tools`),
+or from the pnpm store of the clone. The entry and the shims are in `native/tailwind/js`: see `docs/INTERNALS.md`.
+The script stops when a module of the compiler that a shim must replace (`design-system.ts`, `compile.ts`, `at-import.ts`,
+`property-order.ts`) is in the bundle.
+
 ## How to make the files again
 
 ```sh
@@ -310,6 +359,7 @@ npm install -g pnpm
 pnpm install --frozen-lockfile --ignore-scripts
 
 # 2. Make all the files. The second argument is an empty scratch directory.
+#    The script changes files of the clone (index.ts, plugin.ts, __oracle.ts).
 cd /path/to/this/repository
 tests/upstream/tools/make-all.sh /path/to/tw /path/to/scratch
 ```
@@ -336,6 +386,15 @@ node tests/upstream/tools/run-cli.mjs /path/to/scratch/cli tests/upstream/cli 4.
 # cli-js/*/stdout.css and cli-js/*/exit.txt
 node tests/upstream/tools/run-cli.mjs /path/to/scratch/cli tests/upstream/cli-js 4.3.5
 
+# plugin-suite.jsonl.gz (the unit tests again; the script changes plugin.ts of the clone)
+node tests/upstream/tools/gen-plugin-suite.mjs /path/to/tw /path/to/scratch tests/upstream/plugin-suite.jsonl.gz
+
+# candidates.jsonl.gz
+node tests/upstream/tools/gen-candidates.mjs /path/to/tw tests/upstream
+
+# native/tailwind/assets/compat.js
+node tests/upstream/tools/build-compat-bundle.mjs /path/to/tw
+
 # Read each file and print the number of records.
 python3 tests/upstream/tools/check.py tests/upstream
 ```
@@ -347,6 +406,10 @@ python3 tests/upstream/tools/check.py tests/upstream
 | `tools/instrument.mjs` | Adds the recorder to `packages/tailwindcss/src/index.ts` of the clone. It wraps the exported `compile` function. |
 | `tools/recorder.ts` | The recorder. Each vitest worker appends events to `events-<pid>.jsonl` in the directory `TW_ORACLE_DIR`. |
 | `tools/merge-suite.mjs` | Joins the event files into `suite.jsonl.gz`. |
+| `tools/gen-plugin-suite.mjs` | Makes `plugin-suite.jsonl.gz`: runs the unit tests with the recorder and `TW_ORACLE_MODULES=1`, and checks each record with the upstream compiler. |
+| `tools/gen-candidates.mjs` | Makes `candidates.jsonl.gz`. |
+| `tools/build-compat-bundle.mjs` | Makes `native/tailwind/assets/compat.js` with esbuild (`tools/package.json` names the version). |
+| `tools/bun-interop.mjs` | The module interop of the standalone program, for the cases of `cli-js/` with `standalone.txt`. |
 | `tools/lib.mjs` | Shared helpers: loads the upstream TypeScript sources with jiti, the stylesheet loader, the random number generator. |
 | `tools/candidate-lists.mjs` | The hand-made lists: arbitrary forms, variants for the random stacks, modifiers, edge candidates. |
 | `tools/gen-classes.mjs` | Makes `classes.jsonl.gz` and `classes-all.json.gz`. |

@@ -74,7 +74,13 @@ for name in "$@"; do
         else
             sed "s/$esc\[[0-9;]*m//g" "$cases/$name/stderr.txt" | grep '^│' > "$work/$name/expected.raw" || true
         fi
-        sed "s|<project>|$work/$name/project|g" "$work/$name/expected.raw" > "$work/$name/expected.txt"
+        case "$(uname -s)" in
+            # On Windows, the program and the shell do not write the path
+            # of the project in the same way: compare the text before and
+            # after the path.
+            MINGW*|MSYS*|CYGWIN*) sed "s|<project>|\n|g" "$work/$name/expected.raw" | sed "s/^│ *$//" | grep -v '^$' > "$work/$name/expected.txt" || true ;;
+            *) sed "s|<project>|$work/$name/project|g" "$work/$name/expected.raw" > "$work/$name/expected.txt" ;;
+        esac
         while IFS= read -r line; do
             if ! grep -qF -- "$line" "$work/$name/stderr.txt"; then
                 echo "cli.sh: $name: the error output does not have: $line" >&2

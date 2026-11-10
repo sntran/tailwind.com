@@ -29,5 +29,15 @@ node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli" 4.3.5
 # 4b. cli-js/*/stdout.css and cli-js/*/exit.txt
 node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli-js" 4.3.5
 
-# 5. Check
+# 5. plugin-suite.jsonl.gz: the unit tests again, with each JavaScript
+# module as source text. The script changes plugin.ts of the clone.
+node "$TOOLS/gen-plugin-suite.mjs" "$CLONE" "$SCRATCH" "$OUT/plugin-suite.jsonl.gz"
+
+# 6. candidates.jsonl.gz
+node "$TOOLS/gen-candidates.mjs" "$CLONE" "$OUT"
+
+# 7. native/tailwind/assets/compat.js: the plugin layer for the program
+node "$TOOLS/build-compat-bundle.mjs" "$CLONE"
+
+# 8. Check
 python3 "$TOOLS/check.py" "$OUT"

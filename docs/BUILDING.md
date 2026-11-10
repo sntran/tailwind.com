@@ -2,11 +2,17 @@
 
 ## A program for this computer
 
-You need Rust 1.85 or later.
+You need Rust 1.85 or later, and a C compiler (`cc`: GCC or Clang) for
+the JavaScript engine (QuickJS, `c_src/quickjs`). The crate `cc` finds
+the compiler, and `CC` selects another one.
 
 ```sh
 cargo build --release      # target/release/tailwind
 ```
+
+`cargo build --release --no-default-features --features cli` is not a
+build without JavaScript: the feature `cli` has the feature `js`. See
+"The library only" below for the features.
 
 This is the same program as `tailwind.com`, for one system. Use it for
 development and for the tests.
@@ -27,6 +33,9 @@ rustup toolchain install nightly-2026-11-01 --profile minimal --component rust-s
 make                       # build/tailwind.com
 ```
 
+`cosmocc` also compiles QuickJS for each CPU: the C library of the file
+is Cosmopolitan, so the C compiler of the system is not used here.
+
 `scripts/build.sh` has the steps, and its header names the environment
 variables (`COSMOCC`, `COSMOCC_VERSION`, `RUST_NIGHTLY`, `CPUS`).
 `CPUS=x86_64 sh scripts/build.sh` makes a file for x86_64 only, with no
@@ -37,8 +46,20 @@ nightly Rust. See "The file tailwind.com" in
 
 ```sh
 rustup target add wasm32-wasip1
-make wasm                  # build/tailwind.wasm
+WASI_SDK_PATH=/path/to/wasi-sdk make wasm     # build/tailwind.wasm
 ```
+
+`WASI_SDK_PATH` is the directory of an unpacked
+[wasi-sdk](https://github.com/WebAssembly/wasi-sdk/releases) (CI uses
+version 27, and checks its SHA-256): its clang compiles QuickJS for
+`wasm32-wasip1`. With no `WASI_SDK_PATH`, the build works and prints a
+warning, and the program has no JavaScript: `@plugin` and `@config` are
+then errors.
+
+`native/tailwind/build.rs` has the two things that QuickJS needs on
+WASI, with no change of its files: `-include malloc.h` (for
+`malloc_usable_size`), and an empty `setjmp.h` (`c_src/wasi`), because
+`dtoa.c` includes this header and uses nothing of it.
 
 ## The library only
 
@@ -46,7 +67,8 @@ The compiler is a library with no command line program, no scanner and
 no optimizer:
 
 ```sh
-cargo build -p tailwind --no-default-features
+cargo build -p tailwind --no-default-features                  # no JavaScript
+cargo build -p tailwind --no-default-features --features js    # with @plugin and @config
 ```
 
 ```rust
@@ -55,9 +77,31 @@ let mut compiler = tailwind::compile(css, tailwind::CompileOptions {
     polyfills: tailwind::POLYFILLS_ALL,
     load_stylesheet: Some(&|id, base| { /* give the stylesheet of an @import */ }),
     test_mode: false,
+    // The files of the JavaScript modules of @plugin and @config: an
+    // implementation of tailwind::ModuleLoader (read a file, the kind
+    // of a path, the names in a directory). None: these rules are errors.
+    module_loader: None,
 })?;
 let css = compiler.build(&["flex".to_string(), "md:p-4".to_string()]);
 ```
+
+## The JavaScript parts
+
+The repository has two generated or copied parts. A build needs no
+Node.js for them.
+
+- `c_src/quickjs` is a copy of files of QuickJS, with no change.
+  `sh scripts/sync-quickjs.sh DIR_OF_QUICKJS_CLONE` copies the files of
+  another version (see `c_src/quickjs/README.md`).
+- `native/tailwind/assets/compat.js` is the plugin layer of Tailwind
+  CSS in one file. After a change of `native/tailwind/js`, or for a new
+  version of Tailwind CSS, make it again with Node.js and a clone of
+  Tailwind CSS:
+
+  ```sh
+  (cd tests/upstream/tools && npm install)      # esbuild
+  node tests/upstream/tools/build-compat-bundle.mjs /path/to/tailwindcss
+  ```
 
 ## The Erlang and Elixir modules
 

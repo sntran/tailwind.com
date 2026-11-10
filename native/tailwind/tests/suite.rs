@@ -2,7 +2,9 @@
 //! records of Tailwind CSS in `tests/upstream`.
 //!
 //! - `suite`: each `compile` call of the upstream unit tests
-//!   (`suite.jsonl.gz`).
+//!   (`suite.jsonl.gz`). A record with a JavaScript module has no module
+//!   here, so the compiler must refuse it: `plugin_suite.rs` replays
+//!   these records with their modules.
 //! - `suite_extra`: more records in the same format (`suite-extra.jsonl.gz`).
 //! - `classes`: each candidate of `classes.jsonl.gz`. A sample of the
 //!   candidates, each with a new compiler, and all the candidates in one
@@ -288,8 +290,9 @@ fn replay(record: &Record) -> Outcome {
     Outcome::Pass
 }
 
-/// Replay one record of a stylesheet that needs a JavaScript module: the
-/// compiler must refuse it.
+/// Replay one record of a stylesheet that needs a JavaScript module. This
+/// file has no module for it, so the compiler must refuse it (the test
+/// `plugin_suite.rs` replays these records with their modules).
 fn replay_with_modules(record: &Record) -> Outcome {
     let loader = |id: &str, base: &str| -> Result<Stylesheet, Error> {
         match record.stylesheets.iter().find(|call| call.id == id && call.base == base).and_then(|call| call.result.as_ref()) {
@@ -306,8 +309,8 @@ fn replay_with_modules(record: &Record) -> Outcome {
     };
     match compile(&record.input, options) {
         Err(error) if [PLUGIN_NEEDS_JAVASCRIPT, CONFIG_NEEDS_JAVASCRIPT, NO_LOAD_MODULE].contains(&error.message.as_str()) => Outcome::Pass,
-        Err(error) => Outcome::Fail(format!("  expected the \"needs JavaScript\" error, got: {}\n", error.message)),
-        Ok(_) => Outcome::Fail("  expected the \"needs JavaScript\" error, and compile gave no error\n".to_string()),
+        Err(error) => Outcome::Fail(format!("  expected the error for no module loader, got: {}\n", error.message)),
+        Ok(_) => Outcome::Fail("  expected the error for no module loader, and compile gave no error\n".to_string()),
     }
 }
 
@@ -362,7 +365,7 @@ fn replay_file(path: &str) -> usize {
         }
     }
     eprintln!(
-        "{path}: {total} records, {pass} pass, {} fail. Skipped because of JavaScript modules: {module_total} ({module_pass} refused with the correct error).",
+        "{path}: {total} records, {pass} pass, {} fail. With JavaScript modules, for plugin_suite.rs: {module_total} ({module_pass} refused here with the correct error).",
         total - pass
     );
 

@@ -48,6 +48,7 @@ pub struct CompatOptions<'a> {
 }
 
 /// True when the tree has an `@plugin` or `@config` rule.
+#[cfg(tw_js)]
 fn uses_javascript(ast: &[AstNode]) -> bool {
     ast.iter().any(|node| match node {
         AstNode::AtRule(rule) if rule.name == "@plugin" || rule.name == "@config" => true,

@@ -66,20 +66,14 @@ fn compile() {
             .compiler(sdk.join("bin/clang"))
             .archiver(sdk.join("bin/llvm-ar"))
             .flag(format!("--sysroot={}", sdk.join("share/wasi-sysroot").display()))
-            .target("wasm32-wasip1");
-        wasi_defines(&mut build);
+            // quickjs.c uses `malloc_usable_size`, and includes <malloc.h>
+            // only for the systems that it knows.
+            .flag("-include")
+            .flag("malloc.h")
+            // An empty <setjmp.h>: see c_src/wasi/setjmp.h.
+            .include(c_src.join("wasi"));
     }
 
     build.compile("tw_quickjs");
     println!("cargo:rustc-cfg=tw_js");
-}
-
-/// What QuickJS needs on WASI.
-#[cfg(feature = "js")]
-fn wasi_defines(build: &mut cc::Build) {
-    // `__EMSCRIPTEN__` selects the code of QuickJS for WebAssembly: no
-    // threads (Atomics), no stack check with the address of the stack, and
-    // no `malloc_usable_size`.
-    build.define("__EMSCRIPTEN__", None);
-    build.define("_WASI_EMULATED_SIGNAL", None);
 }

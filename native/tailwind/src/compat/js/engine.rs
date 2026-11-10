@@ -67,8 +67,9 @@ pub struct Limits {
 
 impl Default for Limits {
     fn default() -> Self {
-        // WebAssembly has a small stack, and QuickJS cannot measure it there.
-        let stack = if cfg!(target_family = "wasm") { 0 } else { 1024 * 1024 };
+        // In WebAssembly, the limit is for the stack in the linear memory
+        // (1 MB in all for a program of Rust).
+        let stack = if cfg!(target_family = "wasm") { 512 * 1024 } else { 1024 * 1024 };
         Self { memory: 1024 * 1024 * 1024, stack }
     }
 }
@@ -397,7 +398,6 @@ mod tests {
         assert!(js.memory_used() > 0);
     }
 
-    #[cfg(not(target_family = "wasm"))]
     #[test]
     fn stops_at_the_stack_limit() {
         let js = Engine::new(Limits { memory: 0, stack: 256 * 1024 }, Box::new(|_, _| Ok(None))).unwrap();

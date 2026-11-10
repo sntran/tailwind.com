@@ -22,6 +22,9 @@ concurrency:
 
 env:
   COSMOCC_VERSION: "4.0.2"
+  # The C compiler for the JavaScript engine of the WASI program.
+  WASI_SDK_VERSION: "27"
+  WASI_SDK_SHA256: b7d4d944c88503e4f21d84af07ac293e3440b1b6210bfd7fe78e0afd92c23bc2
   RUST_NIGHTLY: nightly-2026-11-01
   # The newest Erlang/OTP and Elixir.
   OTP_VERSION: "29.1.2"
@@ -42,6 +45,8 @@ jobs:
         run: |
           cargo build --release
           sh tests/cli.sh target/release/tailwind
+      - name: The program with JavaScript plugins and configs, against the record
+        run: CASES=tests/upstream/cli-js sh tests/cli.sh target/release/tailwind
       - name: The watch, with the poll
         run: sh tests/watch.sh target/release/tailwind
 
@@ -51,9 +56,25 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - run: make wasm
+      - name: Cache wasi-sdk
+        id: wasi-sdk
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: build/wasi-sdk
+          key: wasi-sdk-${{ env.WASI_SDK_VERSION }}-x86_64-linux
+      # The clang of wasi-sdk compiles QuickJS for wasm32-wasip1.
+      - name: Download wasi-sdk
+        if: steps.wasi-sdk.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/wasi-sdk.tar.gz" "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
+          echo "$WASI_SDK_SHA256  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum -c -
+          mkdir -p build/wasi-sdk
+          tar xzf "$RUNNER_TEMP/wasi-sdk.tar.gz" -C build/wasi-sdk --strip-components=1
+      - run: WASI_SDK_PATH=$PWD/build/wasi-sdk make wasm
       - name: The program in Node.js, against the record
         run: node tests/wasi.mjs build/tailwind.wasm
+      - name: The program with JavaScript plugins and configs
+        run: CASES=tests/upstream/cli-js node tests/wasi.mjs build/tailwind.wasm
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: tailwind.wasm
@@ -86,6 +107,7 @@ jobs:
       - run: make
       - run: ls -l build/tailwind.com
       - run: sh tests/cli.sh build/tailwind.com
+      - run: CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: tailwind.com
@@ -117,6 +139,8 @@ jobs:
           # shell starts it.
           if [ "$RUNNER_OS" = Windows ]; then ./build/tailwind.com --version; else sh build/tailwind.com --version; fi
           sh tests/cli.sh build/tailwind.com
+      - name: The program with JavaScript plugins and configs, against the record
+        run: CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com
       - name: The watch, with the file events of the system
         run: sh tests/watch.sh build/tailwind.com
       - name: The watch, with the poll
