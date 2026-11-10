@@ -38,6 +38,10 @@ pub struct DesignSystem {
     pub important: bool,
     /// When set, `resolve_theme_value` calls this function.
     pub resolve_theme_value_hook: Option<ResolveThemeValueFn>,
+    /// The JavaScript engine with the plugins of `@plugin` and `@config`.
+    /// The utilities and variants of the plugins call it.
+    #[cfg(tw_js)]
+    pub js: Option<Rc<crate::compat::js::JsRuntime>>,
 
     parsed_variants: RefCell<indexmap::IndexMap<String, Option<Rc<Variant>>>>,
     parsed_candidates: RefCell<HashMap<String, Rc<Vec<Rc<Candidate>>>>>,
@@ -57,6 +61,8 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         invalid_candidates: RefCell::new(HashSet::new()),
         important: false,
         resolve_theme_value_hook: None,
+        #[cfg(tw_js)]
+        js: None,
         parsed_variants: RefCell::new(indexmap::IndexMap::new()),
         parsed_candidates: RefCell::new(HashMap::new()),
         compiled: RefCell::new(HashMap::new()),
@@ -177,6 +183,16 @@ impl DesignSystem {
             (Some(modifier), Some(value)) if !modifier.is_empty() && !value.is_empty() => Some(with_alpha(&value, modifier)),
             (_, value) => value,
         }
+    }
+
+    /// Take the first exception of a JavaScript plugin function in a
+    /// build. Upstream throws it from `build`.
+    pub fn take_js_error(&self) -> Option<crate::Error> {
+        #[cfg(tw_js)]
+        if let Some(js) = &self.js {
+            return js.take_error();
+        }
+        None
     }
 
     /// Mark the theme variables of a value as used.

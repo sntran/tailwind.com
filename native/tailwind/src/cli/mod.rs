@@ -5,6 +5,7 @@
 
 pub mod args;
 pub mod events;
+pub mod modules;
 pub mod optimize_css;
 pub mod resolve;
 
@@ -13,6 +14,7 @@ use crate::{Error, Result};
 use args::{Parsed, Value};
 use std::io::{IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 use tailwindcss_oxide::{PublicSourceEntry, Scanner};
 
@@ -105,11 +107,15 @@ pub fn format_duration(duration: Duration) -> String {
 }
 
 /// An error in the box of the official program.
-fn format_error(style: &Style, error: &str) -> String {
+fn format_error(style: &Style, error: &Error) -> String {
     let mut lines = vec![style.red("Error:"), style.dim("\u{250c}")];
     // The official program prints the error object of JavaScript, whose
-    // text starts with `Error: `.
-    for line in format!("Error: {error}").split('\n') {
+    // text starts with the name of the error.
+    let name = error.name.as_deref().unwrap_or("Error");
+    for line in format!("{name}: {}", error.message).split('\n') {
+        // The word wrap of the official program removes the spaces at the
+        // start of a line.
+        let line = line.trim_start_matches(' ');
         lines.push(format!("{} {line}", style.dim("\u{2502}")));
     }
     lines.push(style.dim("\u{2514}"));
@@ -172,9 +178,9 @@ struct Previous {
 }
 
 /// The mtime and the size of a file, or `None` when the file is not there.
-type Stamp = Option<(SystemTime, u64)>;
+pub(crate) type Stamp = Option<(SystemTime, u64)>;
 
-fn stamp(path: &Path) -> Stamp {
+pub(crate) fn stamp(path: &Path) -> Stamp {
     let meta = std::fs::metadata(path).ok()?;
     Some((meta.modified().ok()?, meta.len()))
 }
@@ -233,6 +239,7 @@ fn create_build(options: &Options, (css, input_stamp): &(String, Stamp)) -> Resu
             dependencies.borrow_mut().push((path.to_path_buf(), stamp(path)))
         })
     };
+    let modules = Rc::new(modules::FileSystem::default());
     let compiler = compile(
         css,
         CompileOptions {
@@ -240,6 +247,7 @@ fn create_build(options: &Options, (css, input_stamp): &(String, Stamp)) -> Resu
             polyfills: crate::POLYFILLS_ALL,
             load_stylesheet: Some(&load),
             test_mode: false,
+            module_loader: Some(modules.clone()),
         },
     )?;
     ensure_source_detection_root_exists(&compiler.root)?;
@@ -287,6 +295,8 @@ fn create_build(options: &Options, (css, input_stamp): &(String, Stamp)) -> Resu
     let mut full_rebuild_paths: Vec<(PathBuf, Stamp)> =
         options.input.iter().map(|path| (path.clone(), *input_stamp)).collect();
     full_rebuild_paths.extend(dependencies.into_inner());
+    // The modules of `@plugin` and `@config`.
+    full_rebuild_paths.extend(modules.take_dependencies());
 
     Ok(Build { compiler, scanner: Scanner::new(sources), full_rebuild_paths })
 }
@@ -396,7 +406,7 @@ fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options,
 /// Scan, build and write. The result is the CSS before the optimizer.
 fn build_once(build: &mut Build, options: &Options, previous: &mut Previous) -> Result<()> {
     let candidates = build.scanner.scan();
-    let css = build.compiler.build(&candidates);
+    let css = build.compiler.try_build(&candidates)?;
     write(&css, options, previous)?;
     Ok(())
 }
@@ -495,7 +505,7 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
         match result {
             Ok(true) if !options.silent => eprintln!("Done in {}", format_duration(start.elapsed())),
             Ok(_) => {}
-            Err(e) => eprintln!("{}", format_error(style, &e.message)),
+            Err(e) => eprintln!("{}", format_error(style, &e)),
         }
     }
 }
@@ -553,7 +563,7 @@ pub fn run(mut argv: Vec<String>) -> i32 {
     let build = match first {
         Ok(build) => build,
         Err(e) => {
-            eprintln!("{}", format_error(&style, &e.message));
+            eprintln!("{}", format_error(&style, &e));
             return 1;
         }
     };

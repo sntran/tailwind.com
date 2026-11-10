@@ -1,0 +1,133 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --spacing: 0.25rem;
+  }
+}
+@layer utilities {
+  .container {
+    width: 100%;
+    @media (width >= (min-height: 800px)) {
+      max-width: (min-height: 800px);
+    }
+    @media (width >= 2) {
+      max-width: 2;
+    }
+    @media (width >= print) {
+      max-width: print;
+    }
+    @media (width >= 500px) {
+      max-width: 500px;
+    }
+    @media (width >= 640px) {
+      max-width: 640px;
+    }
+    @media (width >= 668px) {
+      max-width: 668px;
+    }
+    @media (width >= 767px) {
+      max-width: 767px;
+    }
+    @media (width >= 768px) {
+      max-width: 768px;
+    }
+    @media (width >= 868px) {
+      max-width: 868px;
+    }
+    @media (width >= 1024px) {
+      max-width: 1024px;
+    }
+    @media (width >= 1279px) {
+      max-width: 1279px;
+    }
+    @media (width >= 1280px) {
+      max-width: 1280px;
+    }
+    @media (width >= 80rem) {
+      max-width: 80rem;
+    }
+  }
+  .max-w-screen-rem {
+    max-width: 80rem;
+  }
+  .max-w-screen-sm {
+    max-width: 640px;
+  }
+  @media (width < 768px) {
+    .max-md\:block {
+      display: block;
+    }
+  }
+  @media (width < 640px) {
+    .max-sm\:block {
+      display: block;
+    }
+  }
+  @media (width < 80rem) {
+    .max-rem\:block {
+      display: block;
+    }
+  }
+  @media (1279px >= width >= 1024px) {
+    .lg\:flex {
+      display: flex;
+    }
+  }
+  @media (width >= 96rem) {
+    .\32 xl\:flex {
+      display: flex;
+    }
+  }
+  @media (width >= 640px) {
+    .sm\:flex {
+      display: flex;
+    }
+    @media (width < 1280px) {
+      .sm\:max-xl\:p-2 {
+        padding: calc(var(--spacing) * 2);
+      }
+    }
+  }
+  @media (width >= 768px) {
+    .md\:flex {
+      display: flex;
+    }
+  }
+  @media (width >= 900px) {
+    .min-\[900px\]\:grid {
+      display: grid;
+    }
+  }
+  @media (width >= 1280px) {
+    .xl\:flex {
+      display: flex;
+    }
+  }
+  @media (width >= 80rem) {
+    .rem\:flex {
+      display: flex;
+    }
+  }
+  @media (500px >= width) {
+    .only-max\:flex {
+      display: flex;
+    }
+  }
+  @media (min-height: 800px) {
+    .tall\:flex {
+      display: flex;
+    }
+  }
+  @media print {
+    .print2\:hidden {
+      display: none;
+    }
+  }
+  @media (767px >= width >= 668px), (width >= 868px) {
+    .multi\:flex {
+      display: flex;
+    }
+  }
+}
+

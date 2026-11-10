@@ -1,0 +1,32 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .fallback {
+    display: flex;
+    display: grid;
+  }
+  .multi-a {
+    color: red;
+  }
+  .multi-b {
+    color: red;
+  }
+  .content-auto {
+    content-visibility: auto;
+  }
+  .content-auto\! {
+    content-visibility: auto !important;
+  }
+  @media (hover: hover) {
+    .hover\:scroll-snap-none:hover {
+      scroll-snap-type: none;
+    }
+  }
+  @media (width >= 48rem) {
+    .md\:text-trim {
+      text-box-trim: trim-both;
+      text-box-edge: cap alphabetic;
+    }
+  }
+}
+

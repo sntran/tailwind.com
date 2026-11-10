@@ -1,0 +1,6 @@
+≈ tailwindcss v4.3.5
+
+[31mError:[39m
+[2m┌[22m
+[2m│[22m Error: Can't resolve './missing.config.js' in '<project>'
+[2m└[22m

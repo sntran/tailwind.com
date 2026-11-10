@@ -1,0 +1,11 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .bundle-default {
+    color: red;
+  }
+  .bundle-plain {
+    color: blue;
+  }
+}
+

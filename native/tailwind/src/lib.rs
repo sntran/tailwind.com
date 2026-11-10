@@ -27,17 +27,21 @@ pub mod value_parser;
 pub mod variants;
 pub mod walk;
 
+pub use compat::module_loader::{FileKind, FileStat, MemoryLoader, ModuleLoader};
 pub use index::{compile, CompileOptions, Compiler, Root, Source, Stylesheet, VERSION};
 
 /// An error of the compiler. The message is the message of Tailwind CSS.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
     pub message: String,
+    /// The name of a JavaScript exception of a plugin, when it is not
+    /// `Error`: for example `TypeError`.
+    pub name: Option<String>,
 }
 
 impl Error {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into() }
+        Self { message: message.into(), name: None }
     }
 }
 

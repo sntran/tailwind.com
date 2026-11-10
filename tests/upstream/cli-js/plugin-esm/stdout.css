@@ -1,0 +1,16 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .esm-util {
+    color: oklch(68.5% 0.169 237.323);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --shade: shade-300;
+  }
+  .esm-plain {
+    color: teal;
+  }
+  .esm-variant\:esm-in-js:is(.esm) {
+    color: purple;
+  }
+}
+

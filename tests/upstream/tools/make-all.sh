@@ -26,5 +26,8 @@ node "$TOOLS/gen-full.mjs" "$CLONE" "$OUT"
 # 4. cli/*/stdout.css and cli/*/exit.txt
 node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli" 4.3.5
 
+# 4b. cli-js/*/stdout.css and cli-js/*/exit.txt
+node "$TOOLS/run-cli.mjs" "$SCRATCH/cli" "$OUT/cli-js" 4.3.5
+
 # 5. Check
 python3 "$TOOLS/check.py" "$OUT"

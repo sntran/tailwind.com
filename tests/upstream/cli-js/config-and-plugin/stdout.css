@@ -1,0 +1,39 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --color-brand: #ff0000;
+    --color-css-only: #00ff00;
+    --spacing-gutter: 10px;
+    --color-late: #0000ff;
+  }
+}
+@layer utilities {
+  .bg-brand {
+    background-color: var(--color-brand);
+  }
+  .bg-config-only {
+    background-color: #222222;
+  }
+  .bg-css-only {
+    background-color: var(--color-css-only);
+  }
+  .bg-late {
+    background-color: var(--color-late);
+  }
+  .bg-plugin-only {
+    background-color: #555555;
+  }
+  .p-gutter {
+    padding: var(--spacing-gutter);
+  }
+  .seen-by-plugin {
+    --brand: #ff0000;
+    --css-only: #00ff00;
+    --config-only: #222222;
+    --plugin-only: #555555;
+    --late: #0000ff;
+    --gutter: 10px;
+  }
+}
+

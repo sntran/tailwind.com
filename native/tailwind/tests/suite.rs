@@ -25,7 +25,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
-use tailwind::compat::{CONFIG_NEEDS_JAVASCRIPT, PLUGIN_NEEDS_JAVASCRIPT};
+use tailwind::compat::{CONFIG_NEEDS_JAVASCRIPT, NO_LOAD_MODULE, PLUGIN_NEEDS_JAVASCRIPT};
 use tailwind::{compile, CompileOptions, Compiler, Error, Root, Stylesheet, POLYFILLS_ALL};
 
 // ---------------------------------------------------------------------------
@@ -219,6 +219,7 @@ fn replay(record: &Record) -> Outcome {
         polyfills: record.options.polyfills.unwrap_or(POLYFILLS_ALL),
         load_stylesheet: Some(&loader),
         test_mode: true,
+        module_loader: None,
     };
 
     let compiled = compile(&record.input, options);
@@ -231,7 +232,7 @@ fn replay(record: &Record) -> Outcome {
             // Upstream has this error when the stylesheet needs a module
             // and the test gives no module loader.
             let needs_javascript = expected == "No `loadModule` function provided to `compile`"
-                && (error.message == PLUGIN_NEEDS_JAVASCRIPT || error.message == CONFIG_NEEDS_JAVASCRIPT);
+                && ([PLUGIN_NEEDS_JAVASCRIPT, CONFIG_NEEDS_JAVASCRIPT, NO_LOAD_MODULE].contains(&error.message.as_str()));
             if error.message == *expected || needs_javascript {
                 return Outcome::Pass;
             }
@@ -301,9 +302,10 @@ fn replay_with_modules(record: &Record) -> Outcome {
         polyfills: record.options.polyfills.unwrap_or(POLYFILLS_ALL),
         load_stylesheet: Some(&loader),
         test_mode: true,
+        module_loader: None,
     };
     match compile(&record.input, options) {
-        Err(error) if error.message == PLUGIN_NEEDS_JAVASCRIPT || error.message == CONFIG_NEEDS_JAVASCRIPT => Outcome::Pass,
+        Err(error) if [PLUGIN_NEEDS_JAVASCRIPT, CONFIG_NEEDS_JAVASCRIPT, NO_LOAD_MODULE].contains(&error.message.as_str()) => Outcome::Pass,
         Err(error) => Outcome::Fail(format!("  expected the \"needs JavaScript\" error, got: {}\n", error.message)),
         Ok(_) => Outcome::Fail("  expected the \"needs JavaScript\" error, and compile gave no error\n".to_string()),
     }

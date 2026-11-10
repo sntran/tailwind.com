@@ -1,0 +1,105 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer properties;
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --font-weight-bold: 700;
+  }
+}
+@layer utilities {
+  :is(:where(.group):hover .group-hocus\:flex) {
+    display: flex;
+  }
+  :is(:where(.group):focus .group-hocus\:flex) {
+    display: flex;
+  }
+  :is(:where(.peer):optional ~ .peer-optional\:flex) {
+    display: flex;
+  }
+  .optional\:flex:optional {
+    display: flex;
+  }
+  :where(:hover) .in-hocus\:flex {
+    display: flex;
+  }
+  :where(:focus) .in-hocus\:flex {
+    display: flex;
+  }
+  .has-hocus\:flex:has(:hover) {
+    display: flex;
+  }
+  .has-hocus\:flex:has(:focus) {
+    display: flex;
+  }
+  .hocus\:underline:hover {
+    text-decoration-line: underline;
+  }
+  .hocus\:underline:focus {
+    text-decoration-line: underline;
+  }
+  @media (width >= 48rem) {
+    .hocus\:md\:underline:hover {
+      text-decoration-line: underline;
+    }
+    .hocus\:md\:underline:focus {
+      text-decoration-line: underline;
+    }
+    .md\:hocus\:underline:hover {
+      text-decoration-line: underline;
+    }
+    .md\:hocus\:underline:focus {
+      text-decoration-line: underline;
+    }
+  }
+  .child-p\:m-0 > p {
+    margin: 0px;
+  }
+  .sidebar .in-sidebar\:hidden {
+    display: none;
+  }
+  .third\:font-bold:nth-child(3) {
+    --tw-font-weight: var(--font-weight-bold);
+    font-weight: var(--font-weight-bold);
+  }
+  .both\:underline:hover, .both\:underline:focus-visible {
+    text-decoration-line: underline;
+  }
+  :where([open]) .where-open\:block {
+    display: block;
+  }
+  @media print and (min-width: 1000px) {
+    .print-wide\:hidden {
+      display: none;
+    }
+  }
+  @supports (display: grid) {
+    .can-grid\:grid {
+      display: grid;
+    }
+  }
+  @media (hover: hover) {
+    .mixed\:italic {
+      font-style: italic;
+    }
+  }
+  .mixed\:italic:active {
+    font-style: italic;
+  }
+  @media (min-width: 100px) {
+    .at-nested\:flex:hover {
+      display: flex;
+    }
+  }
+}
+@property --tw-font-weight {
+  syntax: "*";
+  inherits: false;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --tw-font-weight: initial;
+    }
+  }
+}
+

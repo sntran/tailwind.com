@@ -1,0 +1,56 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .mark-\[\#ff0000\] {
+    text-decoration-color: #ff0000;
+  }
+  .mark-\[color\:var\(--c\)\] {
+    text-decoration-color: var(--c);
+  }
+  .mark-accent {
+    text-decoration-color: rgb(255 0 128);
+  }
+  .mark-brand {
+    text-decoration-color: #0ea5e9;
+  }
+  .mark-\[3px\] {
+    text-decoration-thickness: 3px;
+  }
+  .mark-\[length\:var\(--l\)\] {
+    text-decoration-thickness: var(--l);
+  }
+  .mark-thick {
+    text-decoration-thickness: 4px;
+  }
+  .mark-thin {
+    text-decoration-thickness: 1px;
+  }
+  .shade-\[foo\] {
+    accent-color: foo;
+  }
+  .shade-\[oklch\(50\%_0\.2_30\)\] {
+    accent-color: oklch(50% 0.2 30);
+  }
+  .shade-black {
+    accent-color: #000;
+  }
+  .shade-blue-200\/50 {
+    accent-color: color-mix(in oklab, oklch(88.2% 0.059 254.128) 50%, transparent);
+  }
+  .shade-red-500 {
+    accent-color: oklch(63.7% 0.237 25.331);
+  }
+  .anything-\[1px_solid_red\] {
+    --anything: 1px solid red;
+  }
+  .span-\[3\] {
+    column-span: 3;
+  }
+  .span-\[50\%\] {
+    column-span: 50%;
+  }
+  .span-all {
+    column-span: all;
+  }
+}
+

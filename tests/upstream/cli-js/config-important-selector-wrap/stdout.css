@@ -1,0 +1,91 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer properties;
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --color-red-500: oklch(63.7% 0.237 25.331);
+    --spacing: 0.25rem;
+  }
+}
+@layer utilities {
+  #app .flex {
+    display: flex;
+  }
+  #app .flex\! {
+    display: flex !important;
+  }
+  :where(#app .space-x-2 > :not(:last-child)) {
+    --tw-space-x-reverse: 0;
+    margin-inline-start: calc(calc(var(--spacing) * 2) * var(--tw-space-x-reverse));
+    margin-inline-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-x-reverse)));
+  }
+  #app .plug-util {
+    color: red;
+    &:hover {
+      color: blue;
+    }
+  }
+  #app .custom-thing {
+    color: red;
+  }
+  #app .plug-comp {
+    color: green;
+  }
+  :is(#app .\*\:p-1 > *) {
+    padding: var(--spacing);
+  }
+  @media (hover: hover) {
+    :is(:where(.group):hover :is(#app .group-hover\:flex)) {
+      display: flex;
+    }
+  }
+  #app .before\:block::before {
+    content: var(--tw-content);
+    display: block;
+  }
+  @media (hover: hover) {
+    #app .hover\:p-4:hover {
+      padding: calc(var(--spacing) * 4);
+    }
+  }
+  @media (width >= 48rem) {
+    #app .md\:bg-red-500 {
+      background-color: var(--color-red-500);
+    }
+  }
+  @media (prefers-color-scheme: dark) {
+    #app .dark\:underline {
+      text-decoration-line: underline;
+    }
+  }
+  nav :is(#app .in-nav\:flex) {
+    display: flex;
+  }
+}
+.plain-rule {
+  text-decoration-line: underline;
+}
+@layer base {
+  h1 {
+    color: black;
+  }
+}
+@property --tw-space-x-reverse {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-content {
+  syntax: "*";
+  initial-value: "";
+  inherits: false;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --tw-space-x-reverse: 0;
+      --tw-content: "";
+    }
+  }
+}
+

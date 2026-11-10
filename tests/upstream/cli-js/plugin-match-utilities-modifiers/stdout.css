@@ -1,0 +1,59 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .type-\[10px\]\/tight {
+    font-size: 10px;
+    line-height: 1.1;
+  }
+  .type-lg\/\[2\.5\] {
+    font-size: 1.25rem;
+    line-height: 2.5;
+  }
+  .type-lg\/loose {
+    font-size: 1.25rem;
+    line-height: 1.8;
+  }
+  .type-sm {
+    font-size: 0.875rem;
+    line-height: 1;
+  }
+  .type-sm\/tight {
+    font-size: 0.875rem;
+    line-height: 1.1;
+  }
+  .ring2-a {
+    --ring2-color: red;
+    --ring2-modifier: none;
+  }
+  .ring2-a\/50 {
+    --ring2-color: red;
+    --ring2-modifier: 50;
+  }
+  .ring2-b\/\[foo\] {
+    --ring2-color: blue;
+    --ring2-modifier: foo;
+  }
+  .ring2-b\/anything {
+    --ring2-color: blue;
+    --ring2-modifier: anything;
+  }
+  .glow-\[\#123456\]\/20 {
+    --glow-color: color-mix(in oklab, #123456 20%, transparent);
+  }
+  .glow-current\/50 {
+    --glow-color: currentcolor;
+    @supports (color: color-mix(in lab, red, red)) {
+      --glow-color: color-mix(in oklab, currentcolor 50%, transparent);
+    }
+  }
+  .glow-red-500 {
+    --glow-color: oklch(63.7% 0.237 25.331);
+  }
+  .glow-red-500\/50 {
+    --glow-color: color-mix(in oklab, oklch(63.7% 0.237 25.331) 50%, transparent);
+  }
+  .glow-red-500\/\[0\.3\] {
+    --glow-color: color-mix(in oklab, oklch(63.7% 0.237 25.331) 30%, transparent);
+  }
+}
+
