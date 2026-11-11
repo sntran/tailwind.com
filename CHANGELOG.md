@@ -154,6 +154,10 @@ These faults were found and fixed before this first version:
   did not end. The watch now waits until the input stays the same for
   10 ms.
 - An interrupted read of stdin stopped the watch.
+- The order of rules with variants could be different from the official
+  program in a project with a JavaScript config that has `screens` with
+  `min` and `max`: the sort of the variants now uses the algorithm of
+  V8. The fuzzer in CI found it.
 - On an error, daisyUI printed its name two times: the second compile
   for the position of a syntax error ran the plugins again.
 

@@ -19,4 +19,5 @@ pub mod replace_shadow_colors;
 pub mod segment;
 pub mod to_key_path;
 pub mod topological_sort;
+pub mod v8_sort;
 pub mod variables;

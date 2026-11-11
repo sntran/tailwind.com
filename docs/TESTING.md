@@ -266,6 +266,18 @@ A fault made on purpose (a builder that changes the value of
 `underline`) shows that the fuzzer finds a difference, and reduces a
 case of 16 candidates to two lines of stylesheet.
 
+The fuzzer in CI found a fault of the sort of the variants. Tailwind CSS
+sorts them with a compare function that is not consistent (two
+breakpoints of `screens` with `min` and `max` have no value, and each
+one is "more" than the other one). Then the result depends on the sort
+algorithm, and the Rust compiler did not have the algorithm of V8. With
+few variants the results were the same; one case in about 3,000 with a
+JavaScript config was different. `src/utils/v8_sort.rs` is now the
+algorithm of V8 (as `js/sort.ts` for the script engine), and the sort
+has an entry for each text that is not a variant, as upstream.
+`tests/v8_sort.rs` replays 180 sorts that Node.js recorded
+(`node tests/v8.mjs --record tests/upstream/v8-sort.jsonl`).
+
 The fuzzer found two faults of the JavaScript support:
 
 - The message of an error of the engine. QuickJS has other words than

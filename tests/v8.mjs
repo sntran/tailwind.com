@@ -3,7 +3,7 @@
 // against Node.js: the sort (native/tailwind/js/sort.ts) and
 // `Intl.ListFormat` (native/tailwind/js/intl.ts).
 //
-// Usage: node tests/v8.mjs [CASES]
+// Usage: node tests/v8.mjs [CASES] [--record tests/upstream/v8-sort.jsonl]
 //
 // The runtime has the sort algorithm of V8, because the result of a sort
 // with a compare function that is not consistent depends on the
@@ -105,7 +105,7 @@ function run(sorter, input, compare) {
   return { calls, ids: array.map((item) => item.id), error }
 }
 
-const cases = Number(process.argv[2] ?? 4000)
+const cases = Number(/^\d+$/.test(process.argv[2] ?? '') ? process.argv[2] : 4000)
 let done = 0
 let callsTotal = 0
 const names = Object.keys(COMPARES)
@@ -153,6 +153,29 @@ assert.throws(() => sort.call([2, 1], 1), TypeError)
 assert.deepStrictEqual(sort.call({ length: 3, 0: 'c', 1: 'a', 2: 'b' }), { length: 3, 0: 'a', 1: 'b', 2: 'c' })
 
 console.log(`v8.mjs: sort: ${done} cases, ${callsTotal} calls of the compare function: the same as V8 (Node.js ${process.version})`)
+
+// With --record FILE: sorts of V8 for the Rust form of the algorithm
+// (native/tailwind/src/utils/v8_sort.rs, tests/v8_sort.rs). Each line has
+// the name of a compare function, its salt, the keys of the values, and
+// the sequence of the values after the sort of V8.
+const recordAt = process.argv.indexOf('--record')
+if (recordAt !== -1) {
+  const fs = await import('node:fs')
+  const recorded = ['consistent', 'reversed', 'coarse', 'holes', 'noise', 'mostly', 'always', 'never', 'zero']
+  const lines = []
+  seed = 4711
+  for (let i = 0; i < 180; i++) {
+    let length = i < 40 ? [0, 1, 2, 3, 7, 31, 32, 33, 63, 64, 65, 127, 128, 129, 200, 257, 400, 640, 1000, 1500][i % 20] : random() < 0.75 ? int(90) : int(700)
+    let kind = KINDS[int(KINDS.length)]
+    let name = recorded[i % recorded.length]
+    let input = values(length, kind)
+    let salt = int(1 << 30)
+    let result = run(nativeSort, input, COMPARES[name](salt))
+    lines.push(JSON.stringify({ compare: name, salt, keys: input.map((item) => item.key), sorted: result.ids, calls: result.calls.length / 2 }))
+  }
+  fs.writeFileSync(process.argv[recordAt + 1], lines.join('\n') + '\n')
+  console.log(`v8.mjs: recorded ${lines.length} sorts of V8 in ${process.argv[recordAt + 1]}`)
+}
 
 // `Intl.ListFormat`, for English.
 const NativeIntl = globalThis.Intl

@@ -143,15 +143,18 @@ impl DesignSystem {
             }
         }
 
-        let variants: Vec<Rc<Variant>> = self.parsed_variants.borrow().values().flatten().cloned().collect();
-        // The compare function is not a total order for some invalid
-        // variants, so the sort must accept any comparator.
-        let variants = merge_sort(variants, &|a, z| self.variants.compare(Some(z), Some(a), self) >= 0);
+        // The list has an empty entry for each text that is not a
+        // variant, as upstream (`null`): the sort compares them too.
+        let mut variants: Vec<Option<Rc<Variant>>> = self.parsed_variants.borrow().values().cloned().collect();
+        // The compare function is not consistent for some variants (two
+        // breakpoints with no value, for example). Then the result
+        // depends on the sort algorithm: this is the algorithm of V8.
+        crate::utils::v8_sort::sort(&mut variants, |a, z| self.variants.compare(a.as_deref(), z.as_deref(), self));
 
         let mut order = VariantOrder::new();
         let mut prev: Option<&Rc<Variant>> = None;
         let mut index = 0u32;
-        for variant in &variants {
+        for variant in variants.iter().flatten() {
             if let Some(prev) = prev {
                 if self.variants.compare(Some(prev), Some(variant), self) != 0 {
                     index += 1;
@@ -233,29 +236,3 @@ impl DesignSystem {
     }
 }
 
-/// A stable merge sort that accepts a comparator that is not a total
-/// order. `in_order(a, z)` is true when `a` stays before `z`: the sort of
-/// V8 moves `z` before `a` only when `compare(z, a)` is negative.
-fn merge_sort<T: Clone>(items: Vec<T>, in_order: &dyn Fn(&T, &T) -> bool) -> Vec<T> {
-    if items.len() <= 1 {
-        return items;
-    }
-    let right = items[items.len() / 2..].to_vec();
-    let mut left = items;
-    left.truncate(left.len() - right.len());
-    let (left, right) = (merge_sort(left, in_order), merge_sort(right, in_order));
-    let mut merged = Vec::with_capacity(left.len() + right.len());
-    let (mut i, mut j) = (0, 0);
-    while i < left.len() && j < right.len() {
-        if in_order(&left[i], &right[j]) {
-            merged.push(left[i].clone());
-            i += 1;
-        } else {
-            merged.push(right[j].clone());
-            j += 1;
-        }
-    }
-    merged.extend_from_slice(&left[i..]);
-    merged.extend_from_slice(&right[j..]);
-    merged
-}
