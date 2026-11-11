@@ -33,6 +33,19 @@ run() {
     esac
 }
 
+# choose VERSION ENGINE ARGUMENTS...: run the program with the version
+# and the engine in its environment ("" for none). A variable assignment
+# before a shell function does not reach the program in each shell (the
+# sh of FreeBSD keeps it in the shell), so a subshell exports them.
+choose() {
+    (
+        if [ -n "$1" ]; then TAILWINDCSS_VERSION=$1; export TAILWINDCSS_VERSION; fi
+        if [ -n "$2" ]; then TAILWIND_COM_ENGINE=$2; export TAILWIND_COM_ENGINE; fi
+        shift 2
+        run "$@"
+    )
+}
+
 fail() { echo "versions.sh: $*" >&2; exit 1; }
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/tailwind-versions.XXXXXX")
@@ -61,7 +74,12 @@ line=$(run --version)
 # The two engines give the same output for the version of the Rust
 # compiler.
 run -i app.css -o native.css 2> /dev/null || fail "the native engine failed"
-TAILWIND_COM_ENGINE=script run -i app.css -o script.css 2> script.log ||
+line=$(choose "" script --version) || fail "the script engine has no package of $native"
+case "$line" in
+    *"(tailwindcss v$native, script engine)") ;;
+    *) fail "the script engine was not selected: --version gives: $line" ;;
+esac
+choose "" script -i app.css -o script.css 2> script.log ||
     { cat script.log >&2; fail "the script engine failed for $native"; }
 cmp -s native.css script.css || fail "the script engine and the native engine give different output for $native"
 echo "versions.sh: $native: the script engine gives the output of the native engine: pass"
@@ -70,12 +88,12 @@ echo "versions.sh: $native: the script engine gives the output of the native eng
 count=0
 for version in $(grep -v '^#' "$root/PACKAGES" | cut -d' ' -f1); do
     [ "$version" = "$native" ] && continue
-    line=$(TAILWINDCSS_VERSION=$version run --version) || fail "$version is not in the program"
+    line=$(choose "$version" "" --version) || fail "$version is not in the program"
     case "$line" in
         *"(tailwindcss v$version, script engine)") ;;
         *) fail "$version: --version gives: $line" ;;
     esac
-    TAILWINDCSS_VERSION=$version run -i app.css -o out.css 2> out.log || { cat out.log >&2; fail "$version: the build failed"; }
+    choose "$version" "" -i app.css -o out.css 2> out.log || { cat out.log >&2; fail "$version: the build failed"; }
     grep -q "tailwindcss v$version" out.log || fail "$version: the header has another version"
     [ "$(head -n 1 out.css)" = "/*! tailwindcss v$version | MIT License | https://tailwindcss.com */" ] ||
         fail "$version: the license comment has another version"
@@ -89,11 +107,11 @@ done
 echo "versions.sh: $count other versions build the project with their own compiler: pass"
 
 # A version that is not there, and a wrong engine.
-if TAILWINDCSS_VERSION=4.999.0 run -i app.css -o out.css 2> out.log; then
+if choose 4.999.0 "" -i app.css -o out.css 2> out.log; then
     fail "the version 4.999.0 gave no error"
 fi
 grep -q 'Tailwind CSS v4.999.0 is not in this program' out.log || { cat out.log >&2; fail "the message for 4.999.0"; }
-if TAILWINDCSS_VERSION=4.0.0 TAILWIND_COM_ENGINE=native run -i app.css -o out.css 2> out.log; then
+if choose 4.0.0 native -i app.css -o out.css 2> out.log; then
     fail "the native engine with 4.0.0 gave no error"
 fi
 grep -q 'needs the script engine' out.log || { cat out.log >&2; fail "the message for the native engine"; }
