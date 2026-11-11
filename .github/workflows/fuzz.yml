@@ -106,3 +106,42 @@ jobs:
         with:
           name: fuzz-script-${{ matrix.version }}
           path: build/fuzz
+
+  # The Rust compiler as an older version (docs/SWITCHES.md): for each
+  # version that it serves (from Version::OLDEST of src/version.rs to the
+  # version before UPSTREAM), compare it with the official compiler of
+  # that version. A difference is a behavior with no switch.
+  switches:
+    name: The Rust compiler as Tailwind CSS ${{ matrix.version }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["4.3.4"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - name: Build the program and the builder
+        run: cargo build --release --bin tailwind --example fuzz_build
+      - name: The official packages of the version
+        run: sh tests/fuzz/install.sh "$RUNNER_TEMP/official" "${{ matrix.version }}"
+      - name: Fuzz
+        env:
+          SEED: ${{ inputs.seed }}
+          MINUTES: ${{ (github.event_name == 'schedule' && 15) || 4 }}
+        run: |
+          seed=${SEED:-$GITHUB_RUN_ID}
+          echo "The seed is $seed. A run with the same seed tries the same cases."
+          node tests/fuzz/fuzz.mjs \
+            --official "$RUNNER_TEMP/official" \
+            --builder target/release/examples/fuzz_build \
+            --program target/release/tailwind \
+            --seed "$seed" --cases 1000000 --projects 0 \
+            --seconds $((MINUTES * 60)) --out build/fuzz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: failure()
+        with:
+          name: fuzz-switches-${{ matrix.version }}
+          path: build/fuzz

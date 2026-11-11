@@ -20,13 +20,17 @@ The program has two compilers.
 | | The native engine | The script engine |
 |---|---|---|
 | What | The Rust compiler of this repository | The official compiler of the npm package `tailwindcss` (`dist/lib.js`), with no change, in the QuickJS of the program |
-| Versions | One: the version of the file `UPSTREAM` (4.3.5) | Each version whose package the program can find |
+| Versions | The version of the file `UPSTREAM` (4.3.5), and each older version that has all its switches: now 4.3.4 ([`SWITCHES.md`](SWITCHES.md)) | Each version whose package the program can find |
 | A new version of Tailwind CSS needs | A port of the changes to Rust (`docs/SYNC.md`) | One line in the file `PACKAGES` |
 | Speed, Phoenix project | 10 ms | 69 ms |
 | Speed, 1000 HTML files | 224 ms | 1.31 s |
 
-With no setting, the version of the native engine uses the native engine,
-and each other version uses the script engine. `TAILWIND_COM_ENGINE` can
+With no setting, the versions of the native engine use the native
+engine, and each other version uses the script engine. The Rust compiler
+has one behavior for each release that it serves: a switch for each
+change ([`SWITCHES.md`](SWITCHES.md)). For an older version than its
+own, it reads `theme.css` and `preflight.css` from the package of that
+version. `TAILWIND_COM_ENGINE` can
 be `native` or `script`: `script` with the version of the native engine
 runs the official compiler of that version too.
 

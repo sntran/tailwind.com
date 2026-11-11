@@ -291,6 +291,16 @@ The script engine runs the official compiler of a package in QuickJS
 | `node tests/v8.mjs [CASES]` | The sort of the runtime makes the same calls of the compare function as V8 (Node.js), also for compare functions that are not consistent, and `Intl.ListFormat` gives the same text. |
 | `FUZZ_ENGINE=script node tests/fuzz/fuzz.mjs ... --projects 0` | The fuzzer with the script engine as the builder: the official compiler of one version in QuickJS against the same compiler in Node.js. `sh tests/fuzz/install.sh DIR VERSION` installs the official packages of a version. The job `script` of `.github/workflows/fuzz.yml` runs it for 4.0.17, 4.1.18, 4.2.4, 4.3.0 and 4.3.5. |
 
+The switches of the Rust compiler ([`SWITCHES.md`](SWITCHES.md)) have
+`tests/upstream/switches.jsonl`: cases with the result of the official
+compiler of the version before a change and of the version with it.
+`cargo test --test switches` replays them, and
+`node tests/fuzz/compare.mjs --record` writes the results. The fuzzer
+with the official packages of an older version
+(`sh tests/fuzz/install.sh DIR VERSION`) finds each behavior with no
+switch: the Rust compiler compiles as the version of the package that it
+compares with.
+
 The patch files of the packages have three checks: the unit tests of
 `src/cli/patch.rs` (random texts with random changes must read back
 the same), the tool `tools/twpatch` in each build (each version of the

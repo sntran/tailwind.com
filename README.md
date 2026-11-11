@@ -148,8 +148,10 @@ TAILWINDCSS_VERSION=4.1.18 sh ./tailwind.com -i app.css -o dist/app.css
 
 The file has two engines:
 
-- **The native engine** is the Rust compiler. It follows one version
-  (4.3.5), and it is the fast one: 10 ms for a Phoenix project.
+- **The native engine** is the Rust compiler. It follows version 4.3.5,
+  and it has a switch for each behavior that changed since 4.3.4, so it
+  serves 4.3.4 too ([`docs/SWITCHES.md`](docs/SWITCHES.md)). It is the
+  fast one: 10 ms for a Phoenix project.
 - **The script engine** is the official compiler of the npm package
   `tailwindcss` of a version (one JavaScript file with no dependency),
   with no change, in the QuickJS of the file. It needs 69 ms for the
@@ -290,6 +292,7 @@ WASI file system. It has the same JavaScript engine for `@plugin` and
 |---|---|
 | [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) | The results against Tailwind CSS, and the known differences. |
 | [`docs/VERSIONS.md`](docs/VERSIONS.md) | The versions of Tailwind CSS in the file, and the two engines. |
+| [`docs/SWITCHES.md`](docs/SWITCHES.md) | The Rust compiler as an older version: how to write a switch, and the list of the changes of Tailwind CSS 4.3. |
 | [`docs/INTERNALS.md`](docs/INTERNALS.md) | The parts of the compiler and of the file, and how they relate to Tailwind CSS. |
 | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/TESTING.md`](docs/TESTING.md) | Build `tailwind.com`, and the tests. |
 | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) | The time, the memory and the size, against the official programs. |

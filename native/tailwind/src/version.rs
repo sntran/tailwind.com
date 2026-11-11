@@ -23,7 +23,7 @@ impl Version {
     /// later change of Tailwind CSS it has a switch, and the fuzzer finds
     /// no difference from the official compiler of that version
     /// (docs/VERSIONS.md). An older version uses the script engine.
-    pub const OLDEST: Version = Version(4, 3, 5);
+    pub const OLDEST: Version = Version(4, 3, 4);
 
     /// `4.3.5` as a version. A text with another form is `None`.
     pub fn parse(text: &str) -> Option<Version> {
