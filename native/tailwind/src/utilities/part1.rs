@@ -5,6 +5,7 @@ use super::{functional_utility, property, spacing_utility, NamedValue, SpacingOp
 use crate::ast::{at_root, at_rule, decl, AstNode};
 use crate::candidate::{FunctionalCandidate, UtilityValue};
 use crate::design_system::DesignSystem;
+use crate::switches;
 use crate::theme::Theme;
 use crate::utils::compare_breakpoints::{compare_breakpoints, Direction};
 use crate::utils::infer_data_type::{
@@ -152,6 +153,7 @@ fn handle_scale(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSystem) 
         }
         let value = match candidate.value.as_ref()? {
             UtilityValue::Arbitrary { value, .. } => {
+                let negative = negative && switches::SCALE_NEGATIVE_ARBITRARY.on();
                 return Some(vec![decl("scale", negate(value.clone(), negative))]);
             }
             UtilityValue::Named { value: named, .. } => {
@@ -187,6 +189,15 @@ fn handle_rotate(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSystem)
                 };
                 if is_vector {
                     return Some(vec![decl("rotate", format!("{value} var(--tw-rotate)"))]);
+                }
+                if !switches::ROTATE_NEGATIVE_ARBITRARY.on() {
+                    let is_angle = match data_type {
+                        Some(data_type) => data_type == "angle",
+                        None => infer_data_type(value, &[DataType::Angle, DataType::Vector]) == Some(DataType::Angle),
+                    };
+                    if !is_angle {
+                        return Some(vec![decl("rotate", value.as_str())]);
+                    }
                 }
                 value.clone()
             }

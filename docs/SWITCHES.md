@@ -279,6 +279,45 @@ No switch: a static value with the name of a property of `Object`
 |---|---|---|---|---|
 | `UTILITY_ROOT_ENDING_DASH` | fix | S | edge | Only in 4.2.0: `@utility foo--*` was not a valid name |
 
+### 4.1.8 (1 switch, there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `APPLY_ERROR_REASONS` | form | S | rare | The error of `@apply` was always `Cannot apply unknown utility class: NAME` |
+
+No switch: `order-none` moved to the old utilities of the plugin layer,
+with the same result. `@tailwind utilities` becomes a context node after
+the `@apply` step, with no visible change. The value parser stopped at a
+`)` with no `(` (a fault that stops the compiler; the CSS parser and the
+candidate parser refuse such a value first).
+
+### 4.1.7 (1 switch, there; 1 change in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `ROTATE_NEGATIVE_ARBITRARY` | fix | S | rare | `-rotate-[var(--r)]` gave `rotate: var(--r)`: only a value with the type angle was negated |
+| merge-custom-variant (JS) | fix | S | edge | A variant with `:merge(…)` of a plugin was not ignored |
+
+### 4.1.6 (7 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `CRLF_STAYS` | form | S | rare | The parser replaced each `\r\n` of the input with `\n`, also in a comment, in a string and after a `\` |
+| `PAREN_VALUE_NEEDS_TWO_DASHES` | fix | S | edge | `w-(-x)` and `w-(a-b)` were valid: one `-` in the first two characters was sufficient. `w-(--x;y)` was valid |
+| `PAREN_MODIFIER_KEEPS_UNDERSCORES` | fix | S | rare | `bg-red-500/(--my_opacity)` gave `var(--my opacity)` |
+| `SCALE_NEGATIVE_ARBITRARY` | fix | S | rare | `-scale-[var(--s)]` gave `scale: var(--s)` |
+| `REFERENCE_NO_UTILITIES` | fix | S | rare | `@tailwind utilities` in a reference was the utilities node: a later `@tailwind utilities` gave nothing |
+| `APPLY_NESTED_WALK` | fix | M | rare | An `@utility` that another `@utility` applied lost its nested rules with `@apply`. An `@apply` at the top level of a stylesheet gave nothing |
+| `APPLY_CANDIDATES_AS_KEYS` | form | S | edge | The first candidate of `@apply` that is not valid gave the error, in the sequence of the text: now a number comes first |
+
+No switch: the source maps (`ast.ts`, `css-parser.ts`, `at-import.ts`,
+`theme.ts`, `source-maps/`), and `printCandidate` and `printVariant` of
+`candidate.ts` (only the upgrade tool uses them).
+
+`APPLY_NESTED_WALK` needs the one cache of the compiler of before 4.1.12
+for a utility that is also a candidate: `@apply` and the build shared
+the compiled rules.
+
 The scanner of the source files follows no version, in each engine. Its
 changes in these releases: the Markdown and Ruby pre-processors, and the
 `.jsonl` and `.ndjson` files.

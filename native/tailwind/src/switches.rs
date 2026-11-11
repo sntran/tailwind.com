@@ -276,6 +276,62 @@ pub const FRACTION_WHITE_SPACE: Switch = Switch::since(4, 2, 2, "a fraction can 
 /// foo--*`. Before (only in 4.2.0): the name was not valid.
 pub const UTILITY_ROOT_ENDING_DASH: Switch = Switch::since(4, 2, 1, "the root of a functional @utility can end with -");
 
+// --- 4.1.8 ----------------------------------------------------------------
+
+/// The error of `@apply` for a candidate with no result gives the reason:
+/// no prefix, a class that `@source not inline(…)` removes, a variant that
+/// does not exist, or an empty theme. Before: always `Cannot apply unknown
+/// utility class: NAME`.
+pub const APPLY_ERROR_REASONS: Switch = Switch::since(4, 1, 8, "the error of @apply gives the reason");
+
+// --- 4.1.7 ----------------------------------------------------------------
+
+/// `-rotate-[…]` negates each arbitrary value that is not a vector:
+/// `-rotate-[var(--r)]` gives `calc(var(--r) * -1)`. Before: only a value
+/// with the type angle was negated, and each other value stayed as it was.
+pub const ROTATE_NEGATIVE_ARBITRARY: Switch = Switch::since(4, 1, 7, "-rotate-[…] negates each arbitrary value");
+
+// --- 4.1.6 ----------------------------------------------------------------
+
+/// The parser keeps a `\r\n` that is in a comment, in a string, after a
+/// `\\` or in the value of a custom property. Before: the parser replaced
+/// each `\r\n` of the input with `\n` first.
+pub const CRLF_STAYS: Switch = Switch::since(4, 1, 6, "the parser does not replace \\r\\n in the input");
+
+/// The short form of a variable (`w-(--x)`, `bg-red-500/(--x)`,
+/// `min-(--x):flex`) must start with `--`, and the short form of a value
+/// has no `;` or `}` at the top level. Before: one `-` in the first two
+/// characters was sufficient (`w-(-x)`, `w-(a-b)`), and the short form of
+/// a value had no check of its own.
+pub const PAREN_VALUE_NEEDS_TWO_DASHES: Switch = Switch::since(4, 1, 6, "the short form of a variable must start with --");
+
+/// The short form of a variable in a modifier keeps the `_` of the name
+/// of the variable: `bg-red-500/(--my_opacity)`. Before: each `_` was a
+/// space (`var(--my opacity)`).
+pub const PAREN_MODIFIER_KEEPS_UNDERSCORES: Switch = Switch::since(4, 1, 6, "a modifier with (--x_y) keeps the _ of the variable");
+
+/// `-scale-[…]` negates its arbitrary value: `calc(… * -1)`. Before: the
+/// value stayed as it was.
+pub const SCALE_NEGATIVE_ARBITRARY: Switch = Switch::since(4, 1, 6, "-scale-[…] negates the arbitrary value");
+
+/// `@tailwind utilities` in a reference (`@reference`, `@media reference`)
+/// is removed. Before: it was the utilities node, so a later `@tailwind
+/// utilities` was removed, and the stylesheet had no utilities.
+pub const REFERENCE_NO_UTILITIES: Switch = Switch::since(4, 1, 6, "@tailwind utilities in a reference is removed");
+
+/// The substitution of `@apply` in a parent does each `@apply` below it,
+/// and each parent in the path depends on the applied utilities. Before:
+/// only the children of each parent, so a utility that another `@utility`
+/// applied could lose its nested rules with `@apply`, and an `@apply` at
+/// the top level of a stylesheet gave nothing.
+pub const APPLY_NESTED_WALK: Switch = Switch::since(4, 1, 6, "@apply in nested rules of an applied @utility");
+
+/// The candidates of one `@apply` are the keys of a JavaScript object: a
+/// candidate that is a number comes first. Before: they were a list, in
+/// the sequence of the text. The first candidate that is not valid gives
+/// the error.
+pub const APPLY_CANDIDATES_AS_KEYS: Switch = Switch::since(4, 1, 6, "the candidates of @apply are in the sequence of object keys");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -327,4 +383,13 @@ pub const ALL: &[&Switch] = &[
     &UNESCAPE_NUL_IS_REPLACED,
     &FRACTION_WHITE_SPACE,
     &UTILITY_ROOT_ENDING_DASH,
+    &APPLY_ERROR_REASONS,
+    &ROTATE_NEGATIVE_ARBITRARY,
+    &CRLF_STAYS,
+    &PAREN_VALUE_NEEDS_TWO_DASHES,
+    &PAREN_MODIFIER_KEEPS_UNDERSCORES,
+    &SCALE_NEGATIVE_ARBITRARY,
+    &REFERENCE_NO_UTILITIES,
+    &APPLY_NESTED_WALK,
+    &APPLY_CANDIDATES_AS_KEYS,
 ];
