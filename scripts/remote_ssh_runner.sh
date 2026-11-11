@@ -97,9 +97,22 @@ wait_for() {
 # The server program. sshd needs its full path. On Windows, the sshd of
 # Git (MSYS2) runs as the user of the job, and does not check the access
 # lists of Windows for its key files, as the sshd of the system does.
+win32_sshd=0
 if [ $windows = 1 ]; then
-    sshd=/usr/bin/sshd
-    keygen=/usr/bin/ssh-keygen
+    sshd=
+    for candidate in /usr/bin/sshd.exe /usr/bin/sshd "/c/Program Files/Git/usr/bin/sshd.exe"; do
+        [ -z "$sshd" ] && [ -f "$candidate" ] && sshd=$candidate
+    done
+    if [ -n "$sshd" ]; then
+        keygen=$(dirname "$sshd")/ssh-keygen
+    else
+        # No sshd of Git: the sshd of Windows. It reads the access lists of
+        # its key files, and its sessions start with cmd.exe.
+        echo "remote ssh: no sshd of Git (/usr/bin has: $(ls /usr/bin | grep -i ssh | tr '\n' ' '))"
+        sshd=$(command -v sshd 2>/dev/null || true)
+        keygen=$(command -v ssh-keygen 2>/dev/null || true)
+        win32_sshd=1
+    fi
 else
     sshd=$(command -v sshd 2>/dev/null || true)
     for candidate in /usr/sbin/sshd /usr/bin/sshd; do
@@ -108,7 +121,7 @@ else
     done
     keygen=$(command -v ssh-keygen 2>/dev/null || echo "$(dirname "${sshd:-/usr/bin/sshd}")/ssh-keygen")
 fi
-if [ -z "$sshd" ] || [ ! -x "$sshd" ]; then
+if [ -z "$sshd" ] || [ ! -f "$sshd" ]; then
     echo "remote ssh: no sshd on this runner" >&2
     exit 1
 fi
@@ -150,12 +163,26 @@ EOF
 chmod 700 "$dir/command.sh"
 
 sftp=internal-sftp
+force=$dir/command.sh
+if [ $win32_sshd = 1 ]; then
+    # Paths of Windows in the configuration, only the user of the job in
+    # the access list of each key file, and bash for the command.
+    wdir=$(cygpath -m "$dir")
+    for f in host_key authorized_keys; do
+        icacls "$(cygpath -w "$dir/$f")" //inheritance:r //grant:r "$(id -un):F" > /dev/null
+    done
+    force="C:/PROGRA~1/Git/bin/bash.exe $wdir/command.sh"
+    sftp=sftp-server.exe
+    dir_config=$wdir
+else
+    dir_config=$dir
+fi
 cat > "$dir/sshd_config" <<EOF
 Port $PORT
 ListenAddress 127.0.0.1
-HostKey $dir/host_key
-PidFile $dir/sshd.pid
-AuthorizedKeysFile $dir/authorized_keys
+HostKey $dir_config/host_key
+PidFile $dir_config/sshd.pid
+AuthorizedKeysFile $dir_config/authorized_keys
 PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -163,7 +190,7 @@ StrictModes no
 AllowTcpForwarding yes
 ClientAliveInterval 30
 Subsystem sftp $sftp
-ForceCommand $dir/command.sh
+ForceCommand $force
 EOF
 # PAM is not in each build of sshd: use the option only where it is valid.
 if "$sshd" -t -f "$dir/sshd_config" -o UsePAM=no 2>/dev/null; then
