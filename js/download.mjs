@@ -69,18 +69,18 @@ export async function ensure(release, { env = process.env, fetch = globalThis.fe
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const part = `${file}.${process.pid}.part`;
-  const out = fs.createWriteStream(part, { mode: 0o755 });
-  // An error of the file (a full disk): no drain comes after it.
-  const failed = new Promise((_, reject) => out.once('error', reject));
-  failed.catch(() => {});
+  // Synchronous writes: the body stream does not wait for a drain. A
+  // paused body at the end of the connection stops some versions of
+  // Node.js with an assertion error of undici (Node.js 24).
+  const fd = fs.openSync(part, 'w', 0o755);
   const hash = createHash('sha256');
   try {
     for await (const chunk of response.body) {
       wait();
       hash.update(chunk);
-      if (!out.write(chunk)) await Promise.race([new Promise((r) => out.once('drain', r)), failed]);
+      fs.writeSync(fd, chunk);
     }
-    await new Promise((resolve, reject) => out.end((e) => (e ? reject(e) : resolve())));
+    fs.closeSync(fd);
     const got = hash.digest('hex');
     if (got !== release.sha256) {
       throw new Error(`tailwind.com: ${url}: the SHA-256 is ${got}, and this package expects ${release.sha256}`);
@@ -91,7 +91,7 @@ export async function ensure(release, { env = process.env, fetch = globalThis.fe
     throw ac.signal.aborted ? ac.signal.reason : e;
   } finally {
     clearTimeout(timer);
-    out.destroy();
+    try { fs.closeSync(fd); } catch {}
     fs.rmSync(part, { force: true });
   }
   return file;
