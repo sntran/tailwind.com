@@ -412,7 +412,9 @@ jobs:
   release:
     name: Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, wasm, tlc, systems, mix, npm]
+    # A release waits for every compatibility gate, including the
+    # standalone-reference and BSD system tests.
+    needs: [test, standalone, wasm, tlc, systems, bsd, mix, npm]
     runs-on: ubuntu-26.04
     permissions:
       contents: write
@@ -423,6 +425,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: true
+          fetch-depth: 0
+      # npm 11.5.1 or later publishes with this job's OIDC token when
+      # npmjs.com trusts this workflow. NPM_TOKEN remains a one-time
+      # fallback for the first publication, before package settings exist.
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 26
+          package-manager-cache: false
       - name: The tag is the version of the packages
         run: |
           sh scripts/sync-upstream.sh check
@@ -431,6 +441,10 @@ jobs:
             echo "The tag $GITHUB_REF_NAME is not v$version, the version of package.json." >&2
             exit 1
           fi
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "The tagged commit is not on main." >&2
+            exit 1
+          }
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: dist
@@ -459,18 +473,17 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
             --title "Tailwind CSS $TAILWINDCSS_VERSION" \
             --notes "The files of the release $GITHUB_REF_NAME, for Tailwind CSS $TAILWINDCSS_VERSION. A newer release for the same version of Tailwind CSS replaces these files."
-      # npm: with the secret NPM_TOKEN. With no secret, the step does
-      # nothing: the package file is in the release.
+      # npm: trusted publishing (OIDC) needs no stored token. A token is
+      # accepted only to bootstrap this new package, then can be removed.
       - name: Publish to npm
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "No NPM_TOKEN secret: the package is not published to npm."
-            exit 0
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > "$RUNNER_TEMP/npmrc"
+            export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc"
           fi
-          echo "//registry.npmjs.org/:_authToken=$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/npmrc"
-          npm publish dist/tailwind.com-*.tgz --access public --provenance --userconfig "$RUNNER_TEMP/npmrc"
+          npm publish dist/tailwind.com-*.tgz --access public --provenance
       # GitHub Packages accepts only a name with the scope of the owner:
       # the same package, with the name @OWNER/tailwind.com.
       - name: Publish to GitHub Packages

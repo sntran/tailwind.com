@@ -8,7 +8,9 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 
 ## Unreleased
 
-The first version: 0.1.0, with Tailwind CSS 4.3.5.
+## 0.1.0 - 2026-11-11
+
+The first version, with Tailwind CSS 4.3.5.
 
 ### Added
 
