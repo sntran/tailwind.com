@@ -8,7 +8,7 @@ name: Fuzz
 # docs/TESTING.md.
 on:
   push:
-    branches: [main, "ccr-*", "feat/**", "fix/**", "ci/**"]
+    branches: [main, "feat/**", "fix/**", "ci/**"]
     paths-ignore: ["**.md", "docs/**", ".github/remote-ssh.request"]
   pull_request:
     paths-ignore: ["**.md", "docs/**"]

@@ -251,6 +251,7 @@ WASI file system. It has the same JavaScript engine for `@plugin` and
 | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) | The time, the memory and the size, against the official programs. |
 | [`docs/SYNC.md`](docs/SYNC.md) | Move to a new version of Tailwind CSS. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What comes next. |
+| [`CHANGELOG.md`](CHANGELOG.md) | The changes of each version. |
 
 ## Contributing
 

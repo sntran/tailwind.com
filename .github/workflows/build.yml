@@ -6,7 +6,7 @@ on:
   push:
     # main, and the work branches: a push tests them on all the systems
     # before there is a pull request.
-    branches: [main, "ccr-*", "feat/**", "fix/**", "ci/**"]
+    branches: [main, "feat/**", "fix/**", "ci/**"]
     tags: ["v*"]
     paths-ignore: ["**.md", "docs/**", ".github/remote-ssh.request"]
   pull_request:
