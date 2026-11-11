@@ -539,8 +539,8 @@ impl Optimizer<'_> {
                     loc.clear_identity();
                 }
                 let fallback = self.arena.add(Item::Node(fallback));
-                // Before 4.1.16, the declaration was in a `&` rule.
-                let content = if switches::COLOR_MIX_FALLBACK_NO_AMPERSAND.on() {
+                // Only in 4.1.15, the declaration was in a `&` rule.
+                let content = if switches::COLOR_MIX_FALLBACK_NO_AMPERSAND.on() || !switches::COLOR_MIX_FALLBACK_AMPERSAND.on() {
                     declaration
                 } else {
                     let rule = self.arena.add(Item::Rule { selector: "&".to_string(), nodes: vec![declaration], loc: Loc::default() });

@@ -83,6 +83,10 @@ pub struct Variants {
     last_order: i64,
     /// The error of a variant function. Upstream throws it.
     error: RefCell<Option<Error>>,
+    /// True: `from_ast` does not replace the `@variant` rules of a body.
+    /// Only for a version before 4.1.14 and custom variants that use each
+    /// other in a circle (`switches::CUSTOM_VARIANT_CYCLE_ERROR`).
+    pub keep_at_variant: bool,
 }
 
 impl Variants {
@@ -292,7 +296,16 @@ impl Variants {
         collect_selectors(&ast, &mut selectors, &mut uses_at_variant, &mut uses_at_scope);
         let uses_at_scope = uses_at_scope && switches::SCOPE_HOISTING.on();
         let selector_refs: Vec<&str> = selectors.iter().map(String::as_str).collect();
-        let compounds = compounds_for_selectors(&selector_refs);
+        // Before 4.1.14, an `@variant` rule in the body was an at-rule as
+        // each other: a compound variant (`group-*`) did not take the
+        // variant.
+        let compounds = if uses_at_variant && !switches::CUSTOM_VARIANT_AT_VARIANT_COMPOUNDS.on() {
+            COMPOUNDS_NEVER
+        } else {
+            compounds_for_selectors(&selector_refs)
+        };
+        // See `keep_at_variant`.
+        let uses_at_variant = uses_at_variant && !self.keep_at_variant;
 
         self.r#static(
             name,

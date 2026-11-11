@@ -443,6 +443,10 @@ fn handle_functional_utility(desc: UtilityDescription, negative: bool) -> impl F
                 // A fixed value.
                 if value.is_none() && !negative && candidate.modifier.is_none() {
                     if let Some((_, nodes)) = desc.static_values.iter().find(|(k, _)| k == named) {
+                        // Only in 4.1.14, each candidate got the same nodes.
+                        if !crate::switches::STATIC_VALUE_COPIES.on() {
+                            crate::compile::share_declarations(nodes, ds);
+                        }
                         return Some(nodes.clone());
                     }
                 }
@@ -466,7 +470,20 @@ fn handle_functional_utility(desc: UtilityDescription, negative: bool) -> impl F
 }
 
 /// Register a functional utility such as `max-w-*` that reads the theme.
-pub fn functional_utility(utilities: &mut Utilities, class_root: &str, desc: UtilityDescription) {
+pub fn functional_utility(utilities: &mut Utilities, class_root: &str, mut desc: UtilityDescription) {
+    if !crate::switches::STATIC_VALUES_AFTER_THEME.on() {
+        // Before 4.1.14, each fixed value was a static utility: a theme
+        // value with the same name did not replace it.
+        for (key, nodes) in std::mem::take(&mut desc.static_values) {
+            utilities.r#static(format!("{class_root}-{key}"), move |_, _| Some(nodes.clone()));
+        }
+    } else if !crate::switches::STATIC_VALUE_COPIES.on() {
+        // Only in 4.1.14, the nodes of a fixed value were the same objects
+        // for each candidate: see `compile::share_declarations`.
+        for (_, nodes) in &mut desc.static_values {
+            crate::ast::share_identity(nodes);
+        }
+    }
     if desc.supports_negative {
         utilities.functional(format!("-{class_root}"), handle_functional_utility(desc.clone(), true));
     }

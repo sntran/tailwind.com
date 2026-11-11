@@ -242,9 +242,12 @@ impl CompatTheme {
     pub(super) fn resolve_theme_value(&self, design_system: &DesignSystem, path: &str) -> Option<String> {
         let mut resolved = theme_fn(design_system, &self.theme, &|value| value, path);
 
-        // A namespace root with a bare value: `--shadow` for `theme('shadow')`.
+        // An object with `DEFAULT` gives that value: a namespace root with a
+        // bare value (`--shadow` for `theme('shadow')`), or `colors.foo`
+        // with `--color-foo` and `--color-foo-bar`.
+        // (Before 4.1.15, such an object was no value.)
         if let Val::Obj(map) = &resolved {
-            if let Some(default) = map.get("DEFAULT").cloned() {
+            if let Some(default) = map.get("DEFAULT").cloned().filter(|_| switches::THEME_FN_OBJECT_DEFAULT.on()) {
                 resolved = default;
             }
         }
@@ -592,8 +595,14 @@ fn camel_case(value: &str) -> String {
 /// does not exist, the key and the next key become one key with a dash.
 fn get(object: &Val, path: &mut [String]) -> Val {
     let mut current = object.clone();
+    // Before 4.1.15, a key was also an index into a text.
+    let index_strings = !switches::THEME_FN_NO_STRING_INDEX.on();
     for i in 0..path.len() {
-        match current.get_own(&path[i]) {
+        let value = match &current {
+            Val::Str(text) if index_strings => string_index(text, &path[i]),
+            _ => current.get_own(&path[i]),
+        };
+        match value {
             Some(value) => current = value,
             None => {
                 if i + 1 >= path.len() {
@@ -604,6 +613,17 @@ fn get(object: &Val, path: &mut [String]) -> Val {
         }
     }
     current
+}
+
+/// `text[key]` of JavaScript, for an index and for `length`. The units
+/// are UTF-16 code units. (The functions of a text, such as `trim`, are
+/// not in this model.)
+fn string_index(text: &str, key: &str) -> Option<Val> {
+    if key == "length" {
+        return Some(Val::Num(text.encode_utf16().count() as f64));
+    }
+    let unit = text.encode_utf16().nth(array_index(key)?)?;
+    Some(Val::Str(String::from_utf16_lossy(&[unit])))
 }
 
 /// `/^[a-zA-Z0-9-_%/.]+$/`

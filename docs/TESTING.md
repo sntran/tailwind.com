@@ -314,7 +314,10 @@ switch: the Rust compiler compiles as the version of the package that it
 compares with. The job `switches` of `.github/workflows/fuzz.yml` does
 this for each older version that the Rust compiler serves (4.2.0 to
 4.3.4). About one third of its cases have JavaScript plugins or
-configs: they run the plugin layer of that version.
+configs: they run the plugin layer of that version. Where an old
+version gives output that is not valid CSS, and the Rust compiler gives
+the result of the fixed version, the fuzzer knows the fault and prints
+the number of such cases ("The rules" of [`SWITCHES.md`](SWITCHES.md)).
 
 The plugin layer of each version has three checks: a unit test
 (`compat/js/bundles.rs`: each version reads back, and names its

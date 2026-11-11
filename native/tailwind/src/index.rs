@@ -160,20 +160,28 @@ impl Compiler {
     /// The CSS for all the candidates of this call and of the calls before.
     ///
     /// When a function of a JavaScript plugin throws, upstream throws from
-    /// `build`. Here `try_build` gives that error, and `build` gives the
-    /// CSS without the candidate of the failure.
+    /// `build`. Upstream also throws when a candidate uses a custom variant
+    /// whose `@variant` rule is not valid. Here `try_build` gives that
+    /// error, and `build` gives the CSS without the candidate of the
+    /// failure.
     pub fn build(&mut self, candidates: &[String]) -> String {
         let _version = version::enter(self.version);
         let output = self.build_css(candidates);
         self.design_system.take_js_error();
+        self.design_system.variants.take_error();
         output
     }
 
-    /// `build`, with the error of a JavaScript plugin function.
+    /// `build`, with the error of a JavaScript plugin function or of a
+    /// custom variant.
     pub fn try_build(&mut self, candidates: &[String]) -> Result<String> {
         let _version = version::enter(self.version);
+        self.design_system.variants.take_error();
         let output = self.build_css(candidates);
-        match self.design_system.take_js_error() {
+        if let Some(error) = self.design_system.take_js_error() {
+            return Err(error);
+        }
+        match self.design_system.variants.take_error() {
             Some(error) => Err(error),
             None => Ok(output),
         }
@@ -550,7 +558,18 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
     // Register the custom variants: a variant comes after the variants that
     // it uses.
     let graph: Vec<(String, Vec<String>)> = custom_variant_dependencies.into_iter().collect();
-    let sorted = topological_sort(&graph).map_err(|circular| {
+    let sorted = topological_sort(&graph);
+    // Before 4.1.14, custom variants that use each other in a circle were
+    // no error: an `@variant` rule in `@custom-variant` stayed in the
+    // output. For such a stylesheet, these rules stay, as they did then.
+    let sorted = match sorted {
+        Err(_) if !crate::switches::CUSTOM_VARIANT_CYCLE_ERROR.on() => {
+            design_system.variants.keep_at_variant = true;
+            Ok(custom_variants.keys().cloned().collect())
+        }
+        sorted => sorted,
+    };
+    let sorted = sorted.map_err(|circular| {
         let nodes: Vec<AstNode> = circular
             .path
             .iter()
@@ -1048,7 +1067,11 @@ impl Collector {
         let AstNode::AtRule(at) = node else { return Ok(WalkAction::Continue) };
         let (mut theme_options, theme_prefix) = parse_theme_options(&at.params);
 
-        self.features |= FEATURES_AT_THEME;
+        // Before 4.1.14, `@theme` was not a feature: with no other feature,
+        // the output was the input.
+        if crate::switches::AT_THEME_IS_A_FEATURE.on() {
+            self.features |= FEATURES_AT_THEME;
+        }
 
         if css_context(ancestors).get("reference").is_some_and(|v| v.truthy()) {
             theme_options |= theme::REFERENCE;
@@ -1239,6 +1262,16 @@ mod tests {
         };
         assert_eq!(error("@plugin \"./plugin.js\";"), plugin);
         assert_eq!(error("@config \"./config.js\";"), config);
+    }
+
+    #[test]
+    fn build_gives_the_error_of_a_custom_variant() {
+        // Upstream throws from `build` when a candidate uses the variant.
+        let css = "@custom-variant a {\n  @variant nope { @slot; }\n}\n@tailwind utilities;";
+        let mut compiler = compile(css, options()).unwrap();
+        assert_eq!(compiler.try_build(&["flex".to_string()]).unwrap(), ".flex {\n  display: flex;\n}\n");
+        let error = compiler.try_build(&["a:flex".to_string()]).unwrap_err();
+        assert_eq!(error.message, "Cannot use `@variant` with unknown variant: nope");
     }
 
     #[test]

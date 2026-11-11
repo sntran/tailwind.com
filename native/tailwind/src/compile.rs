@@ -1,6 +1,6 @@
 //! The compiler of candidates to rules: `compile.ts` of Tailwind CSS.
 
-use crate::ast::{at_rule, context, decl, rule, AstNode, ContextMap, StyleRule};
+use crate::ast::{at_rule, context, decl, rule, AstNode, ContextMap, Declaration, StyleRule};
 use crate::candidate::{Candidate, Variant};
 use crate::design_system::{CompileAstFlags, DesignSystem, COMPILE_NONE, COMPILE_RESPECT_IMPORTANT};
 use crate::property_order::property_index;
@@ -165,7 +165,61 @@ pub fn compile_candidates(
         z.properties.count.cmp(&a.properties.count).then_with(|| compare(&a.candidate, &z.candidate))
     });
 
+    // Only in 4.1.14: a declaration of a fixed value is `!important` in
+    // each rule when one candidate made it so.
+    let shared = design_system.shared_declarations.borrow();
+    if shared.values().any(|important| *important) {
+        for sorted_node in &mut sorted {
+            apply_shared_important(std::slice::from_mut(&mut sorted_node.node), &shared);
+        }
+    }
+    drop(shared);
+
     sorted
+}
+
+/// Only for Tailwind CSS 4.1.14. In that version, the fixed values of a
+/// utility (`z-auto`, `leading-none`) gave the same node objects to each
+/// candidate. So the `!important` of one candidate (`z-auto!`) changed the
+/// declarations of each candidate with that value, also in the rules that
+/// the compiler made before. This function records the declarations of
+/// such a value. `compile_ast_nodes` records the `!important`, and
+/// `compile_candidates` gives it to each copy at its end: upstream reads
+/// the objects after it compiles all the candidates.
+pub fn share_declarations(nodes: &[AstNode], design_system: &DesignSystem) {
+    let mut shared = design_system.shared_declarations.borrow_mut();
+    for_each_declaration(nodes, &mut |declaration| {
+        if let Some(identity) = declaration.loc.identity() {
+            shared.entry(identity).or_insert(false);
+        }
+    });
+}
+
+/// The declarations that `apply_important` changes.
+fn for_each_declaration(ast: &[AstNode], visit: &mut dyn FnMut(&Declaration)) {
+    for node in ast {
+        match node {
+            AstNode::AtRoot(_) => continue,
+            AstNode::Declaration(d) => visit(d),
+            AstNode::Rule(StyleRule { nodes, .. }) | AstNode::AtRule(crate::ast::AtRule { nodes, .. }) => {
+                for_each_declaration(nodes, visit)
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Make each copy of a shared declaration with `!important` important.
+fn apply_shared_important(ast: &mut [AstNode], shared: &std::collections::HashMap<*const (), bool>) {
+    for node in ast {
+        if let AstNode::Declaration(d) = node {
+            if d.loc.identity().and_then(|identity| shared.get(&identity).copied()) == Some(true) {
+                d.important = true;
+            }
+        } else if let Some(children) = node.children_mut() {
+            apply_shared_important(children, shared);
+        }
+    }
 }
 
 /// The rules of one candidate, with its variants applied.
@@ -187,6 +241,16 @@ pub fn compile_ast_nodes(candidate: &Candidate, design_system: &DesignSystem, fl
         // one of the design system is applied only when the flag asks.
         if candidate.important() || respect_important {
             apply_important(&mut nodes);
+
+            // Only in 4.1.14: see `share_declarations`.
+            let mut shared = design_system.shared_declarations.borrow_mut();
+            if !shared.is_empty() {
+                for_each_declaration(&nodes, &mut |declaration| {
+                    if let Some(important) = declaration.loc.identity().and_then(|identity| shared.get_mut(&identity)) {
+                        *important = true;
+                    }
+                });
+            }
         }
 
         let mut node = AstNode::Rule(StyleRule { selector: selector.clone(), nodes, loc: Default::default() });

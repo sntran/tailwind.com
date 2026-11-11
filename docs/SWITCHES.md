@@ -109,6 +109,14 @@ sh tests/fuzz/install.sh build/official-4.3.4 4.3.4
   later release fixed), the Rust compiler does not stop: it gives the
   result of the fixed version. A wrong output of an old version, which
   is valid CSS, is kept as it was.
+- **Output that is not valid CSS.** Where an old version of Tailwind CSS
+  leaves one of its own at-rules in the output (a fault that a later
+  release fixed), the Rust compiler gives the result of the fixed
+  version. Before 4.1.14, an `@variant` rule in the body of
+  `@custom-variant` stayed in the output. The fuzzer knows this fault
+  (`hasKnownFault` in `tests/fuzz/fuzz.mjs`): when the official result
+  has an `@variant` rule, it compares the case again with no candidate
+  that shows the fault.
 - **A behavior of one version only** needs two switches, one for its
   start and one for its end. (In the list, `addbase-variant-eager` is
   only in 4.3.1, but it is in the plugin layer. `UTILITY_ROOT_ENDING_DASH`
@@ -338,6 +346,63 @@ The Rust compiler replaces it in each version, as 4.1.17 does.
 No switch: the changes of `canonicalize-candidates.ts`, `signatures.ts`,
 `expand-declaration.ts` and `intellisense.ts` do not change the result of
 a build.
+
+### 4.1.15 (6 switches, all there; 1 change only in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `COLOR_MIX_FALLBACK_AMPERSAND` | form | S | common | Only in 4.1.15: the `@supports` rule of a `color-mix(…)` fallback has the declaration in a `& { … }` rule. Before, it had the declaration itself, as since 4.1.16 |
+| `COMPOUND_MODIFIER_TO_INNER_VARIANT` | fix | S | rare | `not-group-hover/name:flex` gave nothing: the modifier stayed on `not-*`, `has-*` or `in-*` |
+| `AT_RULE_NAME_ENDS_AT_TAB` | fix | S | edge | A tab after the name of an at-rule was a part of the name: `@media\tprint` kept the tab, and `@apply\tflex` stayed in the output |
+| `STATIC_VALUE_COPIES` | fix | M | rare | Only in 4.1.14: `z-auto!` made the declarations of each `z-auto` rule `!important`, also `hover:z-auto` and a later `@apply z-auto` |
+| `THEME_FN_OBJECT_DEFAULT` (also in the plugin layer) | fix | S | edge | `theme(colors.foo)` with `--color-foo` and `--color-foo-bar` was an error, or gave its fallback |
+| `THEME_FN_NO_STRING_INDEX` (also in the plugin layer) | fix | S | edge | `theme(colors.what.1)` gave the second character of the value of `--color-what` |
+| selector-parser (JS) | fix | S | edge | In the selector parser of `addUtilities`, `&` and `*` were not nodes of their own: `&[x]` was one node |
+
+No switch: the new walk of the tree (`walk.ts`) gives the same result.
+It visits the context nodes, and the code that needs the parent or the
+context reads them with `cssContext`. The value parser makes `/` a word
+and not a separator: the text of a value stays the same.
+`cloneAstNode` replaces `structuredClone`. `break-words` is now an old
+utility of the plugin layer, which is there with no plugin: the result
+is the same. The files `canonicalize-candidates.ts`, `signatures.ts`,
+`constant-fold-declaration.ts`, `attribute-selector-parser.ts`,
+`utils/dimensions.ts` and `intellisense.ts` are for the editor tools and
+the canonical form of candidates. `selector-parser.ts` is for the plugin
+layer.
+
+`STATIC_VALUE_COPIES` is the end of a fault of one version. In 4.1.14,
+the fixed values of a utility gave the same node objects to each
+candidate. The Rust compiler has no shared objects: it gives each such
+declaration an identity, keeps the identities with `!important` in the
+design system, and gives the flag to each copy at the end of
+`compile_candidates` (`compile::share_declarations`).
+
+### 4.1.14 (6 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `STATIC_VALUES_AFTER_THEME` | fix | S | rare | Each fixed value of a functional utility was a static utility: `rounded-full` with `--radius-full` gave two rules (also `z-auto`, `order-first`, `leading-none`, `transition-all` and the other fixed values) |
+| `ORIGIN_PERCENTAGES` | form | S | common | `origin-top-left` gave `top left`, not `0 0` (six values of `origin-*` and of `perspective-origin-*`) |
+| `GRID_LINE_THEME_KEYS` | fix | S | edge | `col-start-foo` with `--grid-column-start-foo` also gave `grid-column: var(--grid-column-start-foo)` (also `col-end-*`, `row-start-*`, `row-end-*`) |
+| `AT_THEME_IS_A_FEATURE` | fix | S | rare | A stylesheet with `@theme` and no other feature of Tailwind CSS gave its input text with no change |
+| `CUSTOM_VARIANT_CYCLE_ERROR` | fix | S | edge | Custom variants that use each other in a circle were no error |
+| `CUSTOM_VARIANT_AT_VARIANT_COMPOUNDS` | fix | S | edge | `group-a:flex` gave nothing when the body of `@custom-variant a` had an `@variant` rule |
+
+No switch: an `@variant` rule in the body of `@custom-variant` stayed in
+the output, which was not valid CSS. The Rust compiler replaces it in
+each version, as 4.1.14 does, and the fuzzer knows this fault (see "The
+rules"). There is one exception: for a version before 4.1.14 and a
+stylesheet with a circle of custom variants, the Rust compiler keeps
+each `@variant` rule of a custom variant, as the official compiler of
+that version did. For a circle, the fixed version gives only an error.
+When a candidate uses a custom variant whose `@variant` rule names a
+variant that is not there, `build` gives the error of Tailwind CSS
+("Cannot use `@variant` with unknown variant") in each version.
+
+No switch: the new suggestions of `@utility` are for the editor tools.
+`@container-size` was only in a build that was not a release
+(`CONTAINER_SIZE`, 4.3.0).
 
 The scanner of the source files follows no version, in each engine. Its
 changes in these releases: the Markdown and Ruby pre-processors, and the
