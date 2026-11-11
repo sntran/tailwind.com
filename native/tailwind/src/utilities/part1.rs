@@ -775,19 +775,32 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("left", "0"),
         ("top-left", "0 0"),
     ];
+    // Before 4.1.14, the values were the keywords.
+    const OLD_ORIGINS: [(&str, &str); 9] = [
+        ("center", "center"),
+        ("top", "top"),
+        ("top-right", "top right"),
+        ("right", "right"),
+        ("bottom-right", "bottom right"),
+        ("bottom", "bottom"),
+        ("bottom-left", "bottom left"),
+        ("left", "left"),
+        ("top-left", "top left"),
+    ];
+    let origins = if crate::switches::ORIGIN_PERCENTAGES.on() { &ORIGINS } else { &OLD_ORIGINS };
     functional_utility(
         u,
         "origin",
         one_property("transform-origin")
             .theme_keys(&["--transform-origin"])
-            .static_values(values("transform-origin", &ORIGINS)),
+            .static_values(values("transform-origin", origins)),
     );
     functional_utility(
         u,
         "perspective-origin",
         one_property("perspective-origin")
             .theme_keys(&["--perspective-origin"])
-            .static_values(values("perspective-origin", &ORIGINS)),
+            .static_values(values("perspective-origin", origins)),
     );
 
     // `perspective`

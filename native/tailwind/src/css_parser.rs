@@ -491,8 +491,10 @@ pub fn parse_at_rule(buffer: &str, nodes: Vec<AstNode>) -> AtRule {
         start
     };
 
+    // Before 4.1.15, a tab did not end the name.
+    let tab_ends_name = crate::switches::AT_RULE_NAME_ENDS_AT_TAB.on();
     for (i, &current) in bytes.iter().enumerate().skip(start) {
-        if current == SPACE || current == TAB || current == OPEN_PAREN {
+        if current == SPACE || (current == TAB && tab_ends_name) || current == OPEN_PAREN {
             name = &buffer[..i];
             params = &buffer[i..];
             break;

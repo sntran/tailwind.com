@@ -573,8 +573,12 @@ pub fn parse_variant(variant: &str, design_system: &DesignSystem) -> Option<Vari
 
                 // `not-group-hover/name` is `not-*` of `group-hover/name`:
                 // the modifier belongs to the inner variant.
+                // (Before 4.1.15, it stayed on `not-*`, which takes none.)
                 if let Some(m) = &modifier {
-                    if !m.is_empty() && (root == "not" || root == "has" || root == "in") {
+                    if !m.is_empty()
+                        && (root == "not" || root == "has" || root == "in")
+                        && crate::switches::COMPOUND_MODIFIER_TO_INNER_VARIANT.on()
+                    {
                         value = format!("{value}/{m}");
                         modifier = None;
                     }

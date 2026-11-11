@@ -49,6 +49,12 @@ pub struct DesignSystem {
     #[cfg(tw_js)]
     pub js: Option<Rc<crate::compat::js::JsRuntime>>,
 
+    /// Only for Tailwind CSS 4.1.14 (`compile::share_declarations`): the
+    /// declarations of the fixed values of the utilities, by identity. A
+    /// value is true when a candidate with `!important` used the
+    /// declaration.
+    pub shared_declarations: RefCell<HashMap<*const (), bool>>,
+
     parsed_variants: RefCell<indexmap::IndexMap<String, Option<Rc<Variant>>>>,
     parsed_candidates: RefCell<HashMap<String, Rc<Vec<Rc<Candidate>>>>>,
     compiled: RefCell<CompiledCache>,
@@ -71,6 +77,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         track_sources: std::cell::Cell::new(false),
         #[cfg(tw_js)]
         js: None,
+        shared_declarations: RefCell::new(HashMap::new()),
         parsed_variants: RefCell::new(indexmap::IndexMap::new()),
         parsed_candidates: RefCell::new(HashMap::new()),
         compiled: RefCell::new(HashMap::new()),
@@ -111,12 +118,13 @@ impl DesignSystem {
 
         // An arbitrary value or property can have a function such as
         // `theme(…)`, and a utility can have an `@variant`. When the
-        // substitution fails, the candidate is not valid.
+        // substitution fails, the candidate is not valid. (For
+        // `keep_at_variant`, an `@variant` rule stays as it is.)
         let mut failed = false;
         for item in compiled.iter_mut() {
             let mut nodes = vec![std::mem::replace(&mut item.node, crate::ast::comment(""))];
             if crate::css_functions::substitute_functions(&mut nodes, self).is_err()
-                || crate::variants::substitute_at_variant(&mut nodes, self).is_err()
+                || (!self.variants.keep_at_variant && crate::variants::substitute_at_variant(&mut nodes, self).is_err())
                 || nodes.len() != 1
             {
                 failed = true;

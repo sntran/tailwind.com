@@ -127,6 +127,14 @@ pub const DEAD_PSEUDO_ELEMENT_RULES: Switch = Switch::since(4, 3, 4, "a rule aft
 /// `&` in them is replaced. Before: they were plain text.
 pub const MOZ_ANY_NESTING: Switch = Switch::since(4, 3, 4, ":-moz-any() and :-webkit-any() have selectors as arguments");
 
+/// `theme(…)` with only a namespace of Tailwind CSS v3 (`theme(spacing)`)
+/// reads the namespace as an object, and gives its `DEFAULT`: the bare
+/// variable (`--spacing`). Before: a namespace with only the bare variable
+/// gave that value alone. Then a value of `@theme default` lost against
+/// the object of the default configuration, which is no value ("Could
+/// not resolve value for theme function").
+pub const THEME_FN_NAMESPACE_ROOT: Switch = Switch::since(4, 3, 4, "theme(spacing) reads the namespace as an object");
+
 // --- 4.3.3 ----------------------------------------------------------------
 
 /// The last step of the compiler flattens the rules: a nested rule gets
@@ -154,6 +162,13 @@ pub const ARIA_DATA_ATTRIBUTE_CHECK: Switch = Switch::since(4, 3, 3, "aria-* and
 /// system-ui, …`. (The same values of `theme.css` and `preflight.css`
 /// come from the package.)
 pub const DEFAULT_THEME_SYSTEM_FONTS: Switch = Switch::since(4, 3, 3, "theme(fontFamily.sans) starts with the system fonts");
+
+/// In `theme(…)` with a path of Tailwind CSS v3, an object of CSS values
+/// with `DEFAULT` gives that value before the opacity modifier:
+/// `theme(colors.foo / 50%)` with `--color-foo` and `--color-foo-bar` has
+/// the opacity. Before: the object got no opacity, and its `DEFAULT` was
+/// the result.
+pub const THEME_FN_PREFERS_DEFAULT: Switch = Switch::since(4, 3, 3, "theme(colors.foo / 50%) of an object with DEFAULT has the opacity");
 
 // --- 4.3.2 ----------------------------------------------------------------
 
@@ -387,6 +402,81 @@ pub const COLOR_MIX_FALLBACK_NO_AMPERSAND: Switch = Switch::since(4, 1, 16, "the
 /// An arbitrary value with an empty data type is not valid: `bg-[:red]`.
 /// Before: the value was the text after the `:`, with no data type.
 pub const EMPTY_DATA_TYPE_IS_INVALID: Switch = Switch::since(4, 1, 16, "an empty data type of an arbitrary value is not valid");
+
+// --- 4.1.15 ---------------------------------------------------------------
+
+/// Only in 4.1.15: the `@supports` rule of a `color-mix(…)` fallback holds
+/// the declaration in a rule with the selector `&`
+/// (`COLOR_MIX_FALLBACK_NO_AMPERSAND` is the end of this behavior). Before:
+/// the `@supports` rule held the declaration itself, as it does now.
+pub const COLOR_MIX_FALLBACK_AMPERSAND: Switch = Switch::since(4, 1, 15, "the @supports rule of a color-mix() fallback has a & rule");
+
+/// The modifier of `not-*`, `has-*` and `in-*` goes to the inner variant:
+/// `not-group-hover/name` is `not-*` of `group-hover/name`. Before: the
+/// modifier stayed on the outer variant, which takes none, so the
+/// candidate was not valid.
+pub const COMPOUND_MODIFIER_TO_INNER_VARIANT: Switch = Switch::since(4, 1, 15, "the modifier of not-*, has-* and in-* goes to the inner variant");
+
+/// A tab ends the name of an at-rule: `@media\tprint`. Before: only a
+/// space or `(` did, so the tab and the text after it were a part of the
+/// name, and the compiler did not know the at-rule.
+pub const AT_RULE_NAME_ENDS_AT_TAB: Switch = Switch::since(4, 1, 15, "a tab ends the name of an at-rule");
+
+/// A fixed value of a utility (`z-auto`, `leading-none`) gives new nodes
+/// to each candidate. Before (only in 4.1.14, the release with
+/// `STATIC_VALUES_AFTER_THEME`): each candidate got the same nodes, so the
+/// `!important` of one candidate (`z-auto!`) made the declarations of each
+/// candidate with that value important.
+pub const STATIC_VALUE_COPIES: Switch = Switch::since(4, 1, 15, "a fixed value of a utility gives new nodes to each candidate");
+
+/// `theme(…)` with a path of Tailwind CSS v3 gives the `DEFAULT` of an
+/// object: `theme(colors.foo)` with `--color-foo` and `--color-foo-bar`.
+/// Before: an object was no value ("Could not resolve value for theme
+/// function").
+pub const THEME_FN_OBJECT_DEFAULT: Switch = Switch::since(4, 1, 15, "theme(colors.foo) gives the DEFAULT of an object");
+
+/// A key of a `theme(…)` path is not an index into a text. Before:
+/// `theme(colors.what.1)` gave the second character of the value of
+/// `--color-what`, when the theme had no better value.
+pub const THEME_FN_NO_STRING_INDEX: Switch = Switch::since(4, 1, 15, "a key of a theme() path is not an index into a text");
+
+// --- 4.1.14 ---------------------------------------------------------------
+
+/// A fixed value of a functional utility (`origin-top-left`, `z-auto`,
+/// `rounded-full`) is used only when the theme has no value with that
+/// name. Before: each fixed value was a static utility, so a theme value
+/// with the same name (`--radius-full`) gave a second rule.
+pub const STATIC_VALUES_AFTER_THEME: Switch = Switch::since(4, 1, 14, "a theme value replaces a fixed value of a utility");
+
+/// The corners and the sides of `origin-*` and `perspective-origin-*` are
+/// percentages: `origin-top-left` gives `0 0`. Before: the keywords
+/// (`top left`).
+pub const ORIGIN_PERCENTAGES: Switch = Switch::since(4, 1, 14, "origin-* and perspective-origin-* give percentages");
+
+/// `col-*` and `row-*` do not read `--grid-column-start-*`,
+/// `--grid-column-end-*`, `--grid-row-start-*` and `--grid-row-end-*`.
+/// Before: `col-start-foo` with `--grid-column-start-foo` also gave
+/// `grid-column: var(--grid-column-start-foo)`.
+pub const GRID_LINE_THEME_KEYS: Switch = Switch::since(4, 1, 14, "col-* and row-* do not read the keys of col-start-* and such");
+
+/// A stylesheet with `@theme` and no other feature of Tailwind CSS is
+/// compiled. Before: `@theme` was not a feature, so the output was the
+/// input text with no change.
+pub const AT_THEME_IS_A_FEATURE: Switch = Switch::since(4, 1, 14, "a stylesheet with only @theme is compiled");
+
+/// Custom variants that use each other in a circle (`@variant b` in
+/// `@custom-variant a`, and `@variant a` in `@custom-variant b`) are an
+/// error. Before: no error. (An `@variant` rule in `@custom-variant` stayed
+/// in the output before 4.1.14, which was not valid CSS. The Rust compiler
+/// replaces the rule in each version, but not in a stylesheet with such a
+/// circle: see docs/SWITCHES.md.)
+pub const CUSTOM_VARIANT_CYCLE_ERROR: Switch = Switch::since(4, 1, 14, "a circle of custom variants is an error");
+
+/// An `@variant` rule in the body of `@custom-variant` does not change
+/// how the variant compounds (`group-*`, `not-*`). Before: it was an
+/// at-rule as each other, so no compound variant took the custom variant.
+pub const CUSTOM_VARIANT_AT_VARIANT_COMPOUNDS: Switch = Switch::since(4, 1, 14, "a custom variant with @variant can be in a compound variant");
+
 // --- 4.1.8 ----------------------------------------------------------------
 
 /// The error of `@apply` for a candidate with no result gives the reason:
@@ -641,11 +731,13 @@ pub const ALL: &[&Switch] = &[
     &SCOPE_HOISTING,
     &DEAD_PSEUDO_ELEMENT_RULES,
     &MOZ_ANY_NESTING,
+    &THEME_FN_NAMESPACE_ROOT,
     &NESTING_PASS,
     &SPACING_ZERO_PX,
     &SHADOW_FRACTIONAL_ALPHA,
     &ARIA_DATA_ATTRIBUTE_CHECK,
     &DEFAULT_THEME_SYSTEM_FONTS,
+    &THEME_FN_PREFERS_DEFAULT,
     &AUTO_TRACKS_BARE_SPACING,
     &SPACING_FN_IS_LENGTH,
     &ALPHA_FN_IS_COLOR,
@@ -689,6 +781,18 @@ pub const ALL: &[&Switch] = &[
     &THEME_FN_KEEPS_KEY_CASE,
     &COLOR_MIX_FALLBACK_NO_AMPERSAND,
     &EMPTY_DATA_TYPE_IS_INVALID,
+    &COLOR_MIX_FALLBACK_AMPERSAND,
+    &COMPOUND_MODIFIER_TO_INNER_VARIANT,
+    &AT_RULE_NAME_ENDS_AT_TAB,
+    &STATIC_VALUE_COPIES,
+    &THEME_FN_OBJECT_DEFAULT,
+    &THEME_FN_NO_STRING_INDEX,
+    &STATIC_VALUES_AFTER_THEME,
+    &ORIGIN_PERCENTAGES,
+    &GRID_LINE_THEME_KEYS,
+    &AT_THEME_IS_A_FEATURE,
+    &CUSTOM_VARIANT_CYCLE_ERROR,
+    &CUSTOM_VARIANT_AT_VARIANT_COMPOUNDS,
     &APPLY_ERROR_REASONS,
     &ROTATE_NEGATIVE_ARBITRARY,
     &CRLF_STAYS,

@@ -30,8 +30,9 @@ fn ignored_theme_keys(namespace: &str) -> &'static [&'static str] {
             "--text-shadow",
             "--text-underline-offset",
         ],
-        "--grid-column" => &["--grid-column-start", "--grid-column-end"],
-        "--grid-row" => &["--grid-row-start", "--grid-row-end"],
+        // Before 4.1.14, `col-*` and `row-*` also read these keys.
+        "--grid-column" if crate::switches::GRID_LINE_THEME_KEYS.on() => &["--grid-column-start", "--grid-column-end"],
+        "--grid-row" if crate::switches::GRID_LINE_THEME_KEYS.on() => &["--grid-row-start", "--grid-row-end"],
         _ => &[],
     }
 }
