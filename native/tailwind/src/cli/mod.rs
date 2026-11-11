@@ -110,19 +110,26 @@ pub fn format_duration(duration: Duration) -> String {
     format!("{ns}d")
 }
 
-/// An error in the box of the official program.
+/// An error in the box of the official program (`formatError`): the
+/// error, and then each cause of its `cause` chain, one level deeper.
 fn format_error(style: &Style, error: &Error) -> String {
-    let mut lines = vec![style.red("Error:"), style.dim("\u{250c}")];
     // The official program prints the error object of JavaScript, whose
     // text starts with the name of the error: `Error`, `CssSyntaxError`,
     // or the name of an exception of a plugin.
-    for line in format!("{}: {}", error.name, error.message).split('\n') {
-        // The word wrap of the official program removes the spaces at the
-        // start of a line.
-        let line = line.trim_start_matches(' ');
-        lines.push(format!("{} {line}", style.dim("\u{2502}")));
+    let first = if error.name.is_empty() { error.message.clone() } else { format!("{}: {}", error.name, error.message) };
+    let mut lines = Vec::new();
+    for (depth, text) in std::iter::once(&first).chain(error.causes.iter()).enumerate() {
+        let indent = "  ".repeat(depth);
+        lines.push(format!("{indent}{}", style.red(if depth == 0 { "Error:" } else { "Caused by:" })));
+        lines.push(format!("{indent}{}", style.dim("\u{250c}")));
+        for line in text.split('\n') {
+            // The word wrap of the official program removes the spaces at
+            // the start of a line.
+            let line = line.trim_start_matches(' ');
+            lines.push(format!("{indent}{} {line}", style.dim("\u{2502}")));
+        }
+        lines.push(format!("{indent}{}", style.dim("\u{2514}")));
     }
-    lines.push(style.dim("\u{2514}"));
     lines.join("\n")
 }
 

@@ -5,6 +5,12 @@
  *   __host(op, text)  call the host function, synchronously
  *   __await(promise)  run the pending jobs until the promise settles, and
  *                     return its value or throw its reason
+ *   __compile(source, filename)
+ *                     evaluate a script that has the name of its file: an
+ *                     `import()` in it resolves from that file
+ * When no job is pending, the job loop calls the global function
+ * `__tw_run_timer` of JavaScript (the timers of `setTimeout`). It returns
+ * true when it ran a timer.
  * JavaScript has no file access and no network access except through
  * `__host`.
  */
@@ -14,6 +20,10 @@
 #include <string.h>
 
 #include "quickjs/quickjs.h"
+
+#if defined(__COSMOPOLITAN__)
+#include <cosmo.h>
+#endif
 
 struct TwJs {
     JSRuntime *rt;
@@ -141,6 +151,48 @@ static JSValue js_host(JSContext *ctx, JSValueConst this_val, int argc, JSValueC
     return result;
 }
 
+/* Run one timer of JavaScript. 1: a timer ran. 0: no timer. -1: exception. */
+static int run_timer(JSContext *ctx) {
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue function = JS_GetPropertyStr(ctx, global, "__tw_run_timer");
+    JSValue value;
+    int ran = 0;
+
+    if (JS_IsFunction(ctx, function)) {
+        value = JS_Call(ctx, function, global, 0, NULL);
+        if (JS_IsException(value)) {
+            ran = -1;
+        } else {
+            ran = JS_ToBool(ctx, value) > 0;
+        }
+        JS_FreeValue(ctx, value);
+    }
+    JS_FreeValue(ctx, function);
+    JS_FreeValue(ctx, global);
+    return ran;
+}
+
+/* __compile(source, filename) */
+static JSValue js_compile(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    const char *source, *filename;
+    size_t length;
+    JSValue value;
+
+    (void)this_val;
+    if (argc < 2) return JS_ThrowTypeError(ctx, "__compile needs a source and a file name");
+    source = JS_ToCStringLen(ctx, &length, argv[0]);
+    if (!source) return JS_EXCEPTION;
+    filename = JS_ToCString(ctx, argv[1]);
+    if (!filename) {
+        JS_FreeCString(ctx, source);
+        return JS_EXCEPTION;
+    }
+    value = JS_Eval(ctx, source, length, filename, JS_EVAL_TYPE_GLOBAL);
+    JS_FreeCString(ctx, filename);
+    JS_FreeCString(ctx, source);
+    return value;
+}
+
 /* __await(promise) */
 static JSValue js_await(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
     JSRuntime *rt = JS_GetRuntime(ctx);
@@ -158,7 +210,12 @@ static JSValue js_await(JSContext *ctx, JSValueConst this_val, int argc, JSValue
 
         ran = JS_ExecutePendingJob(rt, &job_ctx);
         if (ran < 0) return JS_EXCEPTION;
-        if (ran == 0) return JS_ThrowInternalError(ctx, "The promise cannot settle: no job is pending");
+        if (ran == 0) {
+            /* No job: the next timer of `setTimeout` runs now. */
+            ran = run_timer(ctx);
+            if (ran < 0) return JS_EXCEPTION;
+            if (ran == 0) return JS_ThrowInternalError(ctx, "The promise cannot settle: no job and no timer is pending");
+        }
     }
 }
 
@@ -225,6 +282,25 @@ static JSModuleDef *module_loader(JSContext *ctx, const char *name, void *opaque
     meta = JS_GetImportMeta(ctx, module);
     if (JS_IsException(meta)) return NULL;
     JS_DefinePropertyValueStr(ctx, meta, "filename", JS_NewString(ctx, name), JS_PROP_C_W_E);
+    if (name[0] == '/') {
+        /* A file: `import.meta.url` and `import.meta.dirname`, as Node.js. */
+        const char *slash = strrchr(name, '/');
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue to_url = JS_GetPropertyStr(ctx, global, "__tw_file_url");
+        JSValue file = JS_NewString(ctx, name);
+        JSValue url = JS_IsFunction(ctx, to_url) ? JS_Call(ctx, to_url, global, 1, &file) : JS_UNDEFINED;
+        if (JS_IsException(url)) {
+            JSValue ignored = JS_GetException(ctx);
+            JS_FreeValue(ctx, ignored);
+            url = JS_UNDEFINED;
+        }
+        JS_DefinePropertyValueStr(ctx, meta, "url", url, JS_PROP_C_W_E);
+        JS_DefinePropertyValueStr(ctx, meta, "dirname",
+                                  JS_NewStringLen(ctx, name, slash == name ? 1 : (size_t)(slash - name)), JS_PROP_C_W_E);
+        JS_FreeValue(ctx, file);
+        JS_FreeValue(ctx, to_url);
+        JS_FreeValue(ctx, global);
+    }
     JS_FreeValue(ctx, meta);
     return module;
 }
@@ -258,6 +334,8 @@ TwJs *tw_js_new(size_t memory_limit, size_t stack_limit, TwJsHost host, TwJsRele
                               JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
     JS_DefinePropertyValueStr(js->ctx, global, "__await", JS_NewCFunction(js->ctx, js_await, "__await", 1),
                               JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+    JS_DefinePropertyValueStr(js->ctx, global, "__compile", JS_NewCFunction(js->ctx, js_compile, "__compile", 2),
+                              JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
     JS_FreeValue(js->ctx, global);
     return js;
 }
@@ -270,6 +348,32 @@ void tw_js_free(TwJs *js) {
 }
 
 void tw_js_free_text(char *text) { free(text); }
+
+/* `process.platform` of Node.js for the system that runs the program. */
+const char *tw_js_platform(void) {
+#if defined(__COSMOPOLITAN__)
+    if (IsWindows()) return "win32";
+    if (IsXnu()) return "darwin";
+    if (IsFreebsd()) return "freebsd";
+    if (IsOpenbsd()) return "openbsd";
+    if (IsNetbsd()) return "netbsd";
+    return "linux";
+#elif defined(_WIN32)
+    return "win32";
+#elif defined(__APPLE__)
+    return "darwin";
+#elif defined(__FreeBSD__)
+    return "freebsd";
+#elif defined(__OpenBSD__)
+    return "openbsd";
+#elif defined(__NetBSD__)
+    return "netbsd";
+#elif defined(__wasi__)
+    return "wasi";
+#else
+    return "linux";
+#endif
+}
 
 size_t tw_js_memory_used(TwJs *js) {
     JSMemoryUsage usage;
@@ -288,8 +392,12 @@ static int run_jobs(TwJs *js, char **out, char **stack) {
     for (;;) {
         JSContext *job_ctx;
         int ran = JS_ExecutePendingJob(js->rt, &job_ctx);
-        if (ran == 0) return 0;
         if (ran < 0) return take_exception(job_ctx, out, stack);
+        if (ran == 0) {
+            ran = run_timer(js->ctx);
+            if (ran < 0) return take_exception(js->ctx, out, stack);
+            if (ran == 0) return 0;
+        }
     }
 }
 

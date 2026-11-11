@@ -1,0 +1,9 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./index.html";
+@plugin "@tailwindcss/aspect-ratio";
+@plugin "@tailwindcss/forms";
+@plugin "@tailwindcss/typography" {
+  className: wysiwyg;
+}

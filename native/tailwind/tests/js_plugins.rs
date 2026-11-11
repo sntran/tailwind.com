@@ -146,11 +146,14 @@ fn fs_and_path_read_through_the_loader() {
 #[test]
 fn a_plugin_cannot_write_files_and_has_no_other_modules() {
     let write = error(&format!("{HEAD}@plugin './plugin.js';"), &[("/app/css/plugin.js", "require('fs').writeFileSync('/x', '1')\nmodule.exports = () => {}")]);
-    assert_eq!(write.message, "fs.writeFileSync is not available: a plugin can only read files.");
-    let network = error(&format!("{HEAD}@plugin './plugin.js';"), &[("/app/css/plugin.js", "require('http')\nmodule.exports = () => {}")]);
-    assert_eq!(network.message, "Cannot find module 'http'\nRequire stack:\n- /app/css/plugin.js");
-    let process = error(&format!("{HEAD}@plugin './plugin.js';"), &[("/app/css/plugin.js", "require('child_process')")]);
-    assert!(process.message.starts_with("Cannot find module 'child_process'"));
+    assert_eq!(write.message, "fs.writeFileSync is not permitted: the JavaScript of a plugin or config has read-only access to files.");
+    // A module for the network loads, and each of its functions throws.
+    let network = error(&format!("{HEAD}@plugin './plugin.js';"), &[("/app/css/plugin.js", "const http = require('http')\nmodule.exports = () => { http.get('http://example.com/') }")]);
+    assert_eq!(network.message, "http.get is not permitted: the JavaScript of a plugin or config has no network access.");
+    let missing = error(&format!("{HEAD}@plugin './plugin.js';"), &[("/app/css/plugin.js", "require('crypto')\nmodule.exports = () => {}")]);
+    assert_eq!(missing.message, "Cannot find module 'crypto'\nRequire stack:\n- /app/css/plugin.js");
+    let process = error(&format!("{HEAD}@plugin './plugin.js';"), &[("/app/css/plugin.js", "require('child_process').execSync('ls')")]);
+    assert_eq!(process.message, "child_process.execSync is not permitted: the JavaScript of a plugin or config cannot start a process.");
 }
 
 #[test]
@@ -189,11 +192,8 @@ fn the_errors_of_the_loader() {
     assert_eq!(error(&css, &[]).message, "Can't resolve './plugin.js' in '/app/css'");
     assert_eq!(error(&format!("{HEAD}@plugin 'some-package';"), &[]).message, "Can't resolve 'some-package' in '/app/css'");
 
-    let typescript = error(&format!("{HEAD}@config './tailwind.config.ts';"), &[("/app/css/tailwind.config.ts", "export default {}")]);
-    assert_eq!(
-        typescript.message,
-        "Cannot load '/app/css/tailwind.config.ts': TypeScript modules are not supported. Use a JavaScript file (.js, .mjs or .cjs)."
-    );
+    let typescript = error(&format!("{HEAD}@config './view.tsx';"), &[("/app/css/view.tsx", "export default {}")]);
+    assert_eq!(typescript.message, "Cannot load '/app/css/view.tsx': a TypeScript module with JSX (.tsx) is not supported. Use a .ts file.");
 
     let thrown = error(&css, &[("/app/css/plugin.js", "throw new TypeError('bad module')")]);
     assert_eq!((thrown.message.as_str(), thrown.name.as_ref()), ("bad module", "TypeError"));
@@ -239,7 +239,7 @@ fn the_environment_of_a_module() {
     let css = build(&format!("{HEAD}@plugin './plugin.js';"), &[("/app/css/plugin.js", plugin)], &["env"]);
     assert_eq!(
         css,
-        ".env {\n  content: [\"object\",true,\"undefined\",\"undefined\",\"undefined\",\"abc\",\"YWJj\",\"function\",\"/app/css/plugin.js\",true];\n}\n"
+        ".env {\n  content: [\"object\",true,\"function\",\"function\",\"undefined\",\"abc\",\"YWJj\",\"function\",\"/app/css/plugin.js\",true];\n}\n"
     );
 }
 
@@ -442,4 +442,137 @@ fn the_locations_are_the_same_after_json() {
 
     let made = ast_from_json(&serde_json::json!([{ "kind": "declaration", "property": "a", "value": "b" }]), &table).unwrap();
     assert!(made[0].src().is_none() && made[0].dst().is_none());
+}
+
+#[test]
+fn typescript_modules_lose_their_types() {
+    let files = [
+        (
+            "/app/css/tailwind.config.ts",
+            "import type { Config } from 'tailwindcss'\nimport plugin from 'tailwindcss/plugin'\nimport { size, type Size } from './lib/size'\nimport rule from './rule.cts'\ninterface Theme { spacing: Record<string, Size> }\nenum Color { Red = '#f00' }\nnamespace Extra { export const width = '9px'; export function twice<T>(value: T): T[] { return [value, value] } }\nconst theme = { spacing: { big: size } } satisfies Theme\nexport default {\n  theme: { extend: { ...theme, colors: { brand: Color.Red as string } } },\n  plugins: [plugin(({ addUtilities }): void => addUtilities({ '.ts': { ...rule, width: Extra.width, content: JSON.stringify(Extra.twice<number>(1)) } }))],\n} satisfies Config\n",
+        ),
+        ("/app/css/lib/size.ts", "export type Size = string\nexport const size: Size = '10rem'\n"),
+        ("/app/css/rule.cts", "const rule: { [key: string]: string } = { top: '1px' }\nexport = rule\n"),
+    ];
+    let css = build(&format!("{HEAD}@config './tailwind.config.ts';"), &files, &["p-big", "text-brand", "ts"]);
+    assert_eq!(
+        css,
+        ".ts {\n  top: 1px;\n  width: 9px;\n  content: [1,1];\n}\n.p-big {\n  padding: 10rem;\n}\n.text-brand {\n  color: #f00;\n}\n"
+    );
+
+    // A `.ts` file in the CommonJS style, also in a package of ES modules.
+    let files = [
+        ("/app/css/package.json", "{\"type\": \"module\"}"),
+        ("/app/css/plugin.ts", "const value: string = 'red'\nmodule.exports = ({ addUtilities }: any) => addUtilities({ '.cjs-ts': { color: value } })\n"),
+        ("/app/css/esm.ts", "const value: string = 'blue'\nexport default ({ addUtilities }: any) => addUtilities({ '.esm-ts': { color: value } })\n"),
+        ("/app/css/tailwind.config.js", "import width from './width.ts'\nexport default { theme: { extend: { spacing: { w: width } } } }\n"),
+        ("/app/css/width.ts", "export default '7px' as string\n"),
+    ];
+    let css = build(&format!("{HEAD}@plugin './plugin.ts';@plugin './esm.ts';@config './tailwind.config.js';"), &files, &["cjs-ts", "esm-ts", "m-w"]);
+    assert_eq!(css, ".m-w {\n  margin: 7px;\n}\n.cjs-ts {\n  color: red;\n}\n.esm-ts {\n  color: blue;\n}\n");
+
+    // The record of the dependencies has the TypeScript files.
+    let (compiler, loader) = try_compile(&format!("{HEAD}@config './tailwind.config.js';"), &files);
+    compiler.unwrap();
+    assert!(loader.dependencies.borrow().contains(&"/app/css/width.ts".to_string()));
+
+    // A syntax error has the path of the file.
+    let syntax = error(&format!("{HEAD}@config './bad.ts';"), &[("/app/css/bad.ts", "export default {\n  theme: { extend: { }\n} satisfies Config\n")]);
+    assert_eq!(syntax.name, "SyntaxError");
+    assert_eq!(syntax.message, "Unexpected token, expected \",\" (4:1)\n/app/css/bad.ts:4:1");
+}
+
+#[test]
+fn the_plugins_of_the_standalone_program_are_in_the_program() {
+    // No `node_modules` directory.
+    let css = build(&format!("{HEAD}@plugin '@tailwindcss/aspect-ratio';"), &[], &["aspect-w-4", "aspect-h-3"]);
+    assert!(css.contains(".aspect-h-3 {\n  --tw-aspect-h: 3;\n}"), "{css}");
+    let css = build(&format!("{HEAD}@plugin '@tailwindcss/forms' {{ strategy: 'class'; }}"), &[], &["form-input"]);
+    assert!(css.contains(".form-input {"), "{css}");
+    let css = build(&format!("{HEAD}@plugin '@tailwindcss/typography';"), &[], &["prose"]);
+    assert!(css.contains(".prose {") && css.contains(":where(blockquote)"), "{css}");
+
+    // A copy in `node_modules` does not win for `@plugin`, as in the
+    // standalone program. `require` in a module finds the copy.
+    let files = [
+        ("/app/node_modules/@tailwindcss/aspect-ratio/index.js", "module.exports = ({ addUtilities }) => addUtilities({ '.own-copy': { color: 'red' } })"),
+        ("/app/css/tailwind.config.js", "module.exports = { plugins: [require('@tailwindcss/aspect-ratio')] }"),
+    ];
+    let css = build(&format!("{HEAD}@plugin '@tailwindcss/aspect-ratio';"), &files, &["aspect-h-3", "own-copy"]);
+    assert_eq!(css, ".aspect-h-3 {\n  --tw-aspect-h: 3;\n}\n");
+    let css = build(&format!("{HEAD}@config './tailwind.config.js';"), &files, &["aspect-h-3", "own-copy"]);
+    assert_eq!(css, ".own-copy {\n  color: red;\n}\n");
+
+    // `require` of such a plugin with no `node_modules` is an error, as in
+    // the standalone program.
+    let missing = error(&format!("{HEAD}@config './tailwind.config.js';"), &[files[1]]);
+    assert!(missing.message.starts_with("Cannot find module '@tailwindcss/aspect-ratio'"), "{}", missing.message);
+    // The other packages of the scope are not in the program.
+    assert_eq!(error(&format!("{HEAD}@plugin '@tailwindcss/container-queries';"), &[]).message, "Can't resolve '@tailwindcss/container-queries' in '/app/css'");
+}
+
+#[test]
+fn a_dynamic_import_in_a_commonjs_file_resolves_from_the_file() {
+    let files = [
+        ("/app/css/plugins/plugin.js", "module.exports = ({ addUtilities }) => {}\nmodule.exports.ready = import('./lib/value.mjs').then((module) => module.default)"),
+        ("/app/css/plugins/lib/value.mjs", "import data from '../data.json' with { type: 'json' }\nexport default data.color"),
+        ("/app/css/plugins/data.json", "{\"color\": \"teal\"}"),
+        (
+            "/app/css/main.mjs",
+            "import plugin from './plugins/plugin.js'\nconst color = await plugin.ready\nexport default ({ addUtilities }) => addUtilities({ '.dynamic': { color } })",
+        ),
+    ];
+    let css = build(&format!("{HEAD}@plugin './main.mjs';"), &files, &["dynamic"]);
+    assert_eq!(css, ".dynamic {\n  color: teal;\n}\n");
+}
+
+#[test]
+fn the_imports_of_a_package_json() {
+    let files = [
+        (
+            "/app/package.json",
+            "{\"imports\": {\"#theme\": \"./theme/index.js\", \"#lib/*\": \"./lib/*.js\", \"#dep\": \"dep\", \"#kind\": {\"import\": \"./kind/esm.mjs\", \"require\": \"./kind/cjs.cjs\"}}}",
+        ),
+        ("/app/theme/index.js", "module.exports = { color: 'navy' }"),
+        ("/app/lib/size.js", "module.exports = '3px'"),
+        ("/app/kind/esm.mjs", "export default 'import'"),
+        ("/app/kind/cjs.cjs", "module.exports = 'require'"),
+        ("/app/node_modules/dep/index.js", "module.exports = '5px'"),
+        (
+            "/app/css/plugin.js",
+            "const theme = require('#theme')\nmodule.exports = ({ addUtilities }) => addUtilities({ '.imports': { color: theme.color, top: require('#lib/size'), left: require('#dep'), content: JSON.stringify(require('#kind')) } })",
+        ),
+        ("/app/css/plugin.mjs", "import kind from '#kind'\nimport size from '#lib/size'\nexport default ({ addUtilities }) => addUtilities({ '.imports-esm': { top: size, content: JSON.stringify(kind) } })"),
+    ];
+    let css = build(&format!("{HEAD}@plugin './plugin.js';@plugin './plugin.mjs';"), &files, &["imports", "imports-esm"]);
+    assert_eq!(
+        css,
+        ".imports {\n  color: navy;\n  top: 3px;\n  left: 5px;\n  content: \"require\";\n}\n.imports-esm {\n  top: 3px;\n  content: \"import\";\n}\n"
+    );
+    let missing = error(&format!("{HEAD}@plugin './plugin.js';"), &[("/app/package.json", "{\"imports\": {}}"), ("/app/css/plugin.js", "require('#theme')")]);
+    assert!(missing.message.starts_with("Cannot find module '#theme'"), "{}", missing.message);
+}
+
+#[test]
+fn an_error_has_its_chain_of_causes() {
+    let css = format!("{HEAD}@plugin './plugin.js';");
+    let plugin = "const first = new RangeError('the first cause')\nconst second = new TypeError('the second cause', { cause: first })\nthrow new Error('the module fails', { cause: second })";
+    let error = error(&css, &[("/app/css/plugin.js", plugin)]);
+    assert_eq!(error.message, "the module fails");
+    assert_eq!(error.causes, ["TypeError: the second cause", "RangeError: the first cause"]);
+
+    // A cause that is not an error, and a chain that is a circle.
+    let plugin = "const a = new Error('a')\nconst b = new Error('b', { cause: a })\na.cause = b\nmodule.exports = () => { throw new Error('top', { cause: b }) }";
+    let error = self::error(&css, &[("/app/css/plugin.js", plugin)]);
+    assert_eq!(error.causes, ["Error: b", "Error: a"]);
+    let error = self::error(&css, &[("/app/css/plugin.js", "throw new Error('text cause', { cause: 'only text' })")]);
+    assert_eq!(error.causes, ["only text"]);
+    let error = self::error(&css, &[("/app/css/plugin.js", "throw new Error('no cause')")]);
+    assert!(error.causes.is_empty());
+
+    // An exception of a plugin function in a build.
+    let plugin = "module.exports = ({ matchUtilities }) => matchUtilities({ boom: () => { throw new Error('in a build', { cause: new Error('the reason') }) } })";
+    let (compiler, _) = try_compile(&css, &[("/app/css/plugin.js", plugin)]);
+    let error = compiler.unwrap().try_build(&["boom-[1px]".to_string()]).unwrap_err();
+    assert_eq!((error.message.as_str(), error.causes.as_slice()), ("in a build", ["Error: the reason".to_string()].as_slice()));
 }

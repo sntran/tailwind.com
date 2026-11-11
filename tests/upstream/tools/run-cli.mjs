@@ -14,7 +14,7 @@
 // source map that is in a comment as Base64 text. Lightning CSS gives the paths without the
 // first slash: there the record has PROJECT.
 //
-// A case with a file standalone.txt gets the module interop of the standalone program
+// A case with a file standalone.txt gets the module rules of the standalone program
 // (see bun-interop.mjs).
 //
 // In stderr.txt, the text <project> replaces the absolute path of the project copy.
@@ -41,6 +41,26 @@ if (!fs.existsSync(bin)) {
     fs.writeFileSync(path.join(scratch, 'package.json'), '{"private":true}\n')
   }
   execFileSync('npm', ['install', `tailwindcss@${version}`, `@tailwindcss/cli@${version}`], {
+    cwd: scratch,
+    stdio: 'inherit',
+  })
+}
+
+// The plugins that the standalone program has in its file, at the versions of package.json of
+// this directory. A case that uses one of them with no node_modules directory in its project
+// gets the package from the scratch directory.
+let tools = path.dirname(fileURLToPath(import.meta.url))
+let embedded = Object.entries(JSON.parse(fs.readFileSync(path.join(tools, 'package.json'), 'utf8')).devDependencies)
+  .filter(([name]) => name.startsWith('@tailwindcss/'))
+  .filter(([name, wanted]) => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(scratch, 'node_modules', name, 'package.json'), 'utf8')).version !== wanted
+    } catch {
+      return true
+    }
+  })
+if (embedded.length > 0) {
+  execFileSync('npm', ['install', '--legacy-peer-deps', ...embedded.map(([name, wanted]) => `${name}@${wanted}`)], {
     cwd: scratch,
     stdio: 'inherit',
   })

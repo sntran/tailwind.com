@@ -34,6 +34,22 @@ impl ModuleLoader for FileSystem {
         Some(String::from_utf8_lossy(&bytes).into_owned())
     }
 
+    fn read_bytes(&self, path: &str) -> Option<Vec<u8>> {
+        std::fs::read(path).ok()
+    }
+
+    fn is_symlink(&self, path: &str) -> bool {
+        std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
+    }
+
+    fn real_path(&self, path: &str) -> Option<String> {
+        let real = std::fs::canonicalize(path).ok()?;
+        // Windows gives a path with the prefix `\\?\`: keep the path that
+        // the module gave there.
+        let text = real.to_string_lossy();
+        Some(if text.starts_with('/') { text.into_owned() } else { path.to_string() })
+    }
+
     fn stat(&self, path: &str) -> Option<FileStat> {
         let meta = std::fs::metadata(path).ok()?;
         let modified_ms = meta
@@ -79,7 +95,16 @@ impl ModuleLoader for FileSystem {
     }
 
     fn env(&self) -> Vec<(String, String)> {
-        // Only `NODE_ENV`: a plugin does not get the environment of the user.
-        std::env::var("NODE_ENV").ok().map(|value| ("NODE_ENV".to_string(), value)).into_iter().collect()
+        // The environment of the program, as `process.env` of Node.js. A
+        // variable that is not Unicode text is not there.
+        std::env::vars_os().filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?))).collect()
+    }
+
+    fn argv(&self) -> Vec<String> {
+        let mut args = std::env::args_os().map(|arg| arg.to_string_lossy().into_owned());
+        let program = args.next().unwrap_or_else(|| "tailwindcss".to_string());
+        let mut argv = vec![program.clone(), program];
+        argv.extend(args);
+        argv
     }
 }

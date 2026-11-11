@@ -1,0 +1,33 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .depth-2 {
+    z-index: 20;
+  }
+  .depth-\[7\] {
+    z-index: 7;
+  }
+  .ts-one {
+    color: rebeccapurple;
+    line-height: 100;
+  }
+  .ts-two {
+    opacity: 0.5;
+  }
+  .cts-rule {
+    content: "commonjs.cts";
+  }
+  .mts-rule {
+    content: "module.mts";
+  }
+  .note-box {
+    border: 3px solid currentColor;
+  }
+  .hocus\:underline:hover {
+    text-decoration-line: underline;
+  }
+  .hocus\:underline:focus {
+    text-decoration-line: underline;
+  }
+}
+

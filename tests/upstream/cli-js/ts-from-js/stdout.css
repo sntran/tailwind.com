@@ -1,0 +1,17 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .gap-step {
+    gap: 1.5rem;
+  }
+  .bg-paper {
+    background-color: #fafaf9;
+  }
+  .text-ink {
+    color: #111827;
+  }
+  .from-cjs {
+    outline: 1px dashed;
+  }
+}
+

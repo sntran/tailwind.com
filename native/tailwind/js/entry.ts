@@ -9,8 +9,9 @@ import type { AstNode } from 'tailwindcss-src/ast'
 import { applyCompatibilityHooks } from 'tailwindcss-src/compat/apply-compat-hooks'
 import { createDesignSystem } from './design-system'
 import './globals'
-import { callbacks, decode, encode, setTracking } from './host'
+import { callbacks, decode, encode, host, setTracking } from './host'
 import { loadModule, moduleSource } from './modules'
+import { drainTimers } from './timers'
 
 declare function __await<T>(promise: Promise<T>): T
 
@@ -23,31 +24,58 @@ global.__tw_track = (text: string) => {
   setTracking(text === 'true')
 }
 
-// Run `applyCompatibilityHooks` on the tree of the stylesheet.
-global.__tw_compat = (text: string) => {
-  let { base, ast, sources } = decode(text) as {
-    base: string
-    ast: AstNode[]
-    sources: { base: string; pattern: string; negated: boolean }[]
+// The official program prints the `cause` chain of an error. Give the
+// host the text of each cause of the exception, as `${cause}`.
+function withCauses<T>(fn: () => T): T {
+  try {
+    return fn()
+  } catch (error) {
+    let causes: string[] = []
+    let seen = new Set<unknown>()
+    let current: any = error
+    while (typeof current === 'object' && current !== null && 'cause' in current && current.cause != null) {
+      if (seen.add(current).has(current.cause)) break
+      current = current.cause
+      try {
+        causes.push(`${current}`)
+      } catch {
+        causes.push('[object]')
+      }
+    }
+    host('error.causes', causes)
+    throw error
   }
-  let features = __await(
-    applyCompatibilityHooks({ designSystem: designSystem as any, base, ast, loadModule, sources }),
-  )
-  return encode({ ast, sources, features })
 }
+
+// Run `applyCompatibilityHooks` on the tree of the stylesheet.
+global.__tw_compat = (text: string) =>
+  withCauses(() => {
+    let { base, ast, sources } = decode(text) as {
+      base: string
+      ast: AstNode[]
+      sources: { base: string; pattern: string; negated: boolean }[]
+    }
+    let features = __await(
+      applyCompatibilityHooks({ designSystem: designSystem as any, base, ast, loadModule, sources }),
+    )
+    // The timers that no module waited for run now, as at the end of a
+    // program of Node.js.
+    drainTimers(__await)
+    return encode({ ast, sources, features })
+  })
 
 // The compile function of a utility. `undefined`: no match. `null`: the
 // candidate is not valid.
 global.__tw_utility = (text: string) => {
   let { id, candidate } = decode(text)
-  let result = callbacks[id](candidate)
+  let result = withCauses(() => callbacks[id](candidate))
   return result === undefined ? undefined : encode(result)
 }
 
 // The function of a variant. It changes the rule in place.
 global.__tw_variant = (text: string) => {
   let { id, rule, variant } = decode(text)
-  let result = callbacks[id](rule, variant)
+  let result = withCauses(() => callbacks[id](rule, variant))
   return encode({ rule, applies: result !== null })
 }
 

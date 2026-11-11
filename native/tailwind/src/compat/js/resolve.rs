@@ -42,8 +42,13 @@ impl ModuleFormat {
     }
 }
 
-const EXTENSIONS: [&str; 4] = [".js", ".json", ".cjs", ".mjs"];
-const INDEX_FILES: [&str; 4] = ["index.js", "index.json", "index.cjs", "index.mjs"];
+/// The extensions of a path with no extension, as `@tailwindcss/node`
+/// (`.js`, `.json`, `.ts`) and jiti (the other ones).
+const EXTENSIONS: [&str; 7] = [".js", ".json", ".cjs", ".mjs", ".ts", ".mts", ".cts"];
+const INDEX_FILES: [&str; 7] = ["index.js", "index.json", "index.cjs", "index.mjs", "index.ts", "index.mts", "index.cts"];
+/// A TypeScript module names another one with the extension of its
+/// output: `./file.js` is `./file.ts` when there is no `file.js`.
+const TYPESCRIPT_FOR: [(&str, &str); 3] = [(".js", ".ts"), (".mjs", ".mts"), (".cjs", ".cts")];
 
 /// A path with no `.` and `..` parts.
 pub fn normalize(path: &str) -> String {
@@ -96,9 +101,13 @@ fn is_relative(name: &str) -> bool {
 /// The file of the module `name`, for a module in the directory `base`.
 pub fn resolve(fs: &dyn ModuleLoader, name: &str, base: &str, kind: ResolveKind) -> Result<String, String> {
     let found = match kind {
+        // `@tailwindcss/node`: the two resolvers of `enhanced-resolve`.
         ResolveKind::Entry => resolve_with(fs, name, base, &["node", "import"]).or_else(|| resolve_with(fs, name, base, &["node", "require"])),
-        ResolveKind::Require => resolve_with(fs, name, base, &["node", "require"]),
-        ResolveKind::Import => resolve_with(fs, name, base, &["node", "import"]),
+        // Node.js 22: the conditions of `require` and of `import`. The
+        // sequence of the keys of the package selects the target, and not
+        // the sequence of these lists.
+        ResolveKind::Require => resolve_with(fs, name, base, &["node", "require", "module-sync", "node-addons"]),
+        ResolveKind::Import => resolve_with(fs, name, base, &["node", "import", "module-sync", "node-addons"]),
     };
     let Some(path) = found else {
         return Err(match kind {
@@ -108,10 +117,8 @@ pub fn resolve(fs: &dyn ModuleLoader, name: &str, base: &str, kind: ResolveKind)
             _ => format!("Cannot find module '{name}'"),
         });
     };
-    if [".ts", ".mts", ".cts", ".tsx"].iter().any(|extension| path.ends_with(extension)) {
-        return Err(format!(
-            "Cannot load '{path}': TypeScript modules are not supported. Use a JavaScript file (.js, .mjs or .cjs)."
-        ));
+    if path.ends_with(".tsx") {
+        return Err(format!("Cannot load '{path}': a TypeScript module with JSX (.tsx) is not supported. Use a .ts file."));
     }
     Ok(path)
 }
@@ -121,7 +128,7 @@ fn resolve_with(fs: &dyn ModuleLoader, name: &str, base: &str, conditions: &[&st
         return resolve_path(fs, &join(base, name), conditions);
     }
     if name.starts_with('#') {
-        return None;
+        return resolve_imports(fs, name, base, conditions);
     }
 
     // `package` or `@scope/package`, and the path in the package.
@@ -180,7 +187,7 @@ fn resolve_path(fs: &dyn ModuleLoader, path: &str, conditions: &[&str]) -> Optio
     if is_file(fs, path) {
         return Some(path.to_string());
     }
-    for extension in EXTENSIONS.iter().chain([".ts"].iter()) {
+    for extension in EXTENSIONS {
         let file = format!("{path}{extension}");
         if is_file(fs, &file) {
             return Some(file);
@@ -189,7 +196,66 @@ fn resolve_path(fs: &dyn ModuleLoader, path: &str, conditions: &[&str]) -> Optio
     if is_dir(fs, path) {
         return resolve_directory(fs, path, conditions);
     }
+    for (output, source) in TYPESCRIPT_FOR {
+        if let Some(stem) = path.strip_suffix(output) {
+            let file = format!("{stem}{source}");
+            if is_file(fs, &file) {
+                return Some(file);
+            }
+        }
+    }
     None
+}
+
+/// `#name`: the `imports` of the nearest `package.json` (the scope of the
+/// package), as Node.js. A target is a file of the package (`./…`) or a
+/// name of another package.
+fn resolve_imports(fs: &dyn ModuleLoader, name: &str, base: &str, conditions: &[&str]) -> Option<String> {
+    if name == "#" || name.starts_with("#/") {
+        return None;
+    }
+    let mut directory = normalize(base);
+    let (root, manifest) = loop {
+        if !directory.ends_with("/node_modules") {
+            if let Some(manifest) = read_json(fs, &format!("{}/package.json", directory.trim_end_matches('/'))) {
+                break (directory, manifest);
+            }
+        }
+        if directory == "/" {
+            return None;
+        }
+        directory = dirname(&directory).to_string();
+    };
+    let Value::Object(imports) = manifest.get("imports")? else { return None };
+
+    let target = match imports.get(name) {
+        Some(target) => resolve_target_with(target, "", conditions, true)?,
+        None => {
+            // A pattern with one `*`. The longest prefix wins.
+            let mut best: Option<(&str, &str, &Value)> = None;
+            for (pattern, target) in imports {
+                let Some((prefix, suffix)) = pattern.split_once('*') else { continue };
+                if name.len() >= prefix.len() + suffix.len()
+                    && name.starts_with(prefix)
+                    && name.ends_with(suffix)
+                    && best.is_none_or(|(p, _, _)| prefix.len() > p.len())
+                {
+                    best = Some((prefix, suffix, target));
+                }
+            }
+            let (prefix, suffix, target) = best?;
+            resolve_target_with(target, &name[prefix.len()..name.len() - suffix.len()], conditions, true)?
+        }
+    };
+    if target.starts_with("./") {
+        let path = join(&root, &target);
+        return is_file(fs, &path).then_some(path);
+    }
+    // The name of a package: resolve it from the package of the `imports`.
+    if target.starts_with('#') {
+        return None;
+    }
+    resolve_with(fs, &target, &root, conditions)
 }
 
 /// The main file of a directory: `main` of its `package.json` (then
@@ -268,13 +334,21 @@ fn target_has_star(target: &Value) -> bool {
 }
 
 fn resolve_target(target: &Value, star: &str, conditions: &[&str]) -> Option<String> {
+    resolve_target_with(target, star, conditions, false)
+}
+
+/// The target of an `exports` or `imports` entry. The first key of an
+/// object that is `default` or one of the conditions gives the target, in
+/// the sequence of the keys of the package, as Node.js. `packages`: a
+/// target can be the name of a package (`imports` only).
+fn resolve_target_with(target: &Value, star: &str, conditions: &[&str], packages: bool) -> Option<String> {
     match target {
-        Value::String(text) => text.starts_with("./").then(|| text.replace('*', star)),
-        Value::Array(items) => items.iter().find_map(|item| resolve_target(item, star, conditions)),
+        Value::String(text) => (text.starts_with("./") || (packages && !text.starts_with('.') && !text.starts_with('/'))).then(|| text.replace('*', star)),
+        Value::Array(items) => items.iter().find_map(|item| resolve_target_with(item, star, conditions, packages)),
         Value::Object(map) => map
             .iter()
             .filter(|(condition, _)| *condition == "default" || conditions.contains(&condition.as_str()))
-            .find_map(|(_, value)| resolve_target(value, star, conditions)),
+            .find_map(|(_, value)| resolve_target_with(value, star, conditions, packages)),
         _ => None,
     }
 }
@@ -282,11 +356,16 @@ fn resolve_target(target: &Value, star: &str, conditions: &[&str]) -> Option<Str
 /// The format of a module file: its extension, or the `type` of the
 /// nearest `package.json`.
 pub fn module_format(fs: &dyn ModuleLoader, path: &str) -> ModuleFormat {
-    if path.ends_with(".mjs") {
+    if path.ends_with(".mjs") || path.ends_with(".mts") {
         return ModuleFormat::Esm;
     }
-    if path.ends_with(".cjs") {
+    if path.ends_with(".cjs") || path.ends_with(".cts") {
         return ModuleFormat::CommonJs;
+    }
+    // The official program loads a `.ts` file with jiti when the engine
+    // cannot: the two syntaxes work, with each `type` of the package.
+    if path.ends_with(".ts") {
+        return ModuleFormat::Unknown;
     }
     if path.ends_with(".json") {
         return ModuleFormat::Json;
@@ -397,10 +476,35 @@ mod tests {
     }
 
     #[test]
-    fn refuses_typescript() {
-        let error = entry("./tailwind.config.ts").unwrap_err();
-        assert!(error.contains("TypeScript modules are not supported"), "{error}");
-        assert!(entry("./tailwind.config").unwrap_err().contains("TypeScript"));
+    fn resolves_typescript_files() {
+        let fs = MemoryLoader::new(&[
+            ("/app/css/tailwind.config.ts", ""),
+            ("/app/css/both.js", ""),
+            ("/app/css/both.ts", ""),
+            ("/app/css/theme.ts", ""),
+            ("/app/css/module.mts", ""),
+            ("/app/css/common.cts", ""),
+            ("/app/css/dir/index.ts", ""),
+            ("/app/css/view.tsx", ""),
+        ]);
+        let from = |name: &str, kind| resolve(&fs, name, "/app/css", kind);
+        assert_eq!(from("./tailwind.config.ts", ResolveKind::Entry).unwrap(), "/app/css/tailwind.config.ts");
+        assert_eq!(from("./tailwind.config", ResolveKind::Entry).unwrap(), "/app/css/tailwind.config.ts");
+        // A JavaScript file comes before a TypeScript file.
+        assert_eq!(from("./both", ResolveKind::Require).unwrap(), "/app/css/both.js");
+        assert_eq!(from("./theme", ResolveKind::Import).unwrap(), "/app/css/theme.ts");
+        assert_eq!(from("./module", ResolveKind::Import).unwrap(), "/app/css/module.mts");
+        assert_eq!(from("./common", ResolveKind::Require).unwrap(), "/app/css/common.cts");
+        assert_eq!(from("./dir", ResolveKind::Require).unwrap(), "/app/css/dir/index.ts");
+        // The name of the output of the TypeScript compiler.
+        assert_eq!(from("./theme.js", ResolveKind::Import).unwrap(), "/app/css/theme.ts");
+        assert_eq!(from("./module.mjs", ResolveKind::Import).unwrap(), "/app/css/module.mts");
+        assert_eq!(from("./common.cjs", ResolveKind::Require).unwrap(), "/app/css/common.cts");
+        assert!(from("./view.tsx", ResolveKind::Entry).unwrap_err().contains(".tsx"));
+
+        assert_eq!(module_format(&fs, "/app/css/module.mts"), ModuleFormat::Esm);
+        assert_eq!(module_format(&fs, "/app/css/common.cts"), ModuleFormat::CommonJs);
+        assert_eq!(module_format(&fs, "/app/css/theme.ts"), ModuleFormat::Unknown);
     }
 
     #[test]

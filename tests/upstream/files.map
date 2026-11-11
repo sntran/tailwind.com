@@ -33,6 +33,7 @@ packages/tailwindcss/src/compat/legacy-utilities.ts	native/tailwind/src/compat/l
 packages/tailwindcss/src/compat/plugin-functions.ts	native/tailwind/src/compat/theme_fn.rs	port
 packages/tailwindcss/src/compat/apply-compat-hooks.ts	native/tailwind/src/compat.rs	port
 packages/tailwindcss/src/compat/	native/tailwind/assets/compat.js (the bundle; new host calls: native/tailwind/js/ and native/tailwind/src/compat/js/)	gen
+packages/@tailwindcss-standalone/package.json	UPSTREAM tests/upstream/tools/package.json native/tailwind/assets/plugins/ (the versions of the plugins in the program)	gen
 packages/tailwindcss/index.css	native/tailwind/assets/index.css	copy
 packages/tailwindcss/theme.css	native/tailwind/assets/theme.css	copy
 packages/tailwindcss/preflight.css	native/tailwind/assets/preflight.css	copy
@@ -41,7 +42,7 @@ packages/@tailwindcss-cli/src/	native/tailwind/src/cli/mod.rs native/tailwind/sr
 packages/@tailwindcss-node/src/compile.ts	native/tailwind/src/cli/resolve.rs native/tailwind/src/cli/mod.rs	port
 packages/@tailwindcss-node/src/optimize.ts	native/tailwind/src/cli/optimize_css.rs native/tailwind/src/cli/remapping.rs	port
 packages/@tailwindcss-node/src/source-maps.ts	native/tailwind/src/cli/source_maps.rs	port
-packages/@tailwindcss-standalone/src/index.ts	native/tailwind/src/cli/resolve.rs	port
+packages/@tailwindcss-standalone/src/index.ts	native/tailwind/src/cli/resolve.rs native/tailwind/js/modules.ts (the plugins in the program: EMBEDDED, loadModule) tests/upstream/tools/bun-interop.mjs	port
 crates/oxide/	native/tailwind/Cargo.toml	dep
 crates/ignore/	native/tailwind/Cargo.toml	dep
 pnpm-workspace.yaml	native/tailwind/Cargo.toml	dep

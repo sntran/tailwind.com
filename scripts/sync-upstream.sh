@@ -66,6 +66,16 @@ check() {
         log "c_src/quickjs is not at the commit $QUICKJS_COMMIT"
         status=1
     fi
+    # The plugins of the standalone program, and the TypeScript transform:
+    # the versions of the tools and of the files in the program.
+    expect tests/upstream/tools/package.json "\"@tailwindcss/forms\": \"$STANDALONE_FORMS\""
+    expect tests/upstream/tools/package.json "\"@tailwindcss/typography\": \"$STANDALONE_TYPOGRAPHY\""
+    expect tests/upstream/tools/package.json "\"@tailwindcss/aspect-ratio\": \"$STANDALONE_ASPECT_RATIO\""
+    expect tests/upstream/tools/package.json "\"sucrase\": \"$SUCRASE_VERSION\""
+    expect native/tailwind/assets/plugins/forms.js "@tailwindcss/forms $STANDALONE_FORMS "
+    expect native/tailwind/assets/plugins/typography.js "@tailwindcss/typography $STANDALONE_TYPOGRAPHY "
+    expect native/tailwind/assets/plugins/aspect-ratio.js "@tailwindcss/aspect-ratio $STANDALONE_ASPECT_RATIO "
+    expect native/tailwind/assets/typescript.js "sucrase $SUCRASE_VERSION"
     # The packages have one version of their own.
     p=$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' package.json)
     expect mix.exs "@version \"$p\""
@@ -193,12 +203,29 @@ apply() {
     (cd "$clone" && pnpm install --frozen-lockfile --ignore-scripts > "$work/pnpm.log" 2>&1) ||
         die "pnpm install failed: see $work/pnpm.log"
 
-    log "The generated files"
+    log "The plugins of the standalone program"
     tools=tests/upstream/tools
+    # The versions of the lock file of Tailwind CSS go to UPSTREAM and to
+    # the package.json of the tools. make-all.sh makes the files of the
+    # program from these packages (build-plugin-bundles.mjs).
+    for item in FORMS:forms TYPOGRAPHY:typography ASPECT_RATIO:aspect-ratio; do
+        key=${item%%:*}
+        name=${item#*:}
+        version=$(sed -n "s|^  '@tailwindcss/$name@\\([0-9][^'(]*\\)':\$|\\1|p" "$clone/pnpm-lock.yaml" | head -1)
+        [ -n "$version" ] || die "the lock file of Tailwind CSS has no @tailwindcss/$name"
+        sed -i.bak "s|^STANDALONE_$key=.*|STANDALONE_$key=$version|" UPSTREAM
+        sed -i.bak "s|\"@tailwindcss/$name\": \"[^\"]*\"|\"@tailwindcss/$name\": \"$version\"|" $tools/package.json
+        rm -f UPSTREAM.bak $tools/package.json.bak
+    done
+    (cd $tools && npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts > "$work/npm-tools.log" 2>&1) ||
+        die "npm install in $tools failed: see $work/npm-tools.log"
+
+    log "The generated files"
     node $tools/gen-property-order.mjs "$clone" native/tailwind/src/property_order.rs
     node $tools/gen-default-theme.mjs "$clone" native/tailwind/src/compat/default_theme.rs
-    # make-all.sh, below, also makes the JavaScript bundle of the plugin
-    # layer (native/tailwind/assets/compat.js) and the plugin records.
+    # make-all.sh, below, also makes the JavaScript files of the program
+    # (native/tailwind/assets/compat.js, typescript.js and plugins/) and
+    # the plugin records.
 
     log "The record of the official compiler (this takes some minutes)"
     bash $tools/make-all.sh "$clone" "$work/record"
