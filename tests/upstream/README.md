@@ -611,5 +611,8 @@ Each script takes the path of the upstream clone as its first argument.
 The reduced cases of the differential fuzzer (`tests/fuzz/fuzz.mjs`), one
 JSON line each: `seed`, `version`, `css`, `candidates`, and `official`,
 the output of the official compiler (`css` or `error`).
-`native/tailwind/tests/fuzz_found.rs` replays them. The first three lines
-come from a check of the fuzzer itself; their official output is real.
+A case with JavaScript also has `files` (name to text) and `copy` (name
+to a file of this repository). `native/tailwind/tests/fuzz_found.rs`
+replays them, and `tests/fuzz/refresh.mjs` records their official output
+again. The first three lines come from a check of the fuzzer itself;
+their official output is real.

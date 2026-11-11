@@ -2,10 +2,14 @@
 //! with the output of the official compiler: `tests/upstream/fuzz-found.jsonl`.
 //!
 //! Each line is `{"css", "candidates", "official": {"css"} or {"error"}}`,
-//! the reduced case of a failure. A new compiler compiles each one, and the
+//! the reduced case of a failure, and for a case with JavaScript `files`
+//! (name to text) and `copy` (name to a file of this repository). A new
+//! compiler compiles each one in a directory with these files, and the
 //! output must be the same as the output of the official compiler.
 
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use tailwind::cli::modules::FileSystem;
 use tailwind::{compile, CompileOptions, Error, Stylesheet};
 
 fn root() -> PathBuf {
@@ -29,9 +33,25 @@ fn the_cases_of_the_fuzzer() {
         let css = case["css"].as_str().unwrap();
         let candidates: Vec<String> =
             case["candidates"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        // The files of the case, in a directory of their own.
+        let dir = std::env::temp_dir().join(format!("tailwind-fuzz-found-{}-{i}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, text) in case["files"].as_object().into_iter().flatten() {
+            std::fs::write(dir.join(name), text.as_str().unwrap()).unwrap();
+        }
+        for (name, from) in case["copy"].as_object().into_iter().flatten() {
+            std::fs::copy(root().join(from.as_str().unwrap()), dir.join(name)).unwrap();
+        }
         let loader = load;
-        let options = CompileOptions { load_stylesheet: Some(&loader), test_mode: true, ..CompileOptions::default() };
+        let options = CompileOptions {
+            base: dir.to_string_lossy().into_owned(),
+            load_stylesheet: Some(&loader),
+            module_loader: Some(Rc::new(FileSystem::default())),
+            test_mode: true,
+            ..CompileOptions::default()
+        };
         let ours = compile(css, options).and_then(|mut c| c.try_build(&candidates));
+        let _ = std::fs::remove_dir_all(&dir);
         let official = &case["official"];
         match (ours, official["css"].as_str(), official["error"].as_str()) {
             (Ok(out), Some(expected), _) => assert_eq!(out, expected, "line {}: {css}", i + 1),

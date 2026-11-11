@@ -283,12 +283,21 @@ fn create_build(options: &Options, input: &(String, Stamp)) -> Result<Build> {
         return create_build_from(options, input, Some(from));
     }
     match create_build_from(options, input, None) {
-        Err(error) => Err(create_build_from(options, input, Some(from)).err().unwrap_or(error)),
+        // Only a syntax error has a position. The second compile runs the
+        // plugins again, so their messages (`console.log`) stay quiet:
+        // daisyUI, for example, prints its name to stdout.
+        Err(error) if error.name == "CssSyntaxError" => {
+            Err(create_build_with(options, input, Some(from), true).err().unwrap_or(error))
+        }
         result => result,
     }
 }
 
-fn create_build_from(options: &Options, (css, input_stamp): &(String, Stamp), from: Option<String>) -> Result<Build> {
+fn create_build_from(options: &Options, input: &(String, Stamp), from: Option<String>) -> Result<Build> {
+    create_build_with(options, input, from, false)
+}
+
+fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), from: Option<String>, quiet: bool) -> Result<Build> {
     let input_base = match &options.input {
         Some(path) => path.parent().unwrap_or(Path::new("")).to_path_buf(),
         None => std::env::current_dir().unwrap_or_default(),
@@ -302,7 +311,7 @@ fn create_build_from(options: &Options, (css, input_stamp): &(String, Stamp), fr
             dependencies.borrow_mut().push((path.to_path_buf(), stamp(path)))
         })
     };
-    let modules = Rc::new(modules::FileSystem::default());
+    let modules = Rc::new(modules::FileSystem::with_quiet_console(quiet));
     let compiler = compile(
         css,
         CompileOptions {

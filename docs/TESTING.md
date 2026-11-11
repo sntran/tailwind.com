@@ -218,6 +218,29 @@ them). Two kinds of cases:
   this program, with the same arguments (also `--minify` and
   `--optimize`). Both use the scanner of Tailwind CSS.
 
+A part of the cases (35 percent; `--javascript P` changes it) also has
+JavaScript (`tests/fuzz/plugins.mjs`):
+
+- **real plugins**: `@tailwindcss/typography`, `@tailwindcss/forms` and
+  `@tailwindcss/aspect-ratio` (in the program, as in the standalone
+  program), `tailwindcss-animate`, and the daisyUI bundle of Phoenix,
+  with and without options. Their classes come from the official class
+  list.
+- **random plugins**: source text from random calls of `addUtilities`,
+  `matchUtilities` (values, types, modifiers, negative values),
+  `addComponents`, `matchComponents`, `addVariant`, `matchVariant`,
+  `addBase`, `theme()` and `config()`, as `plugin()`,
+  `plugin.withOptions()` with options of the stylesheet, or a plain
+  function, in CommonJS and ES modules.
+- **random configs**: `@config` files with `theme.extend` (nested colors
+  with `<alpha-value>`, spacing, font sizes with line heights, screens,
+  keyframes and animations, radius, shadows, font families), a `theme`
+  that replaces a key, `darkMode`, `important`, and inline plugins.
+
+The official side runs the npm packages with the module rules of the
+standalone program (`tests/fuzz/official.mjs`, as
+`tests/upstream/tools/bun-interop.mjs`).
+
 ```sh
 cargo build --release --bin tailwind --example fuzz_build
 sh tests/fuzz/install.sh build/official
@@ -242,3 +265,16 @@ each line again (the sync does it for a new version).
 A fault made on purpose (a builder that changes the value of
 `underline`) shows that the fuzzer finds a difference, and reduces a
 case of 16 candidates to two lines of stylesheet.
+
+The fuzzer found two faults of the JavaScript support:
+
+- The message of an error of the engine. QuickJS has other words than
+  V8 for the same errors (`cannot convert to object` for
+  `Cannot convert undefined or null to object`), and the official
+  program prints the V8 text. The program now gives the V8 text for the
+  common errors (`v8_message` in `src/compat/js/engine.rs`).
+- On an error, the program compiled a second time for the position of a
+  syntax error, and a plugin printed its message two times (daisyUI
+  prints its name to stdout). Now only a syntax error compiles again,
+  with no message of a plugin. The case `cli-js/error-daisyui-apply`
+  keeps it fixed.

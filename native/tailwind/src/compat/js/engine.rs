@@ -208,7 +208,76 @@ fn finish(status: c_int, out: *mut c_char, stack: *mut c_char) -> Result<Option<
             },
             None => (None, None),
         };
-        Err(JsError { name, message: out.unwrap_or_else(|| "JavaScript exception".to_string()), stack })
+        let message = out.unwrap_or_else(|| "JavaScript exception".to_string());
+        Err(JsError { name, message: v8_message(&message), stack })
+    }
+}
+
+/// The text of V8 for the common errors of the engine. The official program
+/// runs on V8 (Node.js or Bun), and it prints the message of an exception
+/// of a plugin. QuickJS has other words for the same errors: for example
+/// `cannot convert to object` for `Object.keys(null)`. A message can be a
+/// part of a longer text, so each part changes in place.
+pub fn v8_message(message: &str) -> String {
+    let mut text = message.replace("cannot convert to object", "Cannot convert undefined or null to object");
+    // `cannot read property 'x' of undefined` and the same for null and
+    // for a write.
+    for (quickjs, v8, verb) in [
+        ("cannot read property '", "Cannot read properties of ", "reading"),
+        ("cannot set property '", "Cannot set properties of ", "setting"),
+    ] {
+        while let Some(start) = text.find(quickjs) {
+            let rest = &text[start + quickjs.len()..];
+            let Some(end) = rest.find("' of ") else { break };
+            let name = &rest[..end];
+            let after = &rest[end + "' of ".len()..];
+            let target = if after.starts_with("undefined") {
+                "undefined"
+            } else if after.starts_with("null") {
+                "null"
+            } else {
+                break;
+            };
+            let tail = after[target.len()..].to_string();
+            text = format!("{}{v8}{target} ({verb} '{name}'){tail}", &text[..start]);
+        }
+    }
+    for (quickjs, v8) in [
+        ("cannot read property of undefined", "Cannot read properties of undefined"),
+        ("cannot read property of null", "Cannot read properties of null"),
+    ] {
+        text = text.replace(quickjs, v8);
+    }
+    // `'x' is not defined` is `x is not defined` in V8.
+    if let Some(rest) = text.strip_prefix('\'') {
+        if let Some(name) = rest.strip_suffix("' is not defined") {
+            if !name.contains('\'') {
+                text = format!("{name} is not defined");
+            }
+        }
+    }
+    text
+}
+
+#[cfg(test)]
+mod v8_message_tests {
+    use super::v8_message;
+
+    #[test]
+    fn the_messages_of_v8() {
+        // The values come from Node.js 22.
+        for (quickjs, v8) in [
+            ("cannot convert to object", "Cannot convert undefined or null to object"),
+            ("cannot read property 'foo' of undefined", "Cannot read properties of undefined (reading 'foo')"),
+            ("cannot read property 'bar' of null", "Cannot read properties of null (reading 'bar')"),
+            ("cannot set property 'x' of undefined", "Cannot set properties of undefined (setting 'x')"),
+            ("cannot set property 'y' of null", "Cannot set properties of null (setting 'y')"),
+            ("'notDefinedThing' is not defined", "notDefinedThing is not defined"),
+            ("not a function", "not a function"),
+            ("Plugin failed: cannot convert to object", "Plugin failed: Cannot convert undefined or null to object"),
+        ] {
+            assert_eq!(v8_message(quickjs), v8, "{quickjs}");
+        }
     }
 }
 

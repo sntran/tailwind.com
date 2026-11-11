@@ -12,9 +12,16 @@ use std::time::UNIX_EPOCH;
 #[derive(Default)]
 pub struct FileSystem {
     dependencies: RefCell<Vec<(PathBuf, Stamp)>>,
+    /// True: the messages of `console` are not printed.
+    quiet: bool,
 }
 
 impl FileSystem {
+    /// A file system whose `console` prints nothing when `quiet` is true.
+    pub fn with_quiet_console(quiet: bool) -> Self {
+        Self { quiet, ..Self::default() }
+    }
+
     pub fn take_dependencies(&self) -> Vec<(PathBuf, Stamp)> {
         std::mem::take(&mut *self.dependencies.borrow_mut())
     }
@@ -95,6 +102,9 @@ impl ModuleLoader for FileSystem {
     }
 
     fn console(&self, text: &str, is_error: bool) {
+        if self.quiet {
+            return;
+        }
         if is_error {
             eprintln!("{text}");
         } else {

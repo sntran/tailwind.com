@@ -16,6 +16,8 @@
 //   --projects N     the number of command line projects (default 60)
 //   --seconds N      stop the new cases after this time (default 600)
 //   --out DIR        the directory of the failures (default build/fuzz)
+//   --javascript P   the part of the cases with JavaScript: real plugins,
+//                    random plugins and random configs (default 0.35)
 //
 // Two kinds of cases:
 //   compiler  a stylesheet and a list of candidates: compile(css) and
@@ -36,13 +38,15 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { ARBITRARY_FORMS, EDGE_CANDIDATES, RANDOM_MODIFIERS, RANDOM_VARIANTS } from '../upstream/tools/candidate-lists.mjs'
+import { officialTailwind, writeFiles } from './official.mjs'
+import { REAL_CLASSES, createGenerators } from './plugins.mjs'
 import { createRandom } from './random.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
 function options() {
   const args = process.argv.slice(2)
-  const o = { seed: Date.now() % 2 ** 31, cases: 2000, projects: 60, seconds: 600, out: path.resolve(here, '../../build/fuzz') }
+  const o = { javascript: 0.35, seed: Date.now() % 2 ** 31, cases: 2000, projects: 60, seconds: 600, out: path.resolve(here, '../../build/fuzz') }
   for (let i = 0; i < args.length; i++) {
     const value = () => {
       if (i + 1 >= args.length) throw new Error(`${args[i]} needs a value`)
@@ -57,6 +61,7 @@ function options() {
       case '--projects': o.projects = Number(value()); break
       case '--seconds': o.seconds = Number(value()); break
       case '--out': o.out = path.resolve(value()); break
+      case '--javascript': o.javascript = Number(value()); break
       default: throw new Error(`unknown argument: ${args[i]}`)
     }
   }
@@ -72,52 +77,25 @@ const deadline = Date.now() + opts.seconds * 1000
 // The compiler cases get 80 percent of the time, the projects the rest.
 const compilerDeadline = Date.now() + opts.seconds * 800
 const require = createRequire(path.join(opts.official, 'package.json'))
-const officialDir = path.dirname(require.resolve('tailwindcss/package.json'))
-// require.resolve gives the CommonJS file: its exports are the default
-// export of the module.
-const officialModule = await import(pathToFileURL(require.resolve('tailwindcss')).href)
-const official = officialModule.compile ? officialModule : officialModule.default
+const off = await officialTailwind(opts.official)
+const officialDir = off.officialDir
+const version = off.version
 const cli = require.resolve('@tailwindcss/cli/package.json').replace(/package\.json$/, 'dist/index.mjs')
-const version = JSON.parse(fs.readFileSync(path.join(officialDir, 'package.json'), 'utf8')).version
+const repository = path.resolve(here, '../..')
+const interop = path.join(repository, 'tests/upstream/tools/bun-interop.mjs')
+const generators = createGenerators(random)
 
 console.log(`fuzz: Tailwind CSS ${version}, seed ${opts.seed}, ${opts.cases} compiler cases, ${opts.projects} projects`)
 
-// --- The official compiler, in this process ------------------------------
-
-async function loadStylesheet(id) {
-  let name
-  if (id === 'tailwindcss') name = 'index.css'
-  else if (id.startsWith('tailwindcss/')) name = id.slice('tailwindcss/'.length)
-  else if (id.startsWith('./')) name = id.slice(2)
-  else throw new Error(`Could not resolve '${id}'`)
-  if (!name.endsWith('.css')) name += '.css'
-  const file = path.join(officialDir, name)
-  if (!fs.existsSync(file)) throw new Error(`Could not resolve '${id}'`)
-  return { path: file, base: officialDir, content: fs.readFileSync(file, 'utf8') }
-}
-
-// The license comment: the official compiler prints it when NODE_ENV is not
-// "test", and the builder never prints it.
-const BANNER = /^\/\*! tailwindcss v[^*]*\*\/\n/
-
-async function officialResult({ css, candidates }) {
-  // The warnings of the compiler (console.warn) are not compared.
-  const warn = console.warn
-  console.warn = () => {}
-  try {
-    const compiler = await official.compile(css, { base: officialDir, loadStylesheet })
-    return { css: compiler.build(candidates).replace(BANNER, '') }
-  } catch (e) {
-    return { error: e?.message ?? String(e) }
-  } finally {
-    console.warn = warn
-  }
+// The official compiler, in this process (official.mjs).
+function officialResult(c) {
+  return off.run(c)
 }
 
 // --- This compiler, through the builder ----------------------------------
 
 function ourResults(cases) {
-  const input = cases.map((c) => JSON.stringify({ css: c.css, candidates: c.candidates })).join('\n') + '\n'
+  const input = cases.map((c) => JSON.stringify({ css: c.css, candidates: c.candidates, base: c.base ?? '' })).join('\n') + '\n'
   const run = spawnSync(opts.builder, [path.join(officialDir)], { input, maxBuffer: 1024 * 1024 * 1024 })
   if (run.status !== 0) {
     throw new Error(`the builder failed (status ${run.status}): ${run.stderr.toString().slice(0, 2000)}`)
@@ -133,8 +111,20 @@ function same(a, b) {
 
 // --- The generators ------------------------------------------------------
 
-const design = await official.__unstable__loadDesignSystem('@import "tailwindcss";', { base: officialDir, loadStylesheet })
+const design = await off.loadDesignSystem('@import "tailwindcss";')
 const classList = design.getClassList().map(([name]) => name)
+
+// The classes of the real plugins: the class list with the plugins, with
+// no class of the base list.
+const pluginDir = path.join(opts.official, 'work', 'plugins')
+fs.mkdirSync(pluginDir, { recursive: true })
+fs.copyFileSync(path.join(opts.official, 'vendor', 'daisyui.js'), path.join(pluginDir, 'daisyui.js'))
+const withPlugins = await off.loadDesignSystem(
+  '@import "tailwindcss";\n@plugin "@tailwindcss/typography";\n@plugin "@tailwindcss/forms";\n@plugin "@tailwindcss/aspect-ratio";\n@plugin "tailwindcss-animate";\n@plugin "./daisyui.js";',
+  pluginDir,
+)
+const base = new Set(classList)
+const pluginClasses = [...new Set([...withPlugins.getClassList().map(([name]) => name).filter((n) => !base.has(n)), ...REAL_CLASSES])]
 const variantNames = []
 for (const v of design.getVariants()) {
   variantNames.push(v.name)
@@ -166,6 +156,11 @@ function mutate(c) {
 let userUtilities = []
 let userVariants = []
 let prefix = null
+// The files of the JavaScript parts of the current case, and whether the
+// case has a plugin.
+let caseFiles = {}
+let caseCopy = {}
+let usesPlugins = false
 
 function candidate() {
   const parts = []
@@ -178,6 +173,7 @@ function candidate() {
   if (r < 0.45) base = random.pick(classList)
   else if (r < 0.75) base = random.pick(arbitrary)
   else if (r < 0.85 && userUtilities.length) base = random.pick(userUtilities)
+  else if (r < 0.88 && usesPlugins) base = random.pick(pluginClasses)
   else if (r < 0.92) base = random.pick(EDGE_CANDIDATES)
   else base = mutate(random.pick(classList))
   if (random.chance(0.1)) base = '-' + base
@@ -266,6 +262,9 @@ function stylesheet() {
   userUtilities = []
   userVariants = []
   prefix = null
+  caseFiles = {}
+  caseCopy = {}
+  usesPlugins = false
   const parts = []
   const r = random.next()
   if (r < 0.6) parts.push('@import "tailwindcss";')
@@ -283,6 +282,19 @@ function stylesheet() {
     const g = random.next()
     parts.push(g < 0.3 ? themeBlock() : g < 0.5 ? utilityBlock() : g < 0.7 ? variantBlock() : g < 0.95 ? ruleBlock() : `@source inline("${random.pick(['p-{1,2,4}', 'flex', '{hover:,}underline', 'bg-red-{50,{100..900..200}}'])}");`)
   }
+  // JavaScript: real plugins, random plugins, and random configs.
+  if (random.chance(opts.javascript)) {
+    usesPlugins = true
+    for (let n = 1 + random.int(3); n > 0; n--) {
+      const g = random.next()
+      const part = g < 0.4 ? generators.real() : g < 0.8 ? generators.plugin() : generators.config()
+      parts.push(part.line)
+      Object.assign(caseFiles, part.files)
+      Object.assign(caseCopy, part.copy)
+      userUtilities.push(...part.utilities)
+      userVariants.push(...part.variants)
+    }
+  }
   return parts
 }
 
@@ -290,7 +302,7 @@ function compilerCase() {
   const parts = stylesheet()
   const candidates = []
   for (let n = random.int(40); n > 0; n--) candidates.push(candidate())
-  return { parts, css: parts.join('\n'), candidates }
+  return { parts, css: parts.join('\n'), candidates, files: caseFiles, copy: caseCopy }
 }
 
 // --- The reducer ---------------------------------------------------------
@@ -304,7 +316,7 @@ async function differs(c) {
 // The smallest part of the case that still differs: first the
 // candidates, then the parts of the stylesheet, one at a time.
 async function reduce(c) {
-  let best = { parts: [...c.parts], candidates: [...c.candidates] }
+  let best = { parts: [...c.parts], candidates: [...c.candidates], files: c.files, copy: c.copy, base: c.base }
   const make = (b) => ({ ...b, css: b.parts.join('\n') })
   if (best.candidates.length > 0 && (await differs(make({ ...best, candidates: [] })))) {
     best.candidates = []
@@ -328,6 +340,14 @@ async function reduce(c) {
   return make(best)
 }
 
+// The files that the stylesheet of a reduced case names.
+function usedFiles(c) {
+  return Object.fromEntries(Object.entries(c.files ?? {}).filter(([name]) => c.css.includes(`./${name}`)))
+}
+function usedCopy(c) {
+  return Object.fromEntries(Object.entries(c.copy ?? {}).filter(([name]) => c.css.includes(`./${name}`)))
+}
+
 // --- The project cases ---------------------------------------------------
 
 function projectCase() {
@@ -339,11 +359,13 @@ function projectCase() {
   fs.mkdirSync(path.join(dir, 'src', 'deep'), { recursive: true })
   const classes = () => Array.from({ length: 5 + random.int(30) }, candidate).join(' ')
   fs.writeFileSync(path.join(dir, 'app.css'), parts.join('\n') + '\n')
+  writeFiles(dir, { files: caseFiles, copy: caseCopy }, repository)
+  const jsFiles = { ...caseFiles }
   fs.writeFileSync(path.join(dir, 'src', 'index.html'), `<div class="${classes()}"></div>\n<p class='${classes()}'>x</p>\n`)
   fs.writeFileSync(path.join(dir, 'src', 'deep', 'page.html.heex'), `<.button class={["${classes()}", @active && "${classes()}"]} />\n`)
   fs.writeFileSync(path.join(dir, 'src', 'app.js'), `const a = "${classes()}"; export default \`${classes()}\`\n`)
   const args = ['-i', 'app.css', ...random.pick([[], [], ['--minify'], ['--optimize']])]
-  return { dir, args }
+  return { dir, args, jsFiles, copy: { ...caseCopy } }
 }
 
 function runProgram(command, args, cwd) {
@@ -367,7 +389,7 @@ fs.writeFileSync(failuresFile, '')
 let failures = 0
 let compared = 0
 // What the cases did, to show that they test more than errors.
-const stats = { compilerErrors: 0, compilerCss: 0, cssBytes: 0, projectErrors: 0, projectCss: 0 }
+const stats = { compilerErrors: 0, compilerCss: 0, cssBytes: 0, projectErrors: 0, projectCss: 0, javascript: 0 }
 
 function record(entry) {
   failures++
@@ -378,10 +400,20 @@ function record(entry) {
 const BATCH = 200
 for (let done = 0; done < opts.cases && Date.now() < compilerDeadline; done += BATCH) {
   const cases = Array.from({ length: Math.min(BATCH, opts.cases - done) }, compilerCase)
+  // The files of the JavaScript parts of the batch: the names are new for
+  // each part, so the cases of a batch share one directory.
+  const batchDir = path.join(opts.official, 'work', `batch-${opts.seed}-${done}`)
+  fs.rmSync(batchDir, { recursive: true, force: true })
+  fs.mkdirSync(batchDir, { recursive: true })
+  for (const c of cases) {
+    writeFiles(batchDir, c, repository)
+    c.base = batchDir
+  }
   const ours = ourResults(cases)
   for (let i = 0; i < cases.length; i++) {
     const theirs = await officialResult(cases[i])
     compared++
+    if (cases[i].css.includes('@plugin') || cases[i].css.includes('@config')) stats.javascript++
     if (theirs.error !== undefined) stats.compilerErrors++
     else {
       stats.compilerCss++
@@ -394,16 +426,17 @@ for (let done = 0; done < opts.cases && Date.now() < compilerDeadline; done += B
     console.log(`fuzz: a difference in compiler case ${done + i}:\n${reduced.css}\n  candidates: ${JSON.stringify(reduced.candidates)}`)
     record({
       kind: 'compiler',
-      case: { css: cases[i].css, candidates: cases[i].candidates },
-      reduced: { css: reduced.css, candidates: reduced.candidates, official: reducedTheirs, ours: reducedOurs },
+      case: { css: cases[i].css, candidates: cases[i].candidates, files: cases[i].files, copy: cases[i].copy },
+      reduced: { css: reduced.css, candidates: reduced.candidates, files: usedFiles(reduced), copy: usedCopy(reduced), official: reducedTheirs, ours: reducedOurs },
     })
   }
 }
 
 // The project cases.
-const officialCommand = [process.execPath, cli]
+// The module rules of the standalone program (bun-interop.mjs).
+const officialCommand = [process.execPath, '--import', pathToFileURL(interop).href, cli]
 for (let n = 0; n < opts.projects && Date.now() < deadline; n++) {
-  const { dir, args } = projectCase()
+  const { dir, args, jsFiles, copy } = projectCase()
   const theirs = runProgram(officialCommand, args, dir)
   const ours = runProgram(ourCommand(), args, dir)
   compared++
@@ -416,12 +449,12 @@ for (let n = 0; n < opts.projects && Date.now() < deadline; n++) {
   const files = {}
   for (const f of ['app.css', 'src/index.html', 'src/deep/page.html.heex', 'src/app.js']) files[f] = fs.readFileSync(path.join(dir, f), 'utf8')
   console.log(`fuzz: a difference in project ${n} (${args.join(' ')}): exit ${theirs.status} and ${ours.status}`)
-  record({ kind: 'project', args, files, official: theirs, ours })
+  record({ kind: 'project', args, files: { ...files, ...jsFiles }, copy, official: theirs, ours })
   fs.rmSync(dir, { recursive: true, force: true })
 }
 
 console.log(
-  `fuzz: compiler cases with CSS ${stats.compilerCss} (${(stats.cssBytes / 1e6).toFixed(1)} MB), with an error ${stats.compilerErrors}; projects with CSS ${stats.projectCss}, with an error ${stats.projectErrors}`,
+  `fuzz: compiler cases with CSS ${stats.compilerCss} (${(stats.cssBytes / 1e6).toFixed(1)} MB), with an error ${stats.compilerErrors}, with JavaScript ${stats.javascript}; projects with CSS ${stats.projectCss}, with an error ${stats.projectErrors}`,
 )
 console.log(`fuzz: ${compared} cases compared, ${failures} different (seed ${opts.seed})`)
 if (failures > 0) {

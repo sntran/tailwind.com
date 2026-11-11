@@ -7,9 +7,9 @@
 // A new version of Tailwind CSS can change the official output of a case:
 // scripts/sync-upstream.sh runs this after the install of the new version.
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
+import { officialTailwind, writeFiles } from './official.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const [dir, file = path.join(here, '../upstream/fuzz-found.jsonl')] = process.argv.slice(2)
@@ -17,36 +17,20 @@ if (!dir) {
   console.error('Usage: node tests/fuzz/refresh.mjs DIR [FILE]')
   process.exit(2)
 }
-const require = createRequire(path.join(path.resolve(dir), 'package.json'))
-const officialDir = path.dirname(require.resolve('tailwindcss/package.json'))
-const mod = await import(pathToFileURL(require.resolve('tailwindcss')).href)
-const official = mod.compile ? mod : mod.default
-const version = JSON.parse(fs.readFileSync(path.join(officialDir, 'package.json'), 'utf8')).version
-
-async function loadStylesheet(id) {
-  let name = id === 'tailwindcss' ? 'index.css' : id.replace(/^tailwindcss\//, '').replace(/^\.\//, '')
-  if (!name.endsWith('.css')) name += '.css'
-  const p = path.join(officialDir, name)
-  if (!fs.existsSync(p)) throw new Error(`Could not resolve '${id}'`)
-  return { path: p, base: officialDir, content: fs.readFileSync(p, 'utf8') }
-}
-
-const BANNER = /^\/\*! tailwindcss v[^*]*\*\/\n/
+const off = await officialTailwind(dir)
+const repository = path.resolve(here, '../..')
 const lines = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.trim() !== '')
 const out = []
-const warn = console.warn
-console.warn = () => {}
-for (const line of lines) {
+for (const [i, line] of lines.entries()) {
   const c = JSON.parse(line)
-  let result
-  try {
-    const compiler = await official.compile(c.css, { base: officialDir, loadStylesheet })
-    result = { css: compiler.build(c.candidates).replace(BANNER, '') }
-  } catch (e) {
-    result = { error: e?.message ?? String(e) }
-  }
-  out.push(JSON.stringify({ ...c, version, official: result }))
+  // The files of the case, in a directory next to the official packages.
+  const base = path.join(off.root, 'work', `refresh-${i}`)
+  fs.rmSync(base, { recursive: true, force: true })
+  fs.mkdirSync(base, { recursive: true })
+  writeFiles(base, c, repository)
+  const official = await off.run({ css: c.css, candidates: c.candidates, base })
+  fs.rmSync(base, { recursive: true, force: true })
+  out.push(JSON.stringify({ ...c, version: off.version, official }))
 }
-console.warn = warn
 fs.writeFileSync(file, out.join('\n') + '\n')
-console.log(`refresh.mjs: ${out.length} cases of ${file}, Tailwind CSS ${version}`)
+console.log(`refresh.mjs: ${out.length} cases of ${file}, Tailwind CSS ${off.version}`)
