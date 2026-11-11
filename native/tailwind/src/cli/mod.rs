@@ -30,6 +30,9 @@ const DEFAULT_POLL_INTERVAL_MS: u64 = 250;
 /// have no event (as the file watcher of BEAM.com).
 const EVENTS_INTERVAL_MS: u64 = 500;
 const DEFAULT_INPUT: &str = "@import 'tailwindcss';";
+/// The time that the stamps of the input files must stay the same before
+/// a full build of the watch: see `wait_until_stable`.
+const STABLE_MS: u64 = 10;
 
 /// The text styles of the messages. They are empty when stderr is not a
 /// terminal, or when `NO_COLOR` is set.
@@ -585,6 +588,24 @@ fn watch_paths(build: &mut Build, events: &events::Events) {
     }
 }
 
+/// Wait until the stamps of the files stay the same for `STABLE_MS` (at
+/// most 10 times). A program can write a file in more than one step: a
+/// shell redirect, for example, empties the file first and then writes
+/// it. A build from the empty input gives a wrong output, and with no
+/// `source(none)` it scans all of the directory of the input.
+fn wait_until_stable(paths: &[(PathBuf, Stamp)]) {
+    let stamps = || paths.iter().map(|(path, _)| stamp(path)).collect::<Vec<_>>();
+    let mut last = stamps();
+    for _ in 0..10 {
+        std::thread::sleep(Duration::from_millis(STABLE_MS));
+        let now = stamps();
+        if now == last {
+            return;
+        }
+        last = now;
+    }
+}
+
 /// The watch. A tick starts at a file event of the system, or at the end
 /// of the interval (`--poll`, or a system with no events: only the
 /// interval). At each tick, make a full build when the input or an
@@ -636,6 +657,9 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
 
         let start = Instant::now();
         let full = build.full_rebuild_paths.iter().any(|(path, old)| stamp(path) != *old);
+        if full {
+            wait_until_stable(&build.full_rebuild_paths);
+        }
 
         let result = if full {
             // Keep the old compiler when the new input has an error. Record

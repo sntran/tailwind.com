@@ -411,6 +411,12 @@ of an interval. At each tick:
    stylesheet, or of a JavaScript module of `@plugin` or `@config`
    changed: make a new compiler and a new scanner, scan,
    build and write. With an error, print it and keep the old compiler.
+   Before this, the program waits until these stamps stay the same for
+   10 ms (at most 10 times). A shell redirect (`printf ... > app.css`)
+   empties the file first and then writes it. A build from the empty
+   file gives a wrong output for a short time, and with no
+   `source(none)` it scans all of the directory of the input. In that
+   scan, a read of a FIFO with no data does not end.
 2. If not: scan the source files (the scanner reads only the changed
    files) and build. The compiler gives the same output when there is
    no new candidate, and the program then writes nothing.

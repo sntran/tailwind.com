@@ -75,17 +75,23 @@ export TAILWIND_WATCH_DEBUG=1
 fifo=1
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) fifo=0 ;;
-    *) mkfifo stdin.fifo ;;
+    *)
+        # Not in the directory of the project: with no source(none), the
+        # scanner reads each file of the directory, and the read of a
+        # FIFO with no data does not end (as in the official program).
+        stdin_fifo="$work.fifo"
+        mkfifo "$stdin_fifo"
+        ;;
 esac
 if [ $fifo = 1 ]; then
-    run -i app.css -o out.css --map out.css.map --watch "$@" < stdin.fifo > log.txt 2>&1 &
+    run -i app.css -o out.css --map out.css.map --watch "$@" < "$stdin_fifo" > log.txt 2>&1 &
     pid=$!
-    exec 3> stdin.fifo
+    exec 3> "$stdin_fifo"
 else
     run -i app.css -o out.css --map out.css.map --watch=always "$@" > log.txt 2>&1 &
     pid=$!
 fi
-trap 'kill $pid 2>/dev/null || true' EXIT
+trap 'kill $pid 2>/dev/null || true; rm -f "${stdin_fifo:-}"' EXIT
 
 wait_for '.flex {'
 echo "watch.sh: the first build: pass"
