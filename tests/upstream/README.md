@@ -605,3 +605,11 @@ One JSON line for each candidate of `classes.jsonl.gz`: `{"candidate", "kind", "
 
 `tools/gen-css-utility.mjs`, `tools/gen-variants.mjs` and `tools/gen-optimize.mjs` make `css_utility.json`, `variants.json` and `optimize.json`.
 Each script takes the path of the upstream clone as its first argument.
+
+### `fuzz-found.jsonl`
+
+The reduced cases of the differential fuzzer (`tests/fuzz/fuzz.mjs`), one
+JSON line each: `seed`, `version`, `css`, `candidates`, and `official`,
+the output of the official compiler (`css` or `error`).
+`native/tailwind/tests/fuzz_found.rs` replays them. The first three lines
+come from a check of the fuzzer itself; their official output is real.

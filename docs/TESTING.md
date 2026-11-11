@@ -199,3 +199,45 @@ the download, a download from a local server, the SHA-256 check, a
 status that is not 200, a download that stops, the start of the file by
 the shell, `run()`, the exit status of `npx tailwind.com`, and
 `runWasm()` with the WebAssembly module.
+
+## The live differential fuzzer
+
+`tests/fuzz/fuzz.mjs` compares this compiler with the official Tailwind
+CSS on new random input, live. The official side is the npm packages of
+the version of `UPSTREAM` (`sh tests/fuzz/install.sh DIR` installs
+them). Two kinds of cases:
+
+- **compiler**: a random stylesheet (imports, `@theme`, `@utility`,
+  `@custom-variant`, `@apply`, the functions, `@source inline()`, a
+  prefix, `important`) and random candidates (the class list, the
+  variants, arbitrary values, edge cases, and small random changes of
+  them). `compile()` and `build()` of the npm package against
+  `examples/fuzz_build.rs` of this crate.
+- **project**: a directory with `app.css` and HTML, HEEx and JavaScript
+  files with random classes. The official command line program against
+  this program, with the same arguments (also `--minify` and
+  `--optimize`). Both use the scanner of Tailwind CSS.
+
+```sh
+cargo build --release --bin tailwind --example fuzz_build
+sh tests/fuzz/install.sh build/official
+node tests/fuzz/fuzz.mjs --official build/official \
+  --builder target/release/examples/fuzz_build --program target/release/tailwind \
+  --seed 7 --cases 2000 --projects 60
+```
+
+A difference goes to `build/fuzz/failures.jsonl` with its reduced form:
+the smallest part of the stylesheet and of the candidates that still
+differs. The same seed gives the same cases. The workflow
+`.github/workflows/fuzz.yml` runs the fuzzer for each push (10 minutes)
+and each night (45 minutes), with a new seed each time, and keeps the
+failures as the artifact `fuzz`.
+
+To keep a fixed failure fixed, add its reduced case (`css`,
+`candidates`, and `official`, the official output) as one line to
+`tests/upstream/fuzz-found.jsonl`. `tests/fuzz_found.rs` replays each
+line.
+
+A fault made on purpose (a builder that changes the value of
+`underline`) shows that the fuzzer finds a difference, and reduces a
+case of 16 candidates to two lines of stylesheet.
