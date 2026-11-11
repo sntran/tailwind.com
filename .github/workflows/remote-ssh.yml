@@ -15,7 +15,7 @@
 # Start it by hand (workflow_dispatch), or with a push that changes the
 # file .github/remote-ssh.request on a work branch. The file has one
 # NAME=VALUE for each line: os, vm (none, freebsd, netbsd, openbsd), key,
-# branch, minutes. See CONTRIBUTING.md.
+# branch, minutes. Remove the file after the session. See CONTRIBUTING.md.
 name: Remote SSH
 
 on:
