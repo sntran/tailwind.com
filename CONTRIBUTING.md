@@ -28,6 +28,34 @@ make test              # all the tests: Rust, the program, TLC, Erlang and Elixi
 
 CI runs the tests for each pull request.
 
+For tests on a system that you do not have (Windows, macOS, Linux on
+arm64, or FreeBSD, NetBSD and OpenBSD in a VM), use SSH to a runner of
+CI. This is the method of BEAM.com, and it needs an Erlang/OTP on your
+computer (or `BEAM_COM`, the path of a `beam.com`):
+
+1. Make a key, one time:
+   `sh scripts/remote_ssh_client.sh keygen ~/.ssh/tailwind_com_ci`.
+2. Start the workflow "Remote SSH" (`.github/workflows/remote-ssh.yml`)
+   by hand, with the runner, the VM, the line of
+   `~/.ssh/tailwind_com_ci.pub`, and a branch `debug/...`. On a work
+   branch, a push that changes the file `.github/remote-ssh.request`
+   starts it too. The file has one `NAME=VALUE` for each line: `os`,
+   `vm`, `key`, `branch`, `minutes`.
+3. When the branch exists, run commands and copy files:
+
+```sh
+scripts/remote_ssh_client.sh debug/ssh ~/.ssh/tailwind_com_ci exec 'uname -a'
+scripts/remote_ssh_client.sh debug/ssh ~/.ssh/tailwind_com_ci put build/tailwind.com tailwind.com
+scripts/remote_ssh_client.sh debug/ssh ~/.ssh/tailwind_com_ci get out.log out.log
+scripts/remote_ssh_client.sh debug/ssh - bridge 2222   # for OpenSSH: ssh -p 2222 runner@127.0.0.1
+```
+
+With a VM, the session is on the Linux runner, and `ssh freebsd CMD` (or
+`netbsd`, `openbsd`) runs a command in the VM. Each command runs with
+bash in the work directory of the job. `touch "$REMOTE_SSH_STOP"` ends
+the job, and so does the limit of minutes. The job deletes the branch
+at its end.
+
 ## Rules for a change
 
 - The output of Tailwind CSS is the specification. A change of the
