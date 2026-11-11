@@ -883,7 +883,8 @@ impl Collector {
                 }
             }
 
-            let uses_at_scope = at_rule_params.iter().any(|param| param.starts_with("@scope"));
+            let uses_at_scope =
+                crate::switches::SCOPE_HOISTING.on() && at_rule_params.iter().any(|param| param.starts_with("@scope"));
             let all: Vec<&str> = style_rule_selectors.iter().chain(&at_rule_params).map(String::as_str).collect();
             let compounds = compounds_for_selectors(&all);
 

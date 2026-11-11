@@ -68,6 +68,18 @@ pub fn apply_compatibility_hooks(
     #[cfg(tw_js)]
     if let Some(loader) = options.module_loader.clone() {
         if uses_javascript(ast) {
+            // The plugin layer is the JavaScript of the version of the
+            // port: an older version needs the script engine.
+            if crate::version::current() < crate::version::Version::OLDEST_WITH_PLUGINS {
+                return Err(Error {
+                    message: format!(
+                        "The Rust compiler does not load JavaScript plugins and configs as Tailwind CSS v{}: use the script engine.",
+                        crate::version::current()
+                    ),
+                    name: std::borrow::Cow::Borrowed(crate::version::SCRIPT_ENGINE_NEEDED),
+                    causes: Vec::new(),
+                });
+            }
             return js::apply_compatibility_hooks(design_system, ast, sources, options.base, loader);
         }
     }

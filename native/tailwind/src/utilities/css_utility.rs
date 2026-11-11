@@ -151,7 +151,7 @@ fn normalize_argument(arg: &str) -> String {
     let arg = js_trim(arg);
 
     // The value of `--default(…)` goes to the output as it is.
-    if arg.starts_with("--default(") {
+    if arg.starts_with("--default(") && crate::switches::DEFAULT_FN_WHITESPACE.on() {
         return arg.to_string();
     }
 

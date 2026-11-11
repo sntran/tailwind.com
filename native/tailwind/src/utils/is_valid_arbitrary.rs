@@ -11,6 +11,8 @@ pub fn is_valid_arbitrary(input: &str) -> bool {
     let len = bytes.len();
     let mut stack = [0u8; STACK_SIZE];
     let mut stack_pos = 0usize;
+    // Before 4.3.4, brackets that are not balanced were not an error.
+    let balanced = crate::switches::BALANCED_ARBITRARY_VALUE.on();
 
     let mut idx = 0;
     while idx < len {
@@ -46,7 +48,7 @@ pub fn is_valid_arbitrary(input: &str) -> bool {
                 }
                 if stack_pos <= STACK_SIZE && c == stack[stack_pos - 1] {
                     stack_pos -= 1;
-                } else if c != b'}' {
+                } else if c != b'}' && balanced {
                     return false;
                 }
             }
@@ -56,5 +58,5 @@ pub fn is_valid_arbitrary(input: &str) -> bool {
         idx += 1;
     }
 
-    stack_pos == 0
+    !balanced || stack_pos == 0
 }

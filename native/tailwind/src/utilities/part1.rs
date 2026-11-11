@@ -848,7 +848,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
                 Some(vec![
                     transform_properties(),
                     decl(variable.as_str(), format!("{function}({value})")),
-                    decl("transform", TRANSFORM_VALUE),
+                    decl("transform", super::empty_fallbacks(TRANSFORM_VALUE)),
                 ])
             })
             .negative()
@@ -866,7 +866,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
                 transform_properties(),
                 decl("--tw-skew-x", format!("skewX({value})")),
                 decl("--tw-skew-y", format!("skewY({value})")),
-                decl("transform", TRANSFORM_VALUE),
+                decl("transform", super::empty_fallbacks(TRANSFORM_VALUE)),
             ])
         })
         .negative()
@@ -880,7 +880,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             Some(vec![
                 transform_properties(),
                 decl("--tw-skew-x", format!("skewX({value})")),
-                decl("transform", TRANSFORM_VALUE),
+                decl("transform", super::empty_fallbacks(TRANSFORM_VALUE)),
             ])
         })
         .negative()
@@ -894,7 +894,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             Some(vec![
                 transform_properties(),
                 decl("--tw-skew-y", format!("skewY({value})")),
-                decl("transform", TRANSFORM_VALUE),
+                decl("transform", super::empty_fallbacks(TRANSFORM_VALUE)),
             ])
         })
         .negative()
@@ -908,15 +908,15 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             return None;
         }
         let value = match &candidate.value {
-            None => TRANSFORM_VALUE,
+            None => super::empty_fallbacks(TRANSFORM_VALUE),
             Some(UtilityValue::Arbitrary { value, .. }) => value.as_str(),
             Some(UtilityValue::Named { .. }) => return None,
         };
         Some(vec![transform_properties(), decl("transform", value)])
     });
 
-    st(u, "transform-cpu", &[("transform", TRANSFORM_VALUE)]);
-    st(u, "transform-gpu", &[("transform", &format!("translateZ(0) {TRANSFORM_VALUE}"))]);
+    st(u, "transform-cpu", &[("transform", super::empty_fallbacks(TRANSFORM_VALUE))]);
+    st(u, "transform-gpu", &[("transform", &format!("translateZ(0) {}", super::empty_fallbacks(TRANSFORM_VALUE)))]);
     st(u, "transform-none", &[("transform", "none")]);
 
     // `zoom`
@@ -991,7 +991,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             u,
             &format!("touch-pan-{value}"),
             touch_properties,
-            &[("--tw-pan-x", &format!("pan-{value}")), ("touch-action", TOUCH_ACTION)],
+            &[("--tw-pan-x", &format!("pan-{value}")), ("touch-action", super::empty_fallbacks(TOUCH_ACTION))],
         );
     }
 
@@ -1000,7 +1000,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             u,
             &format!("touch-pan-{value}"),
             touch_properties,
-            &[("--tw-pan-y", &format!("pan-{value}")), ("touch-action", TOUCH_ACTION)],
+            &[("--tw-pan-y", &format!("pan-{value}")), ("touch-action", super::empty_fallbacks(TOUCH_ACTION))],
         );
     }
 
@@ -1008,7 +1008,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         u,
         "touch-pinch-zoom",
         touch_properties,
-        &[("--tw-pinch-zoom", "pinch-zoom"), ("touch-action", TOUCH_ACTION)],
+        &[("--tw-pinch-zoom", "pinch-zoom"), ("touch-action", super::empty_fallbacks(TOUCH_ACTION))],
     );
 
     // `user-select`

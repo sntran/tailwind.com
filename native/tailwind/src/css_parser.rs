@@ -141,9 +141,13 @@ fn utf8_len(lead: u8) -> usize {
 /// The result is `None` when the comment has no end.
 #[inline]
 fn comment_end(bytes: &[u8], start: usize) -> Option<usize> {
+    // Before 4.3.4, a `\` in a comment escaped the next character.
+    let escapes = !crate::switches::COMMENT_BACKSLASH_END.on();
     let mut j = start + 2;
     while j + 1 < bytes.len() {
-        if bytes[j] == ASTERISK && bytes[j + 1] == SLASH {
+        if escapes && bytes[j] == BACKSLASH {
+            j += 1;
+        } else if bytes[j] == ASTERISK && bytes[j + 1] == SLASH {
             return Some(j + 1);
         }
         j += 1;
@@ -265,6 +269,7 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
                 // comments after it.
                 let mut value_end = 0;
                 let mut end: Option<usize> = None;
+                let complete_at_eof = crate::switches::CUSTOM_PROPERTY_AT_EOF.on();
 
                 let mut j = i + 2;
                 while j < len {
@@ -292,7 +297,9 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
                         brackets.push(CLOSE_BRACKET);
                     } else if peek == OPEN_CURLY {
                         brackets.push(CLOSE_CURLY);
-                    } else if peek == CLOSE_CURLY && brackets.is_empty() {
+                    } else if (peek == CLOSE_CURLY || (j == len - 1 && !complete_at_eof)) && brackets.is_empty() {
+                        // Before 4.3.4, the last character of the input
+                        // ended the property too, and was not a part of it.
                         end = Some(j);
                         i = j - 1;
                         break;
@@ -313,10 +320,13 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
                 // the input.
                 let text = match end {
                     Some(end) => &input[start..end],
-                    None => {
+                    None if complete_at_eof => {
                         i = len;
                         &input[start..]
                     }
+                    // Before 4.3.4: no text, and the parser reads the
+                    // characters after the first `-` again.
+                    None => "",
                 };
 
                 let Some(declaration) = parse_declaration(text, colon_idx, value_end) else {
@@ -418,7 +428,7 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
     }
     // A declaration with no `;` at the end of the input. Open brackets
     // make the declaration incomplete.
-    else if !buffer.is_empty() && closing_bracket_stack.is_empty() {
+    else if !buffer.is_empty() && closing_bracket_stack.is_empty() && crate::switches::DECLARATION_AT_EOF.on() {
         if let Some(declaration) = parse_declaration(&buffer, buffer.find(':'), buffer.len()) {
             attach(&mut stack, &mut ast, track(source, declaration, buffer_start, len));
         }
@@ -495,6 +505,18 @@ pub fn parse_at_rule(buffer: &str, nodes: Vec<AstNode>) -> AtRule {
 /// `value_end` is the end of the value without comments after it.
 fn parse_declaration(buffer: &str, colon_idx: Option<usize>, value_end: usize) -> Option<AstNode> {
     let colon_idx = colon_idx?;
+
+    // Before 4.3.4: the first `!important` after the colon is the flag,
+    // and it ends the value. (The text can be shorter than the place of
+    // the colon: see `CUSTOM_PROPERTY_AT_EOF`.)
+    if !crate::switches::IMPORTANT_AT_THE_END.on() {
+        let property = js_trim(buffer.get(..colon_idx).unwrap_or(buffer));
+        let rest = buffer.get(colon_idx + 1..).unwrap_or("");
+        let important = rest.find(IMPORTANT);
+        let value = js_trim(&rest[..important.unwrap_or(rest.len())]);
+        return Some(decl_full(property, Some(value.to_string()), important.is_some()));
+    }
+
     let property = js_trim(&buffer[..colon_idx]);
     let value_start = colon_idx + 1;
     let value_end = value_end.clamp(value_start, buffer.len());

@@ -202,7 +202,7 @@ fn filter_nodes(name: &str, function: &str, value: &str) -> Vec<AstNode> {
     vec![
         filter_properties(),
         decl(format!("--tw-{name}"), format!("{function}({value})")),
-        decl("filter", CSS_FILTER_VALUE),
+        decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE)),
     ]
 }
 
@@ -211,8 +211,8 @@ fn backdrop_filter_nodes(name: &str, function: &str, value: &str) -> Vec<AstNode
     vec![
         backdrop_filter_properties(),
         decl(format!("--tw-backdrop-{name}"), format!("{function}({value})")),
-        decl("-webkit-backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
-        decl("backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
+        decl("-webkit-backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
+        decl("backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
     ]
 }
 
@@ -304,7 +304,7 @@ fn drop_shadow_size_nodes(value: &str, alpha: Option<&str>, drop_shadow: String)
         format!("var(--tw-drop-shadow-color, {color})")
     }));
     nodes.push(decl("--tw-drop-shadow", drop_shadow));
-    nodes.push(decl("filter", CSS_FILTER_VALUE));
+    nodes.push(decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE)));
     nodes
 }
 
@@ -497,7 +497,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         }
 
         // A modifier is only valid as the opacity of a color.
-        if candidate.modifier.is_some() {
+        if candidate.modifier.is_some() && crate::switches::UNUSED_MODIFIER_IS_INVALID.on() {
             return None;
         }
 
@@ -741,7 +741,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             return None;
         }
         match &candidate.value {
-            None => Some(vec![filter_properties(), decl("filter", CSS_FILTER_VALUE)]),
+            None => Some(vec![filter_properties(), decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE))]),
             Some(UtilityValue::Arbitrary { value, .. }) => Some(vec![decl("filter", value.as_str())]),
             Some(UtilityValue::Named { value, .. }) if value == "none" => Some(vec![decl("filter", "none")]),
             Some(UtilityValue::Named { .. }) => None,
@@ -755,8 +755,8 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         match &candidate.value {
             None => Some(vec![
                 backdrop_filter_properties(),
-                decl("-webkit-backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
-                decl("backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
+                decl("-webkit-backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
+                decl("backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
             ]),
             Some(UtilityValue::Arbitrary { value, .. }) => {
                 Some(vec![decl("-webkit-backdrop-filter", value.as_str()), decl("backdrop-filter", value.as_str())])
@@ -775,7 +775,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             .theme_keys(&["--blur"])
             .static_values(vec![(
                 "none",
-                vec![filter_properties(), decl("--tw-blur", " "), decl("filter", CSS_FILTER_VALUE)],
+                vec![filter_properties(), decl("--tw-blur", " "), decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE))],
             )]),
     );
 
@@ -789,8 +789,8 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
                 vec![
                     backdrop_filter_properties(),
                     decl("--tw-backdrop-blur", " "),
-                    decl("-webkit-backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
-                    decl("backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
+                    decl("-webkit-backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
+                    decl("backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
                 ],
             )]),
     );
@@ -817,7 +817,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         vec![
             StaticPart::Node(Box::new(filter_properties)),
             StaticPart::Decl("--tw-drop-shadow", " "),
-            StaticPart::Decl("filter", CSS_FILTER_VALUE),
+            StaticPart::Decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE)),
         ],
     );
 
@@ -841,7 +841,8 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             None => {
                 let value = theme.get(&["--drop-shadow"])?;
                 let resolved = theme.resolve(None, &["--drop-shadow"])?;
-                if bad_modifier {
+                // The two other checks of `bad_modifier` are older.
+                if bad_modifier && crate::switches::UNUSED_MODIFIER_IS_INVALID.on() {
                     return None;
                 }
                 return Some(drop_shadow_size_nodes(&value, alpha, drop_shadow_list(&resolved)));

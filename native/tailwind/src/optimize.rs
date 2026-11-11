@@ -24,6 +24,12 @@ use std::rc::Rc;
 const HOISTABLE_AT_RULES: [&str; 8] =
     ["@container", "@layer", "@media", "@page", "@scope", "@starting-style", "@supports", "@view-transition"];
 
+/// True for an at-rule that goes out of a rule. Before 4.3.4, `@scope`
+/// was not one of them.
+fn is_hoistable(name: &str) -> bool {
+    HOISTABLE_AT_RULES.contains(&name) && (name != "@scope" || switches::SCOPE_HOISTING.on())
+}
+
 /// At-rules that have no effect when they have no nodes.
 const DROPPABLE_IF_EMPTY_AT_RULES: [&str; 7] =
     ["@container", "@media", "@page", "@scope", "@starting-style", "@supports", "@view-transition"];
@@ -65,7 +71,13 @@ const STANDARD_PSEUDO_ELEMENTS: [&str; 32] = [
 ];
 
 /// The params of the `@supports` rule that holds the `@property` fallbacks.
-const AT_PROPERTY_SUPPORTS: &str = "((-webkit-hyphens: none) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b))))";
+fn at_property_supports() -> &'static str {
+    if switches::AT_PROPERTY_SUPPORTS_BLOCK.on() {
+        "((-webkit-hyphens: none) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b))))"
+    } else {
+        "((-webkit-hyphens: none) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b))))"
+    }
+}
 
 // ---------------------------------------------------------------------------
 // optimize_ast
@@ -316,7 +328,8 @@ impl Optimizer<'_> {
                     return;
                 }
                 let merged = context.merge(&node.context);
-                if node.context.get("source").is_some_and(ContextValue::truthy) {
+                // Before 4.3.4, no pass used the source of a subtree.
+                if node.context.get("source").is_some_and(ContextValue::truthy) && switches::SCOPE_HOISTING.on() {
                     let copy = self.arena.add(Item::Context { context: node.context.clone(), nodes: Vec::new() });
                     for child in &node.nodes {
                         self.transform(child, copy, merged, depth);
@@ -553,7 +566,7 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
                 at_rule(
                     "@layer",
                     "properties",
-                    vec![at_rule("@supports", AT_PROPERTY_SUPPORTS, fallback_ast).with_src(src)],
+                    vec![at_rule("@supports", at_property_supports(), fallback_ast).with_src(src)],
                 )
                 .with_src(src),
             );
@@ -812,9 +825,16 @@ fn nodes_at<'a>(mut nodes: &'a mut Vec<AstNode>, path: &[usize]) -> &'a mut Vec<
 
 /// True when the subtree has an `@scope` rule.
 fn contains_at_scope(nodes: &[AstNode]) -> bool {
+    if !switches::SCOPE_HOISTING.on() {
+        return false;
+    }
+    contains_at_scope_rule(nodes)
+}
+
+fn contains_at_scope_rule(nodes: &[AstNode]) -> bool {
     nodes.iter().any(|node| match node.children() {
         None => false,
-        Some(children) => node.is_at_rule("@scope") || contains_at_scope(children),
+        Some(children) => node.is_at_rule("@scope") || contains_at_scope_rule(children),
     })
 }
 
@@ -970,6 +990,14 @@ fn substitute_level(
 
 /// True when no selector of the tree can match an element.
 fn can_never_match(ast: &[SelectorAstNode]) -> bool {
+    // Before 4.3.4, the pass had no such check.
+    if !switches::DEAD_PSEUDO_ELEMENT_RULES.on() {
+        return false;
+    }
+    can_never_match_selector(ast)
+}
+
+fn can_never_match_selector(ast: &[SelectorAstNode]) -> bool {
     !ast.is_empty() && ast.iter().all(is_dead_selector)
 }
 
@@ -1015,7 +1043,7 @@ fn is_dead_selector(node: &SelectorAstNode) -> bool {
         }
         SelectorAstNode::Compound(compound) => compound.nodes.iter().any(is_dead_selector),
         SelectorAstNode::Function(function) => {
-            (function.value == ":is" || function.value == ":where") && can_never_match(&function.nodes)
+            (function.value == ":is" || function.value == ":where") && can_never_match_selector(&function.nodes)
         }
         _ => false,
     }
@@ -1161,17 +1189,19 @@ impl Nesting {
                         self.selector_stack = dead;
                         return;
                     }
-                    if rule.nodes.is_empty() || !HOISTABLE_AT_RULES.contains(&rule.name.as_str()) {
+                    if rule.nodes.is_empty() || !is_hoistable(&rule.name) {
                         return;
                     }
                 }
 
-                if rule.nodes.is_empty() && !DROPPABLE_IF_EMPTY_AT_RULES.contains(&rule.name.as_str()) {
+                if rule.nodes.is_empty()
+                    && !(DROPPABLE_IF_EMPTY_AT_RULES.contains(&rule.name.as_str()) && (rule.name != "@scope" || switches::SCOPE_HOISTING.on()))
+                {
                     self.emit(AstNode::AtRule(rule));
                     return;
                 }
 
-                if !HOISTABLE_AT_RULES.contains(&rule.name.as_str()) {
+                if !is_hoistable(&rule.name) {
                     self.emit(AstNode::AtRule(rule));
                     return;
                 }

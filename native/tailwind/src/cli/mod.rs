@@ -323,25 +323,43 @@ fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), fr
     };
     let modules = Rc::new(modules::FileSystem::with_quiet_console(quiet));
     let base = input_base.to_string_lossy().into_owned();
-    let compiler = match &options.engine {
-        Selection::Native { version, .. } => AnyCompiler::Native(Box::new(compile(
+    #[cfg(tw_js)]
+    let script = |package: &Rc<engine::DirectoryPackage>, from: Option<String>| {
+        crate::script::compile(
             css,
-            CompileOptions {
-                base,
-                polyfills: crate::POLYFILLS_ALL,
-                load_stylesheet: Some(&load),
-                test_mode: false,
-                from,
-                module_loader: Some(modules.clone()),
-                version: Some(*version),
-            },
-        )?)),
-        #[cfg(tw_js)]
-        Selection::Script(package) => AnyCompiler::Script(crate::script::compile(
-            css,
-            crate::script::ScriptOptions { base, from, load_stylesheet: Some(&load), module_loader: modules.clone() },
+            crate::script::ScriptOptions { base: base.clone(), from, load_stylesheet: Some(&load), module_loader: modules.clone() },
             package.clone(),
-        )?),
+        )
+        .map(AnyCompiler::Script)
+    };
+    let compiler = match &options.engine {
+        Selection::Native { version, package } => {
+            let native = compile(
+                css,
+                CompileOptions {
+                    base: base.clone(),
+                    polyfills: crate::POLYFILLS_ALL,
+                    load_stylesheet: Some(&load),
+                    test_mode: false,
+                    from,
+                    module_loader: Some(modules.clone()),
+                    version: Some(*version),
+                },
+            );
+            match (native, package) {
+                // The Rust compiler does not load JavaScript plugins as an
+                // older version (`Version::OLDEST_WITH_PLUGINS`): the
+                // official compiler of that version does it.
+                #[cfg(tw_js)]
+                (Err(error), Some(package)) if error.name == crate::version::SCRIPT_ENGINE_NEEDED => {
+                    dependencies.borrow_mut().clear();
+                    script(package, Some(compiler_from(options)))?
+                }
+                (native, _) => AnyCompiler::Native(Box::new(native?)),
+            }
+        }
+        #[cfg(tw_js)]
+        Selection::Script(package) => script(package, from)?,
         #[cfg(not(tw_js))]
         Selection::Script(_) => return Err(Error::new("This build of the program has no JavaScript engine.")),
     };

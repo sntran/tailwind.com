@@ -20,7 +20,7 @@ The program has two compilers.
 | | The native engine | The script engine |
 |---|---|---|
 | What | The Rust compiler of this repository | The official compiler of the npm package `tailwindcss` (`dist/lib.js`), with no change, in the QuickJS of the program |
-| Versions | The version of the file `UPSTREAM` (4.3.5), and each older version that has all its switches: now 4.3.4 ([`SWITCHES.md`](SWITCHES.md)) | Each version whose package the program can find |
+| Versions | The version of the file `UPSTREAM` (4.3.5), and each older version that has all its switches: now 4.3.4 and 4.3.3 ([`SWITCHES.md`](SWITCHES.md)) | Each version whose package the program can find |
 | A new version of Tailwind CSS needs | A port of the changes to Rust (`docs/SYNC.md`) | One line in the file `PACKAGES` |
 | Speed, Phoenix project | 10 ms | 69 ms |
 | Speed, 1000 HTML files | 224 ms | 1.31 s |
@@ -30,7 +30,13 @@ engine, and each other version uses the script engine. The Rust compiler
 has one behavior for each release that it serves: a switch for each
 change ([`SWITCHES.md`](SWITCHES.md)). For an older version than its
 own, it reads `theme.css` and `preflight.css` from the package of that
-version. `TAILWIND_COM_ENGINE` can
+version.
+
+The plugin layer of the Rust compiler is the JavaScript of Tailwind CSS
+4.3.5, and it has no switches. So for a version with another plugin
+layer (now: older than 4.3.4), a stylesheet with `@plugin` or `@config`
+uses the script engine, also when the Rust compiler serves that version.
+The program decides this for each stylesheet, before it loads a module. `TAILWIND_COM_ENGINE` can
 be `native` or `script`: `script` with the version of the native engine
 runs the official compiler of that version too.
 

@@ -2,6 +2,7 @@
 //!
 //! A candidate is the text of a class, for example `md:hover:bg-red-500/50`.
 
+use crate::switches;
 use crate::design_system::DesignSystem;
 use crate::utils::decode_arbitrary_value::decode_arbitrary_value;
 use crate::utils::is_valid_arbitrary::is_valid_arbitrary;
@@ -237,7 +238,7 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
 
     // The modifier is after the only `/` at the top level.
     let parts = segment(base, b'/');
-    if parts.len() > 2 {
+    if has_extra_modifier(&parts) {
         return result;
     }
     let mut base_without_modifier = parts[0];
@@ -456,7 +457,7 @@ pub fn parse_variant(variant: &str, design_system: &DesignSystem) -> Option<Vari
     // ^^^^^^^^^^^            -> Variant without modifier
     //             ^^^^^^^^^^ -> Modifier
     let parts = segment(variant, b'/');
-    if parts.len() > 2 {
+    if has_extra_modifier(&parts) {
         return None;
     }
     let variant_without_modifier = parts[0];
@@ -604,7 +605,22 @@ fn find_roots(input: &str, exists: &dyn Fn(&str) -> bool) -> Vec<(String, Option
     roots
 }
 
+/// True when the parts at `/` have more than one modifier. Before 4.3.4,
+/// only a third part that is not empty was an error.
+fn has_extra_modifier(parts: &[&str]) -> bool {
+    if switches::EMPTY_EXTRA_MODIFIER_IS_INVALID.on() {
+        parts.len() > 2
+    } else {
+        parts.get(2).is_some_and(|extra| !extra.is_empty())
+    }
+}
+
 fn decode_valid_arbitrary_value(raw: &str) -> Option<String> {
+    // Before 4.3.4, the check was on the decoded value.
+    if !switches::BALANCED_ARBITRARY_VALUE.on() {
+        let decoded = decode_arbitrary_value(raw);
+        return is_valid_arbitrary(&decoded).then(|| decoded.into_owned());
+    }
     if is_valid_arbitrary(raw) {
         Some(decode_arbitrary_value(raw).into_owned())
     } else {

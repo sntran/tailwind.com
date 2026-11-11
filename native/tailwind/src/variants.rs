@@ -1,5 +1,6 @@
 //! The variants: `variants.ts` of Tailwind CSS.
 
+use crate::switches;
 use crate::ast::{at_root, at_rule, context, decl, rule, style_rule, AstNode, AtRule, ContextMap, StyleRule};
 use crate::candidate::{ValueKind, Variant};
 use crate::compile::apply_variant;
@@ -289,6 +290,7 @@ impl Variants {
         let mut uses_at_variant = false;
         let mut uses_at_scope = false;
         collect_selectors(&ast, &mut selectors, &mut uses_at_variant, &mut uses_at_scope);
+        let uses_at_scope = uses_at_scope && switches::SCOPE_HOISTING.on();
         let selector_refs: Vec<&str> = selectors.iter().map(String::as_str).collect();
         let compounds = compounds_for_selectors(&selector_refs);
 
@@ -656,7 +658,11 @@ fn group_or_peer(name: &'static str, combinator: &'static str) -> impl Fn(&mut A
             if segment(&selector, b',').len() > 1 {
                 selector = format!(":is({selector})");
             }
-            format!(":is({selector}{combinator}&)")
+            if switches::GROUP_PEER_TARGET_IN_IS.on() {
+                format!(":is({selector}{combinator}&)")
+            } else {
+                format!("&:is({selector}{combinator}*)")
+            }
         })
     }
 }
@@ -666,6 +672,36 @@ fn starts_with_function(value: &str) -> bool {
     let rest = value.trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-');
     let rest = rest.trim_start_matches(is_js_whitespace);
     rest.starts_with('(')
+}
+
+/// Before 4.3.4: `value.replace(/\b(and|or|not)\b/g, ' $1 ')`. Each of
+/// the words gets spaces around it, also in `selector(…)` and between
+/// hyphens.
+fn space_supports_words(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let is_word = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
+    let mut out = String::with_capacity(value.len() + 8);
+    let mut i = 0;
+    while i < bytes.len() {
+        let before = i == 0 || !is_word(bytes[i - 1]);
+        let found = ["and", "or", "not"].into_iter().find(|word| {
+            before && bytes[i..].starts_with(word.as_bytes()) && bytes.get(i + word.len()).is_none_or(|&next| !is_word(next))
+        });
+        match found {
+            Some(word) => {
+                out.push(' ');
+                out.push_str(word);
+                out.push(' ');
+                i += word.len();
+            }
+            None => {
+                let length = value[i..].chars().next().map_or(1, char::len_utf8);
+                out.push_str(&value[i..i + length]);
+                i += length;
+            }
+        }
+    }
+    out
 }
 
 /// Put spaces around `and`, `or` and `not` when they are functions.
@@ -999,8 +1035,16 @@ pub fn create_variants(theme: &Theme) -> Variants {
             // `selector(…)`, is used as it is.
             if starts_with_function(&value) {
                 // `(a)or(b)` is not valid in Chrome, `(a) or (b)` is.
-                let mut ast = value_parser::parse(&value);
-                let query = if space_supports_keywords(&mut ast) { value_parser::to_css(&ast) } else { value };
+                let query = if switches::SUPPORTS_KEYWORDS_AS_FUNCTIONS.on() {
+                    let mut ast = value_parser::parse(&value);
+                    if space_supports_keywords(&mut ast) {
+                        value_parser::to_css(&ast)
+                    } else {
+                        value
+                    }
+                } else {
+                    space_supports_words(&value)
+                };
                 return wrap_in(rule_node, |nodes| at_rule("@supports", query, nodes));
             }
 

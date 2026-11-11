@@ -64,7 +64,15 @@ module.exports = plugin(({ addUtilities, theme }) => {
   addUtilities({ '.from-plugin': { color: theme('colors.red.500') } })
 })
 JS
-echo '<p class="flex md:p-4 hover:from-plugin"></p>' > src/a.html
+echo '<p class="flex md:p-4 hover:from-plugin group-hover:underline blur-sm m-0 m-1 space-x-0"></p>' > src/a.html
+# The same with no plugin: the Rust compiler compiles this one as an older
+# version too. (With a plugin, it gives the stylesheet to the script
+# engine for a version with another plugin layer.)
+cat > plain.css <<'CSS'
+@import "tailwindcss" source(none);
+@source "./src";
+.card { @apply underline; }
+CSS
 
 # The version line.
 line=$(run --version)
@@ -113,9 +121,11 @@ echo "versions.sh: $count other versions build the project: pass"
 # For a version that the Rust compiler has, the two engines must give the
 # same output: the script engine is the official compiler of that version.
 for version in $native_versions; do
-    choose "$version" native -i app.css -o native.css 2> /dev/null || fail "$version: the native engine failed"
-    choose "$version" script -i app.css -o script.css 2> /dev/null || fail "$version: the script engine failed"
-    cmp -s native.css script.css || fail "$version: the native engine and the script engine give different output"
+    for input in plain.css app.css; do
+        choose "$version" native -i $input -o native.css 2> /dev/null || fail "$version: the native engine failed for $input"
+        choose "$version" script -i $input -o script.css 2> /dev/null || fail "$version: the script engine failed for $input"
+        cmp -s native.css script.css || fail "$version: the native engine and the script engine give different output for $input"
+    done
 done
 [ -z "$native_versions" ] || echo "versions.sh: the Rust compiler as$native_versions gives the output of the official compiler: pass"
 

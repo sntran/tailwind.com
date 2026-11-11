@@ -29,10 +29,10 @@ nothing wrong: that version is only slower.
 |---|---|---|
 | 4.3.5 | Rust compiler | the port |
 | 4.3.4 | Rust compiler | 3, all there |
-| 4.3.3 | script engine | 19 to write |
-| 4.3.2 | script engine | 6 more |
-| 4.3.1 | script engine | 3 more |
-| 4.3.0 | script engine | 10 more |
+| 4.3.3 | Rust compiler; script engine for a stylesheet with plugins | 18 more, all there |
+| 4.3.2 | script engine | 4 more to write |
+| 4.3.1 | script engine | 3 more to write |
+| 4.3.0 | script engine | 8 more to write |
 | 4.0.0 to 4.2.4 | script engine | not counted |
 
 ## How to write a switch
@@ -100,13 +100,20 @@ sh tests/fuzz/install.sh build/official-4.3.4 4.3.4
   later release fixed), the Rust compiler does not stop: it gives the
   result of the fixed version. A wrong output of an old version, which
   is valid CSS, is kept as it was.
-- **A behavior of one version only** (in the list: `addbase-variant-eager`
-  is only in 4.3.1) needs two switches, one for its start and one for its
-  end.
-- **The plugin layer is JavaScript** (`assets/compat.js`, made from the
-  source of Tailwind CSS of the port). A switch there needs a question to
-  the host from the JavaScript side. No switch of this kind is written
-  yet.
+- **A behavior of one version only** needs two switches, one for its
+  start and one for its end. (In the list, `addbase-variant-eager` is
+  only in 4.3.1, but it is in the plugin layer.)
+- **The plugin layer has no switches.** The plugin layer is JavaScript
+  (`assets/compat.js`, made from the source of Tailwind CSS of the
+  port), with no change. So for a version that is older than
+  `Version::OLDEST_WITH_PLUGINS` (the oldest version with the same plugin
+  layer as the port), the Rust compiler does not compile a stylesheet
+  with `@plugin` or `@config`. It gives the error `ScriptEngineNeeded`
+  before it loads a module, and the program uses the script engine for
+  that stylesheet. Such a build is mostly JavaScript in each engine (a
+  Phoenix project with daisyUI: 195 ms and 202 ms), so it loses little.
+  A change of Tailwind CSS that is only in the plugin layer thus needs
+  no switch: the list marks it `JS`.
 
 ## The changes of Tailwind CSS 4.3
 
@@ -126,31 +133,31 @@ project. `JS` marks a change in the plugin layer.
 | `HTML_COMMENT_MARKS` | fix | S | edge | `-->` started a custom property; `<!--` was a part of the next rule |
 | `ONE_CANDIDATE_NO_VARIANT_ORDER` | (no visible change found) | S | edge | The variant order was computed also for one candidate |
 
-### 4.3.4 (19 switches, to write)
+### 4.3.4 (18 switches, all there; 1 change in the plugin layer)
 
-| Change | Kind | Effort | How often | What was before |
+| Switch | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
-| at-property-supports-query | data | S | each build | The `@supports` rule of the fallbacks had `margin-trim: inline`, not `block` |
-| empty-var-fallback-space | data | S | common | `var(--tw-blur,)`, not `var(--tw-blur, )` (8 utilities) |
-| group-peer-selector-form | form | S | common | `.x:is(:where(.group):hover *)`, not `:is(:where(.group):hover .x)` |
-| scope-hoisting | fix | S | rare | `@scope` stayed nested in the rule, with its contents as they were |
-| dead-pseudo-element-rules | fix | S | rare | A rule after a pseudo-element (`::selection > *`) was in the output |
-| ignored-modifier-no-utility | fix | S | rare | `rounded-sm/50` gave the class with the modifier ignored |
-| empty-extra-modifier | fix | S | edge | `bg-red-500/50/` was valid |
-| unbalanced-arbitrary-value | fix | M | rare | `w-[calc(1px]` was valid: only `;` and a closing bracket at depth 0 were errors |
-| supports-variant-keywords | fix | M | rare | `and`, `or`, `not` got spaces around them in all of a `supports-[…]` value |
-| breakpoint-decimal-sort | fix | S | edge | `40.25rem` and `40.5rem` were equal in the sort (`parseInt`) |
-| comment-backslash-end | fix | S | edge | `\` before `*/` kept a comment open |
-| important-flag-at-end | fix | M | edge | The first `!important` in a value cut the value |
-| custom-property-at-eof | fix | M | edge | A custom property at the end of the input lost its last character |
-| declaration-at-eof | fix | S | edge | A declaration with no `;` at the end of the input was dropped |
-| unescape-single-hex-digit | fix | S | edge | `\0` … `\f` gave the digit, not the code point |
-| length-units-table | data | S | rare | `dvmin`, `svb`, `cap`, … were not lengths: `text-[10dvmin]` was a color |
-| moz-any-nesting | fix | S | edge | `&` in `:-moz-any(…)` was not replaced |
-| default-fn-whitespace | fix | S | rare | White space in `--default(…)` of `@utility` was removed |
-| theme-root-namespace-lookup (JS) | fix | M | rare | Plugin `theme('shadow')` gave the DEFAULT text, not the object |
+| `AT_PROPERTY_SUPPORTS_BLOCK` | data | S | each build | The `@supports` rule of the fallbacks had `margin-trim: inline`, not `block` |
+| `EMPTY_VAR_FALLBACK_SPACE` | data | S | common | `var(--tw-blur,)`, not `var(--tw-blur, )` (8 utilities) |
+| `GROUP_PEER_TARGET_IN_IS` | form | S | common | `.x:is(:where(.group):hover *)`, not `:is(:where(.group):hover .x)` |
+| `SCOPE_HOISTING` | fix | S | rare | `@scope` stayed nested in the rule, with its contents as they were |
+| `DEAD_PSEUDO_ELEMENT_RULES` | fix | S | rare | A rule after a pseudo-element (`::selection > *`) was in the output |
+| `UNUSED_MODIFIER_IS_INVALID` | fix | S | rare | `rounded-sm/50` gave the class with the modifier ignored |
+| `EMPTY_EXTRA_MODIFIER_IS_INVALID` | fix | S | edge | `bg-red-500/50/` was valid |
+| `BALANCED_ARBITRARY_VALUE` | fix | M | rare | `w-[calc(1px]` was valid: only `;` and a closing bracket at depth 0 were errors |
+| `SUPPORTS_KEYWORDS_AS_FUNCTIONS` | fix | M | rare | `and`, `or`, `not` got spaces around them in all of a `supports-[…]` value |
+| `BREAKPOINT_DECIMAL_SORT` | fix | S | edge | `40.25rem` and `40.5rem` were equal in the sort (`parseInt`) |
+| `COMMENT_BACKSLASH_END` | fix | S | edge | `\` before `*/` kept a comment open |
+| `IMPORTANT_AT_THE_END` | fix | M | edge | The first `!important` in a value cut the value |
+| `CUSTOM_PROPERTY_AT_EOF` | fix | M | edge | A custom property at the end of the input lost its last character |
+| `DECLARATION_AT_EOF` | fix | S | edge | A declaration with no `;` at the end of the input was dropped |
+| `UNESCAPE_ONE_HEX_DIGIT` | fix | S | edge | `\0` … `\f` gave the digit, not the code point |
+| `MORE_LENGTH_UNITS` | data | S | rare | `dvmin`, `svb`, `cap`, … were not lengths: `text-[10dvmin]` was a color |
+| `MOZ_ANY_NESTING` | fix | S | edge | `&` in `:-moz-any(…)` was not replaced |
+| `DEFAULT_FN_WHITESPACE` | fix | S | rare | White space in `--default(…)` of `@utility` was removed |
+| theme-root-namespace-lookup (JS: no switch) | fix | M | rare | Plugin `theme('shadow')` gave the DEFAULT text, not the object |
 
-### 4.3.3 (6 switches, to write; 6 data changes with no switch)
+### 4.3.3 (4 switches, to write; 2 changes in the plugin layer; 6 data changes with no switch)
 
 | Change | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
@@ -158,8 +165,8 @@ project. `JS` marks a change in the plugin layer.
 | spacing-zero-px | form | S | common | `--spacing(0)` gave `0`, not `0px` |
 | shadow-fractional-alpha | fix | S | rare | `shadow-sm/12.5` gave the class with no alpha |
 | aria-data-attr-validate | fix | S | edge | `data-[foo bar]:flex` gave a rule with a selector that is not valid |
-| selector-nth-child-of (JS) | form | M | edge | Classes after `of` in `:nth-child(…)` got no prefix in `addUtilities` |
-| plugin-theme-default (JS) | fix | S | rare | Plugin `theme('colors.foo')` gave an object when `--color-foo-bar` was there too |
+| selector-nth-child-of (JS: no switch) | form | M | edge | Classes after `of` in `:nth-child(…)` got no prefix in `addUtilities` |
+| plugin-theme-default (JS: no switch) | fix | S | rare | Plugin `theme('colors.foo')` gave an object when `--color-foo-bar` was there too |
 
 Data, from the package: the new `--font-sans` stack (`theme.css`,
 `preflight.css`), `:-moz-focusring:where(:not(iframe))` in
@@ -172,10 +179,10 @@ the plugin layer: there they must come from the package too.
 | Change | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
 | auto-rows-cols-bare-spacing | feature | S | rare | `auto-rows-12` gave nothing |
-| infer-length-spacing-fn (also JS) | fix | S | edge | `text-[--spacing(2)]` was a color |
-| infer-color-alpha-fn (also JS) | fix | S | edge | `--alpha(…)` was not a color for the type of a value |
+| infer-length-spacing-fn (also in the plugin layer) | fix | S | edge | `text-[--spacing(2)]` was a color |
+| infer-color-alpha-fn (also in the plugin layer) | fix | S | edge | `--alpha(…)` was not a color for the type of a value |
 
-### 4.3.1 (10 switches, to write)
+### 4.3.1 (8 switches, to write; 2 changes in the plugin layer)
 
 | Change | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
@@ -187,24 +194,28 @@ the plugin layer: there they must come from the package too.
 | apply-body-error | fix | S | edge | `@apply underline { … }` dropped the body with no error |
 | shadow-color-detection | fix | M | rare | The color of a shadow was the first part that is not a length |
 | not-container-negation | fix | M | rare | `not-*` on `@container style(…)` gave a condition that is not valid |
-| addbase-variant-eager (JS) | fix | M | rare | Only in 4.3.1: `@variant` in `addBase` was replaced when the plugin loaded |
-| plugin-selector-whitespace (JS) | form | L | rare | Selectors of plugins kept their text: `&>*`, not `& > *` |
+| addbase-variant-eager (JS: no switch) | fix | M | rare | Only in 4.3.1: `@variant` in `addBase` was replaced when the plugin loaded |
+| plugin-selector-whitespace (JS: no switch) | form | L | rare | Selectors of plugins kept their text: `&>*`, not `& > *` |
 
 ## What the list shows
 
-- **41 switches** for the six releases of 4.3: 3 are there, 38 are to
-  write.
-- **27 are fixes** of faults in rare inputs, 8 change the form of valid
-  output, 2 are new features, 3 are constants, and 1 has no visible
-  change.
+- **41 changes** in the six releases of 4.3. 5 of them are only in the
+  plugin layer and need no switch. So there are **36 switches**: 21 are
+  there (4.3.5 and 4.3.4), and 15 are to write.
+- **27 of the changes are fixes** of faults in rare inputs, 8 change the
+  form of valid output, 2 are new features, 3 are constants, and 1 has no
+  visible change.
 - **7 change the output of a normal project** (the rows with "each
   build" or "common"). Each other one needs an input that few projects
   have.
-- **30 are one condition or one constant, 10 are one function in two
-  forms, and 1 is large.** The large one is in the JavaScript of the
-  plugin layer. The two largest changes of Tailwind CSS in these
-  releases (the pass that flattens rules, and `@scope`) are new passes:
-  the old behavior is "do not run the pass", and no old algorithm must
-  come back.
-- **7 switches are in the plugin layer**, which is JavaScript, and 2
-  data changes are there too.
+- **Most are one condition or one constant.** Of the 21 switches that
+  are there, 17 are one condition, one constant or one small helper, and
+  4 keep a function in two forms (the declaration with `!important`, the
+  custom property at the end of the input, the brackets of an arbitrary
+  value, the words of `supports-[…]`). The two largest changes of
+  Tailwind CSS in these releases (the pass that flattens rules, and
+  `@scope`) are new passes: the old behavior is "do not run the pass",
+  and no old algorithm must come back.
+- **A behavior that is a fault of an old version is kept**, when its
+  result is CSS: a custom property at the end of the input loses its
+  last character as 4.3.3, as in the official 4.3.3.

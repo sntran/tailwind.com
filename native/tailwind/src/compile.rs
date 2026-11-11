@@ -217,7 +217,7 @@ pub fn apply_variant(node: &mut AstNode, variant: &Variant, design_system: &Desi
 
         let nodes = std::mem::take(node.children_mut()?);
         let mut child = rule(selector.clone(), Vec::new());
-        if child.is_at_rule("@scope") {
+        if child.is_at_rule("@scope") && crate::switches::SCOPE_HOISTING.on() {
             let mut user = ContextMap::new();
             user.insert("source".into(), "user".into());
             *child.children_mut().unwrap() = vec![context(user, nodes)];

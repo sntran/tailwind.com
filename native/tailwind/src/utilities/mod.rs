@@ -21,6 +21,18 @@ use crate::utils::segment::segment;
 use indexmap::IndexMap;
 use std::rc::Rc;
 
+/// A value with empty `var()` fallbacks, as the selected version writes
+/// them: `var(--tw-blur, )`, and before 4.3.4 `var(--tw-blur,)`.
+pub(crate) fn empty_fallbacks(text: &'static str) -> &'static str {
+    if crate::switches::EMPTY_VAR_FALLBACK_SPACE.on() {
+        return text;
+    }
+    thread_local! {
+        static OLD: std::cell::RefCell<std::collections::HashMap<&'static str, &'static str>> = Default::default();
+    }
+    OLD.with(|old| *old.borrow_mut().entry(text).or_insert_with(|| Box::leak(text.replace(", )", ",)").into_boxed_str())))
+}
+
 /// The kind of a utility.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UtilityKind {
@@ -371,7 +383,11 @@ fn handle_functional_utility(desc: UtilityDescription, negative: bool) -> impl F
                 value = theme.resolve(Some(fraction.as_deref().unwrap_or(named)), &desc.theme_keys);
 
                 // A value of the theme does not take a modifier.
-                if value.is_some() && candidate.modifier.is_some() && fraction.is_none() {
+                if value.is_some()
+                    && candidate.modifier.is_some()
+                    && fraction.is_none()
+                    && crate::switches::UNUSED_MODIFIER_IS_INVALID.on()
+                {
                     return None;
                 }
 

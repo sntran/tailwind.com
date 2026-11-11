@@ -104,8 +104,15 @@ pub fn unescape(escaped: &str) -> Cow<'_, str> {
             i += escaped[i..].chars().next().map_or(1, char::len_utf8);
             continue;
         }
-        if i < len && matches!(bytes[i], b'\t' | b'\n' | 0x0c | b'\r' | b' ') {
+        let white_space = i < len && matches!(bytes[i], b'\t' | b'\n' | 0x0c | b'\r' | b' ');
+        if white_space {
             i += 1;
+        }
+        // Before 4.3.4, an escape of two characters (`\0` … `\f` with no
+        // white space after it) was the second character itself.
+        if digits == 1 && !white_space && !crate::switches::UNESCAPE_ONE_HEX_DIGIT.on() {
+            pending = i - 1;
+            continue;
         }
         // NUL, a surrogate, or a value after the last code point
         let c = match code_point {

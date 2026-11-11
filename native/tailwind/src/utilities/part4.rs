@@ -178,7 +178,9 @@ impl ShadowUtility {
 
     fn compile(&self, candidate: &FunctionalCandidate, theme: &Theme) -> Option<Vec<AstNode>> {
         let alpha = shadow_alpha(candidate.modifier.as_ref());
-        let invalid_alpha = candidate.modifier.is_some() && !alpha.as_ref().is_some_and(|a| !a.is_empty());
+        let invalid_alpha = candidate.modifier.is_some()
+            && !alpha.as_ref().is_some_and(|a| !a.is_empty())
+            && crate::switches::UNUSED_MODIFIER_IS_INVALID.on();
 
         let named = match &candidate.value {
             None => {
@@ -503,7 +505,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
             static_utility(
                 utilities,
                 name,
-                vec![n(css_contain_properties), d(variable, value), d("contain", CSS_CONTAIN_VALUE)],
+                vec![n(css_contain_properties), d(variable, value), d("contain", super::empty_fallbacks(CSS_CONTAIN_VALUE))],
             );
         }
 
@@ -568,7 +570,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 vec![
                     n(font_variant_numeric_properties),
                     d(variable, name),
-                    d("font-variant-numeric", CSS_FONT_VARIANT_NUMERIC_VALUE),
+                    d("font-variant-numeric", super::empty_fallbacks(CSS_FONT_VARIANT_NUMERIC_VALUE)),
                 ],
             );
         }
@@ -741,7 +743,8 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 decl(
                     "--tw-ring-shadow",
                     format!(
-                        "var(--tw-ring-inset, ) 0 0 0 calc({value} + var(--tw-ring-offset-width)) var(--tw-ring-color, {default_ring_color})"
+                        "{} 0 0 0 calc({value} + var(--tw-ring-offset-width)) var(--tw-ring-color, {default_ring_color})",
+                        super::empty_fallbacks("var(--tw-ring-inset, )")
                     ),
                 ),
                 decl("box-shadow", CSS_BOX_SHADOW_VALUE),
@@ -779,7 +782,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         const RING_OFFSET_SHADOW_VALUE: &str =
             "var(--tw-ring-inset, ) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color)";
         let ring_offset_width = |value: String| {
-            vec![decl("--tw-ring-offset-width", value), decl("--tw-ring-offset-shadow", RING_OFFSET_SHADOW_VALUE)]
+            vec![decl("--tw-ring-offset-width", value), decl("--tw-ring-offset-shadow", super::empty_fallbacks(RING_OFFSET_SHADOW_VALUE))]
         };
         utilities.functional("ring-offset", move |candidate, ds| {
             let theme = &ds.theme;

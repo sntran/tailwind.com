@@ -120,7 +120,7 @@ fn load(assets: &Path, id: &str, _base: &str) -> tailwind::Result<Stylesheet> {
     })
 }
 
-fn one(assets: &Path, version: Option<tailwind::Version>, css: &str, candidates: &[String], base: &str) -> serde_json::Value {
+fn one(assets: &Path, version: Option<tailwind::Version>, css: &str, candidates: &[String], base: &str) -> Option<serde_json::Value> {
     let loader = |id: &str, base: &str| load(assets, id, base);
     let options = CompileOptions {
         version,
@@ -131,18 +131,22 @@ fn one(assets: &Path, version: Option<tailwind::Version>, css: &str, candidates:
         ..CompileOptions::default()
     };
     match compile(css, options).and_then(|mut compiler| compiler.try_build(candidates)) {
-        Ok(css) => serde_json::json!({ "css": css }),
-        Err(e) => serde_json::json!({ "error": e.message }),
+        Ok(css) => Some(serde_json::json!({ "css": css })),
+        // The Rust compiler does not load JavaScript plugins as an older
+        // version: the program then uses the script engine.
+        Err(e) if e.name == tailwind::version::SCRIPT_ENGINE_NEEDED => None,
+        Err(e) => Some(serde_json::json!({ "error": e.message })),
     }
 }
 
 fn main() {
     let assets = PathBuf::from(std::env::args().nth(1).expect("usage: fuzz_build ASSETS_DIR < cases.jsonl"));
-    let script = std::env::var("FUZZ_ENGINE").is_ok_and(|engine| engine == "script").then(|| {
+    let package = || {
         let text = std::fs::read_to_string(assets.join("package.json")).expect("package.json in ASSETS_DIR");
         let json: serde_json::Value = serde_json::from_str(&text).expect("package.json");
         Rc::new(NpmPackage { directory: assets.clone(), version: json["version"].as_str().unwrap_or_default().to_string() })
-    });
+    };
+    let script = std::env::var("FUZZ_ENGINE").is_ok_and(|engine| engine == "script").then(package);
     // The Rust compiler compiles as the version of the package in
     // ASSETS_DIR: its switches (src/switches.rs) follow that version.
     let version = std::fs::read_to_string(assets.join("package.json"))
@@ -167,7 +171,7 @@ fn main() {
         let base = case["base"].as_str().unwrap_or("").to_string();
         let build = std::panic::AssertUnwindSafe(|| match &script {
             Some(package) => one_script(package, &css, &candidates, &base),
-            None => one(&assets, version, &css, &candidates, &base),
+            None => one(&assets, version, &css, &candidates, &base).unwrap_or_else(|| one_script(&package(), &css, &candidates, &base)),
         });
         let result = std::panic::catch_unwind(build).unwrap_or_else(|p| {
             let text = p

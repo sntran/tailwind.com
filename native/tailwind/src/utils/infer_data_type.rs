@@ -295,8 +295,16 @@ fn is_length_fn(value: &str) -> bool {
     bytes.len() >= 10 && bytes[..9].eq_ignore_ascii_case(b"--spacing") && bytes[9] == b'('
 }
 
+/// The units of 4.3.4.
+const NEW_LENGTH_UNITS: [&str; 18] = [
+    "cap", "ic", "rex", "rch", "rcap", "ric", "svi", "svb", "svmin", "svmax", "lvi", "lvb", "lvmin", "lvmax", "dvi", "dvb", "dvmin",
+    "dvmax",
+];
+
 pub fn is_length(value: &str) -> bool {
-    is_number_with_unit(value, &LENGTH_UNITS) || is_length_fn(value) || has_math_fn(value)
+    let unit = is_number_with_unit(value, &LENGTH_UNITS)
+        && (crate::switches::MORE_LENGTH_UNITS.on() || !is_number_with_unit(value, &NEW_LENGTH_UNITS));
+    unit || is_length_fn(value) || has_math_fn(value)
 }
 
 pub fn is_background_position(value: &str) -> bool {

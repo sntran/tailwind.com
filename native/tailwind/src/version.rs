@@ -23,7 +23,16 @@ impl Version {
     /// later change of Tailwind CSS it has a switch, and the fuzzer finds
     /// no difference from the official compiler of that version
     /// (docs/VERSIONS.md). An older version uses the script engine.
-    pub const OLDEST: Version = Version(4, 3, 4);
+    pub const OLDEST: Version = Version(4, 3, 3);
+
+    /// The oldest version whose plugin layer (`compat/` of Tailwind CSS)
+    /// is the same as the plugin layer of the port. The plugin layer is
+    /// JavaScript of the version of the port (`assets/compat.js`), and it
+    /// has no switches. So for an older version, the Rust compiler does
+    /// not compile a stylesheet with `@plugin` or `@config`: it gives the
+    /// error `SCRIPT_ENGINE_NEEDED`, and the caller uses the script
+    /// engine.
+    pub const OLDEST_WITH_PLUGINS: Version = Version(4, 3, 4);
 
     /// `4.3.5` as a version. A text with another form is `None`.
     pub fn parse(text: &str) -> Option<Version> {
@@ -38,6 +47,11 @@ impl std::fmt::Display for Version {
         write!(f, "{}.{}.{}", self.0, self.1, self.2)
     }
 }
+
+/// The name of the error of the Rust compiler for a stylesheet that it
+/// does not compile as the selected version (see
+/// `Version::OLDEST_WITH_PLUGINS`).
+pub const SCRIPT_ENGINE_NEEDED: &str = "ScriptEngineNeeded";
 
 thread_local! {
     static CURRENT: Cell<Version> = const { Cell::new(Version::NATIVE) };
