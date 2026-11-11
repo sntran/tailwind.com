@@ -20,7 +20,7 @@ The program has two compilers.
 | | The native engine | The script engine |
 |---|---|---|
 | What | The Rust compiler of this repository | The official compiler of the npm package `tailwindcss` (`dist/lib.js`), with no change, in the QuickJS of the program |
-| Versions | The version of the file `UPSTREAM` (4.3.5), and each older version that has all its switches: now 4.3.0 to 4.3.4 ([`SWITCHES.md`](SWITCHES.md)) | Each version whose package the program can find |
+| Versions | The version of the file `UPSTREAM` (4.3.5), and each older version that has all its switches: now 4.2.0 to 4.3.4 ([`SWITCHES.md`](SWITCHES.md)) | Each version whose package the program can find |
 | A new version of Tailwind CSS needs | A port of the changes to Rust (`docs/SYNC.md`) | One line in the file `PACKAGES` |
 | Speed, Phoenix project | 10 ms | 69 ms |
 | Speed, 1000 HTML files | 224 ms | 1.31 s |
@@ -32,11 +32,13 @@ change ([`SWITCHES.md`](SWITCHES.md)). For an older version than its
 own, it reads `theme.css` and `preflight.css` from the package of that
 version.
 
-The plugin layer of the Rust compiler is the JavaScript of Tailwind CSS
-4.3.5, and it has no switches. So for a version with another plugin
-layer (now: older than 4.3.4), a stylesheet with `@plugin` or `@config`
-uses the script engine, also when the Rust compiler serves that version.
-The program decides this for each stylesheet, before it loads a module. `TAILWIND_COM_ENGINE` can
+The plugin layer of the Rust compiler (for `@plugin` and `@config`) is
+the JavaScript of Tailwind CSS. The program has the plugin layer of each
+version that the Rust compiler serves, made from the source of that
+version with no change ([`SWITCHES.md`](SWITCHES.md), "The plugin
+layer"). So a stylesheet with plugins uses the Rust compiler too: a new
+Phoenix project (Tailwind CSS 4.3.3, with daisyUI) builds in 120 ms, and
+in 200 ms with the script engine. `TAILWIND_COM_ENGINE` can
 be `native` or `script`: `script` with the version of the native engine
 runs the official compiler of that version too.
 
@@ -85,7 +87,7 @@ text. So the file does not have each package in full:
 
 A patch has, for each file, the bytes that are new and the places of
 the bytes that are a copy from the other version
-(`native/tailwind/src/cli/patch.rs`). A patch file is 0.2 KB to 57 KB
+(`native/tailwind/src/patch.rs`). A patch file is 0.2 KB to 57 KB
 before deflate, and about 6 KB with deflate. The 48 versions from 4.0.0
 to 4.3.5 are 0.37 MB of the file. As 48 full packages they were 4.1 MB.
 The chain of patches costs no time that a measure shows: the oldest

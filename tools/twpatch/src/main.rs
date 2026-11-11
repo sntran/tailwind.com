@@ -18,7 +18,7 @@
 //! scripts/build.sh puts the store into the ZIP directory `tailwindcss/`
 //! of tailwind.com. See docs/VERSIONS.md.
 
-#[path = "../../../native/tailwind/src/cli/patch.rs"]
+#[path = "../../../native/tailwind/src/patch.rs"]
 #[allow(dead_code)]
 mod patch;
 

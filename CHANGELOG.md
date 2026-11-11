@@ -73,13 +73,17 @@ and each version from 4.0.0 to 4.3.5 with the script engine.
 - With the script engine, a plugin or a config can load the module
   `tailwindcss` itself.
 - The Rust compiler can compile as an older version: a behavior that
-  changed in a release is a switch (`src/switches.rs`). It has the 36
-  switches of 4.3.1 to 4.3.5, so each version of 4.3 (4.3.0 to 4.3.5)
-  uses the Rust compiler. A stylesheet with `@plugin` or `@config` as a
-  version with another plugin layer (older than 4.3.4) uses the script
-  engine.
-  `docs/SWITCHES.md` has the procedure, and the list of the 41 changes
-  of Tailwind CSS 4.3.0 to 4.3.5.
+  changed in a release is a switch (`src/switches.rs`). It has the 49
+  switches of 4.2.1 to 4.3.5, so each version of 4.2 and 4.3 (4.2.0 to
+  4.3.5) uses the Rust compiler.
+  `docs/SWITCHES.md` has the procedure, and the list of the 56 changes
+  of Tailwind CSS 4.2.0 to 4.3.5.
+- The program has the plugin layer of Tailwind CSS (the JavaScript for
+  `@plugin` and `@config`) of each version that the Rust compiler
+  serves, made from the source of that version with no change
+  (`scripts/compat.sh`). An older version is a patch file in the program
+  (76 KB in all). So a stylesheet with plugins as an older version uses
+  the Rust compiler too: a new Phoenix project has Tailwind CSS 4.3.3.
   `tests/fuzz/compare.mjs` compares given cases with the official
   compiler of a version.
 - `docs/VERSIONS.md`.

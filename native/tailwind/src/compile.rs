@@ -318,7 +318,11 @@ fn compile_base_utility(candidate: &Candidate, design_system: &DesignSystem) -> 
             match compiled {
                 Compiled::Undefined => continue,
                 Compiled::Null => {
-                    if utility.options.as_ref().is_some_and(|o| !o.types.is_empty()) {
+                    // Before 4.3.0, each utility that was not valid stopped
+                    // the other utilities.
+                    if utility.options.as_ref().is_some_and(|o| !o.types.is_empty())
+                        || !crate::switches::UTILITY_NULL_FALLTHROUGH.on()
+                    {
                         return asts;
                     }
                     continue;

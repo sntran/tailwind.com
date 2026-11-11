@@ -173,6 +173,17 @@ impl CompatTheme {
         // `createCompatConfig`: the default theme with the `extend` object.
         let mut theme: Object = super::default_theme::default_theme().into_iter().map(|(k, v)| (k.to_string(), v)).collect();
 
+        // Before 4.3.3, the sans-serif fonts of the default theme started
+        // with `ui-sans-serif, system-ui`.
+        if !crate::switches::DEFAULT_THEME_SYSTEM_FONTS.on() {
+            if let Some(Val::Obj(fonts)) = theme.get("fontFamily") {
+                let mut fonts: Object = (**fonts).clone();
+                let old = ["ui-sans-serif", "system-ui", "sans-serif", "\"Apple Color Emoji\"", "\"Segoe UI Emoji\"", "\"Segoe UI Symbol\"", "\"Noto Color Emoji\""];
+                fonts.insert("sans".to_string(), a(old.into_iter().map(s).collect()));
+                theme.insert("fontFamily".to_string(), Val::object(fonts));
+            }
+        }
+
         let spread = |key: &'static str| Val::Lazy(Rc::new(Lazy::Object(vec![Part::SpreadOrEmpty(key)])));
         let default_of = |key: &str| {
             let mut map = Object::new();

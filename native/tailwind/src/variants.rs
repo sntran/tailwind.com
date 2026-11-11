@@ -1204,7 +1204,9 @@ pub fn substitute_at_variant(ast: &mut Vec<AstNode>, design_system: &DesignSyste
 
         let mut body = Some(std::mem::take(&mut variant_rule.nodes));
         let mut nodes: Vec<AstNode> = Vec::new();
-        let compound_variants = segment(&variant_rule.params, b',');
+        // Before 4.3.0, the text was one variant.
+        let list = crate::switches::AT_VARIANT_LIST.on();
+        let compound_variants = if list { segment(&variant_rule.params, b',') } else { vec![variant_rule.params.as_str()] };
         let last = compound_variants.len() - 1;
 
         for (idx, compound_variant) in compound_variants.iter().enumerate() {
@@ -1213,10 +1215,11 @@ pub fn substitute_at_variant(ast: &mut Vec<AstNode>, design_system: &DesignSyste
             let children = if idx == last { body.take().unwrap_or_default() } else { body.clone().unwrap_or_default() };
             let mut node = style_rule("&", children);
 
-            for variant in segment(compound_variant, b':').into_iter().rev() {
-                let variant = js_trim(variant);
+            let stacked_variants = if list { segment(compound_variant, b':') } else { vec![*compound_variant] };
+            for variant in stacked_variants.into_iter().rev() {
+                let variant = if list { js_trim(variant) } else { variant };
 
-                if variant.is_empty() {
+                if variant.is_empty() && list {
                     error = Some(Error::new("Cannot use `@variant` with empty variant"));
                     return WalkAction::Stop;
                 }

@@ -116,6 +116,8 @@ pub fn unescape(escaped: &str) -> Cow<'_, str> {
         }
         // NUL, a surrogate, or a value after the last code point
         let c = match code_point {
+            // Before 4.2.3, the code point 0 stayed.
+            0 if !crate::switches::UNESCAPE_NUL_IS_REPLACED.on() => '\0',
             0 => '\u{FFFD}',
             n => char::from_u32(n).unwrap_or('\u{FFFD}'),
         };

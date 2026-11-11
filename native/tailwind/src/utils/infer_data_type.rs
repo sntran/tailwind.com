@@ -263,11 +263,19 @@ pub fn is_fraction(value: &str) -> bool {
     fn matches(value: &str) -> bool {
         let bytes = value.as_bytes();
         let Some(end) = number_end(bytes, 0) else { return false };
-        let slash = skip_whitespace(value, end);
+        // Before 4.2.2, the pattern had `s*` where `\s*` was necessary.
+        let skip = |start: usize| {
+            if crate::switches::FRACTION_WHITE_SPACE.on() {
+                skip_whitespace(value, start)
+            } else {
+                start + bytes[start..].iter().take_while(|byte| **byte == b's').count()
+            }
+        };
+        let slash = skip(end);
         if bytes.get(slash) != Some(&b'/') {
             return false;
         }
-        let start = skip_whitespace(value, slash + 1);
+        let start = skip(slash + 1);
         number_end(bytes, start) == Some(bytes.len())
     }
     matches(value) || has_math_fn(value)

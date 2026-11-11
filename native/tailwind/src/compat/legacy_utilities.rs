@@ -105,6 +105,16 @@ fn handle_inset(
 ) -> Option<Vec<AstNode>> {
     let negate = |value: String| if negative { format!("calc({value} * -1)") } else { value };
 
+    // Before 4.3.0, `start` and `end` with no value gave the value of
+    // `--inset` or `--spacing`.
+    if candidate.value.is_none() && !crate::switches::LEGACY_INSET_NEEDS_VALUE.on() {
+        if candidate.modifier.is_some() {
+            return None;
+        }
+        let value = design_system.theme.resolve(None, &["--inset", "--spacing"])?;
+        return Some(vec![decl(property, negate(value))]);
+    }
+
     let (named, fraction) = match candidate.value.as_ref()? {
         UtilityValue::Arbitrary { value, .. } => {
             if candidate.modifier.is_some() {

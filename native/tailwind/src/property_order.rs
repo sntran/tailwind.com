@@ -370,6 +370,13 @@ pub const GLOBAL_PROPERTY_ORDER: &[&str] = &[
 /// The index of a property in `GLOBAL_PROPERTY_ORDER`: the first one, when
 /// the list has the property two times.
 pub fn property_index(property: &str) -> Option<usize> {
+    // Before 4.3.0, these properties had no place in the order. The
+    // sequence of the other properties is the same.
+    if matches!(property, "zoom" | "scrollbar-width" | "scrollbar-color" | "scrollbar-gutter" | "tab-size")
+        && !crate::switches::ZOOM_TAB_SCROLLBAR.on()
+    {
+        return None;
+    }
     static INDEX: OnceLock<HashMap<&str, usize>> = OnceLock::new();
     INDEX
         .get_or_init(|| {

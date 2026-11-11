@@ -41,6 +41,17 @@ jobs:
           submodules: true
       - name: The versions of UPSTREAM
         run: sh scripts/sync-upstream.sh check
+      # The plugin layer of each version (native/tailwind/assets/compat.js
+      # and compat/) must be the files that scripts/compat.sh makes from
+      # the source of Tailwind CSS.
+      - name: The plugin layer of each version, from the source of Tailwind CSS
+        run: |
+          . ./UPSTREAM
+          git clone -q --depth 1 --branch "v$TAILWINDCSS_VERSION" https://github.com/tailwindlabs/tailwindcss.git "$RUNNER_TEMP/tailwindcss"
+          (cd tests/upstream/tools && npm ci --no-audit --no-fund --legacy-peer-deps --ignore-scripts)
+          sh scripts/compat.sh "$RUNNER_TEMP/tailwindcss"
+          git diff --exit-code -- native/tailwind/assets
+          test -z "$(git status --porcelain -- native/tailwind/assets)"
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: The tests, against the record of Tailwind CSS

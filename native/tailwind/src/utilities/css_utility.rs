@@ -168,7 +168,9 @@ fn normalize_argument(arg: &str) -> String {
     let mut arg = collapse_wildcards(&arg);
 
     // A theme key ends in `-*`.
-    if arg.starts_with("--") && !arg.contains('(') && !arg.contains("-*") {
+    // (Before 4.3.0, `--default(…)` was a theme key as each other.)
+    let is_function = arg.contains('(') && crate::switches::CSS_UTILITY_DEFAULT.on();
+    if arg.starts_with("--") && !is_function && !arg.contains("-*") {
         arg.push_str("-*");
     }
 
@@ -260,6 +262,12 @@ struct CompileState<'a> {
 }
 
 fn compile_functional(node: &AtRule, candidate: &FunctionalCandidate, design_system: &DesignSystem) -> Compiled {
+    // Before 4.3.0, a functional utility needed a value.
+    let has_default = crate::switches::CSS_UTILITY_DEFAULT.on();
+    if candidate.value.is_none() && !has_default {
+        return Compiled::Undefined;
+    }
+
     let mut at_rule = node.clone();
     let mut state = CompileState {
         value: candidate.value.as_ref(),
@@ -276,7 +284,9 @@ fn compile_functional(node: &AtRule, candidate: &FunctionalCandidate, design_sys
     resolve_declarations(&mut at_rule.nodes, true, &mut state);
 
     // One `--value(…)` must have a result.
-    if !state.used_value_fn || !state.resolved_value_fn {
+    // (Before 4.3.0, a utility with no `--value(…)` was valid.)
+    let needs_value = crate::switches::CSS_UTILITY_NEEDS_VALUE.on();
+    if (needs_value || state.used_value_fn) && !(state.used_value_fn && state.resolved_value_fn) {
         return Compiled::Null;
     }
 
@@ -364,6 +374,11 @@ fn resolve_value_functions(nodes: &mut Vec<ValueAstNode>, state: &mut CompileSta
             nodes.splice(index..=index, resolved.nodes);
             index += count;
         } else if function.value == "--modifier" {
+            // Before 4.3.0, a candidate with no modifier removed the
+            // declaration here: there was no default.
+            if state.modifier.is_none() && !crate::switches::CSS_UTILITY_DEFAULT.on() {
+                return false;
+            }
             state.used_modifier_fn = true;
             let Some(resolved) = resolve_value_function(state.modifier.map(FunctionValue::from), function, state.design_system)
             else {
@@ -653,5 +668,6 @@ pub fn is_valid_functional_utility_name(name: &str) -> bool {
     let Some(name) = name.strip_suffix("-*") else { return false };
     // The root is the full name. A root that ends in `-` is valid, so a
     // candidate such as `foo--bar` is possible.
-    utility_root_length(name) == Some(name.len())
+    // (4.2.0 did not permit that end.)
+    utility_root_length(name) == Some(name.len()) && (!name.ends_with('-') || crate::switches::UTILITY_ROOT_ENDING_DASH.on())
 }

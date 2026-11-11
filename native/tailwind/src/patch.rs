@@ -1,4 +1,7 @@
-//! The patches of the packages of Tailwind CSS.
+//! The patches of the packages of Tailwind CSS, and of the plugin layer.
+//!
+//! The plugin layer of each older version that the Rust compiler serves is
+//! a patch file too (`assets/compat/`, `compat/js/bundles.rs`).
 //!
 //! The file tailwind.com has the npm package `tailwindcss` of each
 //! version, for the script engine. The compilers of two versions next to

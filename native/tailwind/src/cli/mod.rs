@@ -8,7 +8,6 @@ pub mod engine;
 pub mod events;
 pub mod modules;
 pub mod optimize_css;
-pub mod patch;
 pub mod remapping;
 pub mod resolve;
 pub mod source_maps;
@@ -347,8 +346,8 @@ fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), fr
                 },
             );
             match (native, package) {
-                // The Rust compiler does not load JavaScript plugins as an
-                // older version (`Version::OLDEST_WITH_PLUGINS`): the
+                // The Rust compiler does not load JavaScript plugins as a
+                // version older than `Version::OLDEST_WITH_PLUGINS`: the
                 // official compiler of that version does it.
                 #[cfg(tw_js)]
                 (Err(error), Some(package)) if error.name == crate::version::SCRIPT_ENGINE_NEEDED => {

@@ -928,7 +928,9 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     st(u, "transform-none", &[("transform", "none")]);
 
     // `zoom`
-    functional_utility(u, "zoom", one_property("zoom").bare(integer_with("%")));
+    if crate::switches::ZOOM_TAB_SCROLLBAR.on() {
+        functional_utility(u, "zoom", one_property("zoom").bare(integer_with("%")));
+    }
 
     // `transform-style`
     st(u, "transform-flat", &[("transform-style", "flat")]);

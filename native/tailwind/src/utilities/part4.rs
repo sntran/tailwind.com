@@ -834,7 +834,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
             None => "inline-size",
             Some(UtilityValue::Arbitrary { value, .. }) => value.as_str(),
             Some(UtilityValue::Named { value, .. }) if value == "normal" => "normal",
-            Some(UtilityValue::Named { value, .. }) if value == "size" => "size",
+            Some(UtilityValue::Named { value, .. }) if value == "size" && crate::switches::CONTAINER_SIZE.on() => "size",
             Some(_) => return None,
         };
 

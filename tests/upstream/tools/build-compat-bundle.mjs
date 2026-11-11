@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Usage: node build-compat-bundle.mjs <upstream clone> [output file]
 //
+// <upstream clone> is a directory with packages/tailwindcss of Tailwind
+// CSS: a clone, or the files of one tag (scripts/compat.sh).
+//
 // This script makes native/tailwind/assets/compat.js: the plugin layer of
 // Tailwind CSS (packages/tailwindcss/src/compat) in one JavaScript file.
 // The entry and the shims are in native/tailwind/js. The modules of
@@ -25,10 +28,18 @@ upstream = path.resolve(upstream)
 let here = path.dirname(fileURLToPath(import.meta.url))
 let root = path.resolve(here, '../../..')
 let js = path.join(root, 'native/tailwind/js')
-let src = path.join(upstream, 'packages/tailwindcss/src')
 output = path.resolve(output ?? path.join(root, 'native/tailwind/assets/compat.js'))
 
 let version = JSON.parse(fs.readFileSync(path.join(upstream, 'packages/tailwindcss/package.json'), 'utf8')).version
+
+// The short names in the bundle depend on the paths of its modules. So
+// the source of Tailwind CSS always goes to the same place in this
+// repository: then the bundle of a version is the same file for each
+// place of the upstream clone.
+let copy = path.join(root, 'build/compat-src')
+fs.rmSync(copy, { recursive: true, force: true })
+let src = path.join(copy, 'packages/tailwindcss/src')
+fs.cpSync(path.join(upstream, 'packages/tailwindcss/src'), src, { recursive: true })
 
 let esbuild = loadEsbuild()
 
@@ -58,6 +69,7 @@ let replaced = new Map([
   [path.join(src, 'apply.ts'), path.join(js, 'shims/apply.ts')],
   [path.join(src, 'css-functions.ts'), path.join(js, 'shims/css-functions.ts')],
   [path.join(src, 'compat/legacy-utilities.ts'), path.join(js, 'shims/legacy-utilities.ts')],
+  [path.join(src, 'variants.ts'), path.join(js, 'shims/variants.ts')],
 ])
 
 // The modules of Tailwind CSS that must not be in the bundle: a shim has
@@ -72,6 +84,11 @@ let shims = {
     build.onResolve({ filter: /^tailwindcss-src\// }, (args) => {
       let file = path.join(src, args.path.slice('tailwindcss-src/'.length) + '.ts')
       return { path: replaced.get(file) ?? file }
+    })
+    // The module of Tailwind CSS itself, for a shim that has only a part
+    // of it.
+    build.onResolve({ filter: /^tailwindcss-real\// }, (args) => {
+      return { path: path.join(src, args.path.slice('tailwindcss-real/'.length) + '.ts') }
     })
     build.onResolve({ filter: /^\./ }, (args) => {
       if (!args.resolveDir.startsWith(src)) return null
@@ -129,7 +146,7 @@ let scriptResult = await esbuild.build({
   metafile: true,
 })
 for (let file of Object.keys(scriptResult.metafile.inputs)) {
-  if (path.resolve(file).startsWith(upstream + path.sep)) {
+  if (path.resolve(file).startsWith(copy + path.sep)) {
     console.error(`build-compat-bundle.mjs: ${file} is in the script bundle. It must have no code of Tailwind CSS.`)
     process.exit(1)
   }
@@ -144,7 +161,7 @@ console.error(`build-compat-bundle.mjs: wrote ${scriptOutput} (${fs.statSync(scr
 
 if (process.env.VERBOSE) {
   for (let [file, info] of inputs.sort((a, z) => z[1].bytesInOutput - a[1].bytesInOutput)) {
-    console.error(String(info.bytesInOutput).padStart(8), path.relative(upstream, path.resolve(file)))
+    console.error(String(info.bytesInOutput).padStart(8), path.relative(root, path.resolve(file)))
   }
 }
 console.error(`build-compat-bundle.mjs: wrote ${output} (${fs.statSync(output).size} bytes)`)

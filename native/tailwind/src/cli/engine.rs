@@ -26,7 +26,7 @@
 
 use crate::index::{Compiler, Root, Source};
 use crate::source_maps::DecodedSourceMap;
-use super::patch::{self, Entry, Patch};
+use crate::patch::{self, Entry, Patch};
 use crate::version::Version;
 use crate::Result;
 use std::cell::RefCell;

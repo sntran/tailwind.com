@@ -17,6 +17,7 @@ pub mod css_parser;
 pub mod design_system;
 pub mod index;
 pub mod optimize;
+pub mod patch;
 pub mod property_order;
 #[cfg(tw_js)]
 pub mod script;

@@ -311,10 +311,21 @@ compiler of the version before a change and of the version with it.
 with the official packages of an older version
 (`sh tests/fuzz/install.sh DIR VERSION`) finds each behavior with no
 switch: the Rust compiler compiles as the version of the package that it
-compares with.
+compares with. The job `switches` of `.github/workflows/fuzz.yml` does
+this for each older version that the Rust compiler serves (4.2.0 to
+4.3.4). About one third of its cases have JavaScript plugins or
+configs: they run the plugin layer of that version.
+
+The plugin layer of each version has three checks: a unit test
+(`compat/js/bundles.rs`: each version reads back, and names its
+version), the job "test" of `.github/workflows/build.yml` (the files of
+the repository are the files that `scripts/compat.sh` makes from the
+source of Tailwind CSS), and `tests/versions.sh` (for each version of
+the Rust compiler, the two engines give the same output for a project
+with a plugin).
 
 The patch files of the packages have three checks: the unit tests of
-`src/cli/patch.rs` (random texts with random changes must read back
+`src/patch.rs` (random texts with random changes must read back
 the same), the tool `tools/twpatch` in each build (each version of the
 store must read back as its package), and `tests/versions.sh` with
 `tailwind.com` on each system.

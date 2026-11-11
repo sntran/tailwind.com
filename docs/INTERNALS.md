@@ -133,7 +133,11 @@ design system in `runtime.rs` (see below), the file events
 the plugin layer, and 41 KB for the parts of Node.js), made by
 `tests/upstream/tools/build-compat-bundle.mjs` with esbuild from the
 source of Tailwind CSS and from `native/tailwind/js`. It is in the
-repository, so a build needs no Node.js.
+repository, so a build needs no Node.js. The same file from the source
+of each older version that the Rust compiler serves is a patch file in
+`assets/compat/` (`scripts/compat.sh`): `compat/js/bundles.rs` gives the
+file of the version that the compiler follows (`SWITCHES.md`, "The
+plugin layer").
 
 The bundle has these modules of Tailwind CSS as they are: all of
 `compat/` except `legacy-utilities.ts`, `plugin.ts`, the constructors
@@ -577,7 +581,7 @@ In `tailwind.com` that directory is `/zip/tailwindcss/VERSION`:
 Cosmopolitan gives the ZIP directory of the file as the path `/zip`.
 `scripts/build.sh` adds the files with `zip` after the link. The store
 has the newest package as a directory and each older version as a patch
-file (`src/cli/patch.rs`): `DirectoryPackage` reads a file of a version
+file (`src/patch.rs`): `DirectoryPackage` reads a file of a version
 from its directory, or from the reference version of its patch with the
 delta of the patch. The tool `tools/twpatch` makes the patch files: it
 includes `patch.rs`, and it builds for the computer of the build.

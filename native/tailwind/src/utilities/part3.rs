@@ -669,7 +669,12 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         }),
     );
 
-    color_utility(utilities, "placeholder", &["--placeholder-color", "--color"], |value, _| {
+    let placeholder_keys: &[&str] = if crate::switches::PLACEHOLDER_COLOR_KEY.on() {
+        &["--placeholder-color", "--color"]
+    } else {
+        &["--background-color", "--color"]
+    };
+    color_utility(utilities, "placeholder", placeholder_keys, |value, _| {
         Some(vec![style_rule("&::placeholder", vec![decl("--tw-sort", "placeholder-color"), decl("color", value)])])
     });
 

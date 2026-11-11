@@ -33,8 +33,6 @@ use serde_json::{json, Value};
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
-/// The compatibility bundle.
-const COMPAT_JS: &str = include_str!("../../../assets/compat.js");
 
 /// The design system of a call into JavaScript.
 #[derive(Clone, Copy)]
@@ -120,7 +118,11 @@ impl JsRuntime {
             locs: LocTable::default(),
         });
         *slot.borrow_mut() = Rc::downgrade(&runtime);
-        runtime.engine.eval(COMPAT_JS, "tailwindcss/compat.js").map_err(to_error)?;
+        // The plugin layer of the version that the compiler follows now.
+        let version = crate::version::current();
+        let compat_js = super::bundles::compat_js(version)
+            .ok_or_else(|| Error::new(format!("The plugin layer of Tailwind CSS v{version} is not in this program.")))?;
+        runtime.engine.eval(&compat_js, "tailwindcss/compat.js").map_err(to_error)?;
         Ok(runtime)
     }
 
@@ -603,11 +605,17 @@ impl JsRuntime {
                 crate::compat::legacy_utilities::register_legacy_utilities(ds);
                 Ok(None)
             }),
-            "substituteAtApply" | "substituteFunctions" => {
+            // `substituteAtVariant`: only the plugin layer of 4.3.1 asks
+            // for it (`js/shims/variants.ts`).
+            "substituteAtApply" | "substituteFunctions" | "substituteAtVariant" => {
                 let mut ast = ast_from_json(arg, &self.locs)?;
                 let features = self.with(|ds| {
-                    if op == "substituteAtApply" { substitute_at_apply(&mut ast, ds, None) } else { substitute_functions(&mut ast, ds) }
-                        .map_err(|error| error.message)
+                    match op {
+                        "substituteAtApply" => substitute_at_apply(&mut ast, ds, None),
+                        "substituteFunctions" => substitute_functions(&mut ast, ds),
+                        _ => crate::variants::substitute_at_variant(&mut ast, ds),
+                    }
+                    .map_err(|error| error.message)
                 })?;
                 done(json!({ "ast": ast_to_json(&ast, &self.locs), "features": features }))
             }

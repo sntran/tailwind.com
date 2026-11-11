@@ -29,13 +29,20 @@ nothing wrong: that version is only slower.
 |---|---|---|
 | 4.3.5 | Rust compiler | the port |
 | 4.3.4 | Rust compiler | 3 |
-| 4.3.3 | Rust compiler; script engine for a stylesheet with plugins | 18 more |
-| 4.3.2 | Rust compiler; script engine for a stylesheet with plugins | 4 more |
-| 4.3.1 | Rust compiler; script engine for a stylesheet with plugins | 3 more |
-| 4.3.0 | Rust compiler; script engine for a stylesheet with plugins | 8 more |
-| 4.0.0 to 4.2.4 | script engine | not counted |
+| 4.3.3 | Rust compiler | 18 more |
+| 4.3.2 | Rust compiler | 5 more |
+| 4.3.1 | Rust compiler | 3 more |
+| 4.3.0 | Rust compiler | 8 more |
+| 4.2.4 | Rust compiler | 8 more |
+| 4.2.3 | Rust compiler | 0 more |
+| 4.2.2 | Rust compiler | 2 more |
+| 4.2.1 | Rust compiler | 1 more |
+| 4.2.0 | Rust compiler | 1 more |
+| 4.0.0 to 4.1.18 | script engine | not counted |
 
-All the 36 switches of Tailwind CSS 4.3 are there.
+All the 49 switches of Tailwind CSS 4.2 and 4.3 are there. Each of these
+versions uses the Rust compiler also for a stylesheet with `@plugin` or
+`@config`: see "The plugin layer" below.
 
 ## How to write a switch
 
@@ -104,20 +111,48 @@ sh tests/fuzz/install.sh build/official-4.3.4 4.3.4
   is valid CSS, is kept as it was.
 - **A behavior of one version only** needs two switches, one for its
   start and one for its end. (In the list, `addbase-variant-eager` is
-  only in 4.3.1, but it is in the plugin layer.)
-- **The plugin layer has no switches.** The plugin layer is JavaScript
-  (`assets/compat.js`, made from the source of Tailwind CSS of the
-  port), with no change. So for a version that is older than
-  `Version::OLDEST_WITH_PLUGINS` (the oldest version with the same plugin
-  layer as the port), the Rust compiler does not compile a stylesheet
-  with `@plugin` or `@config`. It gives the error `ScriptEngineNeeded`
-  before it loads a module, and the program uses the script engine for
-  that stylesheet. Such a build is mostly JavaScript in each engine (a
-  Phoenix project with daisyUI: 195 ms and 202 ms), so it loses little.
-  A change of Tailwind CSS that is only in the plugin layer thus needs
-  no switch: the list marks it `JS`.
+  only in 4.3.1, but it is in the plugin layer. `UTILITY_ROOT_ENDING_DASH`
+  is only in 4.2.0, the oldest version, so it needs one switch.)
+- **The plugin layer has no switches: each version has its own.** See
+  the next section.
 
-## The changes of Tailwind CSS 4.3
+## The plugin layer
+
+The plugin layer is JavaScript: `packages/tailwindcss/src/compat` of
+Tailwind CSS, with the shims of `native/tailwind/js`, in one file
+(`native/tailwind/assets/compat.js` for the version of the port). The
+program has that file for each version from
+`Version::OLDEST_WITH_PLUGINS` to the version of the port, made from
+the source of that version with no change. So the Rust compiler as
+version N runs the plugin layer of version N, and a change of Tailwind
+CSS in its plugin layer needs no switch and no work: the list marks it
+`JS`.
+
+- `sh scripts/compat.sh UPSTREAM_CLONE` makes all the files. An older
+  version is a patch file (`native/tailwind/assets/compat/VERSION.patch`,
+  3 KB to 12 KB): the difference from the file of the next newer
+  version, in the format of the packages (`src/patch.rs`). The patch
+  files are in the program (76 KB in all), and `compat/js/bundles.rs`
+  reads them.
+- The files do not depend on the computer. The job "test" of
+  `.github/workflows/build.yml` makes them again from the source of
+  Tailwind CSS and compares them with the repository.
+- A change of `native/tailwind/js` (the shims) changes each file: run
+  the script again.
+- The same shims must build with the source of each version. One version
+  needed its own shim: only the plugin layer of 4.3.1 calls
+  `substituteAtVariant`, which is in the host (`js/shims/variants.ts`).
+- The parts of `compat/` that are Rust have switches as each other code:
+  the default theme of `theme(fontFamily.sans)`
+  (`DEFAULT_THEME_SYSTEM_FONTS`) and the old utilities `start` and `end`
+  (`LEGACY_INSET_NEEDS_VALUE`).
+- For a version that is older than `Version::OLDEST_WITH_PLUGINS`, the
+  Rust compiler does not compile a stylesheet with `@plugin` or
+  `@config`: it gives the error `ScriptEngineNeeded` before it loads a
+  module, and the program uses the script engine for that stylesheet.
+  Now `OLDEST_WITH_PLUGINS` is `OLDEST`, so this does not occur.
+
+## The changes of Tailwind CSS 4.2 and 4.3
 
 This list comes from the source of Tailwind CSS: each change between two
 releases that can change the result of `compile` and `build`.
@@ -157,9 +192,9 @@ project. `JS` marks a change in the plugin layer.
 | `MORE_LENGTH_UNITS` | data | S | rare | `dvmin`, `svb`, `cap`, … were not lengths: `text-[10dvmin]` was a color |
 | `MOZ_ANY_NESTING` | fix | S | edge | `&` in `:-moz-any(…)` was not replaced |
 | `DEFAULT_FN_WHITESPACE` | fix | S | rare | White space in `--default(…)` of `@utility` was removed |
-| theme-root-namespace-lookup (JS: no switch) | fix | M | rare | Plugin `theme('shadow')` gave the DEFAULT text, not the object |
+| theme-root-namespace-lookup (JS) | fix | M | rare | Plugin `theme('shadow')` gave the DEFAULT text, not the object |
 
-### 4.3.3 (4 switches, all there; 2 changes in the plugin layer; 6 data changes with no switch)
+### 4.3.3 (5 switches, all there; 2 changes in the plugin layer; data changes with no switch)
 
 | Switch | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
@@ -167,14 +202,15 @@ project. `JS` marks a change in the plugin layer.
 | `SPACING_ZERO_PX` | form | S | common | `--spacing(0)` gave `0`, not `0px` |
 | `SHADOW_FRACTIONAL_ALPHA` | fix | S | rare | `shadow-sm/12.5` gave the class with no alpha |
 | `ARIA_DATA_ATTRIBUTE_CHECK` | fix | S | edge | `data-[foo bar]:flex` gave a rule with a selector that is not valid |
-| selector-nth-child-of (JS: no switch) | form | M | edge | Classes after `of` in `:nth-child(…)` got no prefix in `addUtilities` |
-| plugin-theme-default (JS: no switch) | fix | S | rare | Plugin `theme('colors.foo')` gave an object when `--color-foo-bar` was there too |
+| `DEFAULT_THEME_SYSTEM_FONTS` | data | S | edge | `theme(fontFamily.sans)` with no `--font-sans` gave `ui-sans-serif, system-ui, …` |
+| selector-nth-child-of (JS) | form | M | edge | Classes after `of` in `:nth-child(…)` got no prefix in `addUtilities` |
+| plugin-theme-default (JS) | fix | S | rare | Plugin `theme('colors.foo')` gave an object when `--color-foo-bar` was there too |
 
 Data, from the package: the new `--font-sans` stack (`theme.css`,
 `preflight.css`), `:-moz-focusring:where(:not(iframe))` in
 `preflight.css`, and `oklch(L 0 none)` for 13 gray colors. The same
 values are also in `tailwindcss/colors` and `tailwindcss/defaultTheme` of
-the plugin layer: there they must come from the package too.
+the plugin layer: the plugin layer of each version has its own values.
 
 ### 4.3.2 (3 switches, all there)
 
@@ -196,21 +232,70 @@ the plugin layer: there they must come from the package too.
 | `APPLY_BODY_ERROR` | fix | S | edge | `@apply underline { … }` dropped the body with no error |
 | `SHADOW_COLOR_DETECTION` | fix | M | rare | The color of a shadow was the first part that is not a length |
 | `NOT_CONTAINER_VALUE_PARSER` | fix | M | rare | `not-*` on `@container style(…)` gave a condition that is not valid |
-| addbase-variant-eager (JS: no switch) | fix | M | rare | Only in 4.3.1: `@variant` in `addBase` was replaced when the plugin loaded |
-| plugin-selector-whitespace (JS: no switch) | form | L | rare | Selectors of plugins kept their text: `&>*`, not `& > *` |
+| addbase-variant-eager (JS) | fix | M | rare | Only in 4.3.1: `@variant` in `addBase` was replaced when the plugin loaded |
+| plugin-selector-whitespace (JS) | form | L | rare | Selectors of plugins kept their text: `&>*`, not `& > *` |
+
+### 4.3.0 (8 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `ZOOM_TAB_SCROLLBAR` | feature, data | S | rare | No `zoom-*`, `tab-*`, `scrollbar-*`, `scrollbar-thumb-*`, `scrollbar-track-*`, `scrollbar-gutter-*`; their five properties had no place in the property order |
+| `CONTAINER_SIZE` | feature | S | rare | No `@container-size` in a release |
+| `CSS_UTILITY_DEFAULT` | feature | M | rare | A functional `@utility` had no `--default(…)`, and did not match a candidate with no value |
+| `CSS_UTILITY_NEEDS_VALUE` | fix | S | edge | A functional `@utility` with no `--value(…)` matched each value |
+| `UTILITY_NULL_FALLTHROUGH` | fix | S | edge | A utility that was not valid stopped the other utilities with the same name |
+| `AT_VARIANT_LIST` | feature | S | rare | `@variant hover, focus` and `@variant hover:focus` were errors |
+| `NEGATIVE_CALC_WHITESPACE` | form | S | edge | `-m-[1px+2px]` gave `calc(1px+2px * -1)` |
+| `LEGACY_INSET_NEEDS_VALUE` | fix | S | edge | The old utilities `start` and `end` with no value gave the value of `--inset` or `--spacing` |
+
+### 4.2.4 (no change of the compiler)
+
+### 4.2.3 (2 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `PLACEHOLDER_COLOR_KEY` | fix | S | rare | `placeholder-*` read `--background-color`, not `--placeholder-color` |
+| `UNESCAPE_NUL_IS_REPLACED` | fix | S | edge | An escape of the code point 0 gave that code point, not U+FFFD |
+
+No switch: an escape above U+10FFFF stopped the official compiler (a
+fault that stops the compiler). `NODE_PATH` with more than one directory
+is in the module loader of the program, which is the same for each
+version.
+
+### 4.2.2 (1 switch, there; 2 changes in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `FRACTION_WHITE_SPACE` | fix | S | edge | `1 / 2` was not a fraction for the type of a value (a fault in the pattern) |
+| plugin-values-own-property (JS) | fix | S | edge | `matchUtilities` and `matchVariant` took `constructor` and `toString` as values |
+| theme-get-own-property (JS) | fix | S | edge | `theme('colors.constructor')` gave a function |
+
+No switch: a static value with the name of a property of `Object`
+(`auto-rows-constructor`) stopped the official compiler.
+
+### 4.2.1 (1 switch, there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `UTILITY_ROOT_ENDING_DASH` | fix | S | edge | Only in 4.2.0: `@utility foo--*` was not a valid name |
+
+The scanner of the source files follows no version, in each engine. Its
+changes in these releases: the Markdown and Ruby pre-processors, and the
+`.jsonl` and `.ndjson` files.
 
 ## What the list shows
 
-- **41 changes** in the six releases of 4.3. 5 of them are only in the
-  plugin layer and need no switch. So there are **36 switches**, and all
-  are there: the Rust compiler serves each version of 4.3.
-- **27 of the changes are fixes** of faults in rare inputs, 8 change the
-  form of valid output, 2 are new features, 3 are constants, and 1 has no
-  visible change.
+- **56 changes** in the eleven releases from 4.2.0 to 4.3.5. 7 of them
+  are only in the JavaScript of the plugin layer and need no switch. So
+  there are **49 switches**, and all are there: the Rust compiler serves
+  each version of 4.2 and 4.3.
+- **Most of the changes are fixes** of faults in rare inputs. 9 change
+  the form of valid output, 6 are new features, 4 are constants, and 1
+  has no visible change.
 - **7 change the output of a normal project** (the rows with "each
   build" or "common"). Each other one needs an input that few projects
   have.
-- **Most are one condition or one constant.** Of the 36 switches, 29
+- **Most are one condition or one constant.** Of the 49 switches, 42
   are one condition, one constant or one small helper, and 7 keep a
   function in two forms (the declaration with `!important`, the custom
   property at the end of the input, the brackets of an arbitrary value,
@@ -222,9 +307,17 @@ the plugin layer: there they must come from the package too.
   the old code must come back (about 50 lines for the pass that flattens
   rules).
 - **The work for one release was small.** The 15 switches of 4.3.1,
-  4.3.2 and 4.3.3 are about 320 lines of Rust, with their comments. The fuzzer found no
-  difference after them: the list from the source of Tailwind CSS was
-  complete.
+  4.3.2 and 4.3.3 are about 320 lines of Rust, with their comments, and
+  the 12 switches of 4.2.1 to 4.3.0 are about 200 lines. The fuzzer
+  found no difference after them: the list from the source of Tailwind
+  CSS was almost complete. One switch came later
+  (`DEFAULT_THEME_SYSTEM_FONTS`): its value is in the Rust part of the
+  plugin layer, and the fuzzer has no `theme(fontFamily.sans)`.
+- **An older line is more work.** With no switch for it, the Rust
+  compiler is different from the official 4.1.18 in 111 of 600 fuzz
+  cases, and from 4.0.17 in 375 of 600 (4.2.4 before its switches: 35 of
+  1,500). 4.1.0 to 4.2.0 changes about 4,000 lines of the compiler of
+  Tailwind CSS.
 - **A behavior that is a fault of an old version is kept**, when its
   result is CSS: a custom property at the end of the input loses its
   last character as 4.3.3, as in the official 4.3.3. And before 4.3.3, a

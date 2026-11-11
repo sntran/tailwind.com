@@ -448,7 +448,12 @@ fn handle_functional_utility(desc: UtilityDescription, negative: bool) -> impl F
         let value = value?;
 
         if negative {
-            (desc.handle)(&add_whitespace_around_math_operators(&format!("calc({value} * -1)")), data_type, ds)
+            let negated = format!("calc({value} * -1)");
+            if crate::switches::NEGATIVE_CALC_WHITESPACE.on() {
+                (desc.handle)(&add_whitespace_around_math_operators(&negated), data_type, ds)
+            } else {
+                (desc.handle)(&negated, data_type, ds)
+            }
         } else {
             (desc.handle)(&value, data_type, ds)
         }

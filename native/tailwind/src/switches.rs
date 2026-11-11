@@ -149,6 +149,12 @@ pub const SHADOW_FRACTIONAL_ALPHA: Switch = Switch::since(4, 3, 3, "the alpha of
 /// there was no check: `data-[foo bar]:flex` gave a rule.
 pub const ARIA_DATA_ATTRIBUTE_CHECK: Switch = Switch::since(4, 3, 3, "aria-* and data-* need a valid attribute selector");
 
+/// The default theme of `theme(fontFamily.sans)` starts with the system
+/// fonts (`-apple-system, BlinkMacSystemFont, …`). Before: `ui-sans-serif,
+/// system-ui, …`. (The same values of `theme.css` and `preflight.css`
+/// come from the package.)
+pub const DEFAULT_THEME_SYSTEM_FONTS: Switch = Switch::since(4, 3, 3, "theme(fontFamily.sans) starts with the system fonts");
+
 // --- 4.3.2 ----------------------------------------------------------------
 
 /// `auto-rows-*` and `auto-cols-*` have bare values of the spacing scale:
@@ -202,6 +208,74 @@ pub const SHADOW_COLOR_DETECTION: Switch = Switch::since(4, 3, 1, "the color of 
 /// the condition at the spaces.
 pub const NOT_CONTAINER_VALUE_PARSER: Switch = Switch::since(4, 3, 1, "not-* reads @container conditions with the value parser");
 
+// --- 4.3.0 ----------------------------------------------------------------
+
+/// The utilities `zoom-*`, `tab-*`, `scrollbar-auto`, `scrollbar-thin`,
+/// `scrollbar-none`, `scrollbar-thumb-*`, `scrollbar-track-*` and
+/// `scrollbar-gutter-*`, and their properties in the order of the
+/// properties. Before: no such utilities, and `zoom`, `tab-size` and the
+/// three `scrollbar-*` properties had no place in the order.
+pub const ZOOM_TAB_SCROLLBAR: Switch = Switch::since(4, 3, 0, "zoom-*, tab-* and scrollbar-* utilities");
+
+/// `@container-size`. Before: only in a build of Tailwind CSS that was
+/// not a release.
+pub const CONTAINER_SIZE: Switch = Switch::since(4, 3, 0, "@container-size");
+
+/// A functional `@utility` can have a default: `--value(--default(4))`
+/// and `--modifier(--default(…))` give a result for a candidate with no
+/// value or no modifier. Before: a candidate with no value was not a
+/// match, `--default(…)` had no meaning, and a declaration with
+/// `--modifier(…)` was removed for a candidate with no modifier.
+pub const CSS_UTILITY_DEFAULT: Switch = Switch::since(4, 3, 0, "--default(…) in a functional @utility");
+
+/// A functional `@utility` must have a `--value(…)` with a result.
+/// Before: one with no `--value(…)` was a match for each value.
+pub const CSS_UTILITY_NEEDS_VALUE: Switch = Switch::since(4, 3, 0, "a functional @utility needs --value(…)");
+
+/// When a utility is not valid for a candidate, the other utilities with
+/// the same name still run (but a plugin utility with types stops them).
+/// Before: the first utility that was not valid stopped them all.
+pub const UTILITY_NULL_FALLTHROUGH: Switch = Switch::since(4, 3, 0, "a utility that is not valid does not stop the others");
+
+/// `@variant` can have a list (`@variant hover, focus`) and a stack
+/// (`@variant hover:focus`). Before: the text was one variant, so these
+/// were errors.
+pub const AT_VARIANT_LIST: Switch = Switch::since(4, 3, 0, "@variant with a list or a stack of variants");
+
+/// The `calc(… * -1)` of a negative utility has spaces around its
+/// operators. Before: the value stayed as it was (`-m-[1px+2px]`).
+pub const NEGATIVE_CALC_WHITESPACE: Switch = Switch::since(4, 3, 0, "the calc() of a negative value has spaces around operators");
+
+/// The old utilities `start` and `end` need a value. Before: with no
+/// value they gave the value of `--inset` or `--spacing`.
+pub const LEGACY_INSET_NEEDS_VALUE: Switch = Switch::since(4, 3, 0, "the old start and end utilities need a value");
+
+// --- 4.2.3 ----------------------------------------------------------------
+
+/// `placeholder-*` reads the theme keys `--placeholder-color` and
+/// `--color`. Before: `--background-color` and `--color`.
+pub const PLACEHOLDER_COLOR_KEY: Switch = Switch::since(4, 2, 3, "placeholder-* reads --placeholder-color");
+
+/// An escape of the code point 0 (`\\00`) is U+FFFD. Before: the code
+/// point 0. (An escape above U+10FFFF stopped the official compiler: see
+/// "Faults that stop the compiler" in docs/SWITCHES.md. An escape of a
+/// surrogate is U+FFFD in each version of the Rust compiler, because a
+/// Rust text cannot have one.)
+pub const UNESCAPE_NUL_IS_REPLACED: Switch = Switch::since(4, 2, 3, "an escape of the code point 0 is U+FFFD");
+
+// --- 4.2.2 ----------------------------------------------------------------
+
+/// A fraction for the type of an arbitrary value can have white space
+/// around the `/`: `1 / 2`. Before: a fault in the pattern permitted the
+/// letter `s` there, not white space (`1s/s2`).
+pub const FRACTION_WHITE_SPACE: Switch = Switch::since(4, 2, 2, "a fraction can have white space around the /");
+
+// --- 4.2.1 ----------------------------------------------------------------
+
+/// The root of a functional `@utility` can end with `-`: `@utility
+/// foo--*`. Before (only in 4.2.0): the name was not valid.
+pub const UTILITY_ROOT_ENDING_DASH: Switch = Switch::since(4, 2, 1, "the root of a functional @utility can end with -");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -229,6 +303,7 @@ pub const ALL: &[&Switch] = &[
     &SPACING_ZERO_PX,
     &SHADOW_FRACTIONAL_ALPHA,
     &ARIA_DATA_ATTRIBUTE_CHECK,
+    &DEFAULT_THEME_SYSTEM_FONTS,
     &AUTO_TRACKS_BARE_SPACING,
     &SPACING_FN_IS_LENGTH,
     &ALPHA_FN_IS_COLOR,
@@ -240,4 +315,16 @@ pub const ALL: &[&Switch] = &[
     &APPLY_BODY_ERROR,
     &SHADOW_COLOR_DETECTION,
     &NOT_CONTAINER_VALUE_PARSER,
+    &ZOOM_TAB_SCROLLBAR,
+    &CONTAINER_SIZE,
+    &CSS_UTILITY_DEFAULT,
+    &CSS_UTILITY_NEEDS_VALUE,
+    &UTILITY_NULL_FALLTHROUGH,
+    &AT_VARIANT_LIST,
+    &NEGATIVE_CALC_WHITESPACE,
+    &LEGACY_INSET_NEEDS_VALUE,
+    &PLACEHOLDER_COLOR_KEY,
+    &UNESCAPE_NUL_IS_REPLACED,
+    &FRACTION_WHITE_SPACE,
+    &UTILITY_ROOT_ENDING_DASH,
 ];

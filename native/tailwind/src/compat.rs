@@ -68,8 +68,9 @@ pub fn apply_compatibility_hooks(
     #[cfg(tw_js)]
     if let Some(loader) = options.module_loader.clone() {
         if uses_javascript(ast) {
-            // The plugin layer is the JavaScript of the version of the
-            // port: an older version needs the script engine.
+            // The program has the plugin layer of each version from
+            // `OLDEST_WITH_PLUGINS`: an older version needs the script
+            // engine.
             if crate::version::current() < crate::version::Version::OLDEST_WITH_PLUGINS {
                 return Err(Error {
                     message: format!(

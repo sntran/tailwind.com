@@ -8,7 +8,7 @@ publish = false
 
 # This tool builds for the computer of the build, in a few seconds: it has
 # its own workspace and no dependency. The code of the patches is the file
-# of the compiler (native/tailwind/src/cli/patch.rs).
+# of the compiler (native/tailwind/src/patch.rs).
 [workspace]
 
 [profile.release]

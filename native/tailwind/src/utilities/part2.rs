@@ -646,36 +646,40 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
     }
 
     group(u, "scroll-behavior", &[("scroll-auto", "auto"), ("scroll-smooth", "smooth")]);
-    group(
-        u,
-        "scrollbar-width",
-        &[("scrollbar-auto", "auto"), ("scrollbar-thin", "thin"), ("scrollbar-none", "none")],
-    );
+    let new_utilities = crate::switches::ZOOM_TAB_SCROLLBAR.on();
+    // The utilities of 4.3.0 (`switches::ZOOM_TAB_SCROLLBAR`).
+    if new_utilities {
+        group(
+            u,
+            "scrollbar-width",
+            &[("scrollbar-auto", "auto"), ("scrollbar-thin", "thin"), ("scrollbar-none", "none")],
+        );
 
-    for (name, variable) in
-        [("scrollbar-thumb", "--tw-scrollbar-thumb"), ("scrollbar-track", "--tw-scrollbar-track")]
-    {
-        color_utility(u, name, &["--color"], move |value, _| {
-            Some(vec![
-                at_root(vec![
-                    property("--tw-scrollbar-thumb", Some("#0000"), Some("<color>")),
-                    property("--tw-scrollbar-track", Some("#0000"), Some("<color>")),
-                ]),
-                decl(variable, value),
-                decl("scrollbar-color", "var(--tw-scrollbar-thumb) var(--tw-scrollbar-track)"),
-            ])
-        });
+        for (name, variable) in
+            [("scrollbar-thumb", "--tw-scrollbar-thumb"), ("scrollbar-track", "--tw-scrollbar-track")]
+        {
+            color_utility(u, name, &["--color"], move |value, _| {
+                Some(vec![
+                    at_root(vec![
+                        property("--tw-scrollbar-thumb", Some("#0000"), Some("<color>")),
+                        property("--tw-scrollbar-track", Some("#0000"), Some("<color>")),
+                    ]),
+                    decl(variable, value),
+                    decl("scrollbar-color", "var(--tw-scrollbar-thumb) var(--tw-scrollbar-track)"),
+                ])
+            });
+        }
+
+        group(
+            u,
+            "scrollbar-gutter",
+            &[
+                ("scrollbar-gutter-auto", "auto"),
+                ("scrollbar-gutter-stable", "stable"),
+                ("scrollbar-gutter-both", "stable both-edges"),
+            ],
+        );
     }
-
-    group(
-        u,
-        "scrollbar-gutter",
-        &[
-            ("scrollbar-gutter-auto", "auto"),
-            ("scrollbar-gutter-stable", "stable"),
-            ("scrollbar-gutter-both", "stable both-edges"),
-        ],
-    );
 
     static_decls(u, "truncate", &[("overflow", "hidden"), ("text-overflow", "ellipsis"), ("white-space", "nowrap")]);
 
@@ -698,12 +702,14 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         ],
     );
 
-    functional_utility(
-        u,
-        "tab",
-        UtilityDescription::new(|value, _, _| Some(vec![decl("tab-size", value)]))
-            .bare(|v, _| is_positive_integer(v.value).then(|| v.value.to_string())),
-    );
+    if new_utilities {
+        functional_utility(
+            u,
+            "tab",
+            UtilityDescription::new(|value, _, _| Some(vec![decl("tab-size", value)]))
+                .bare(|v, _| is_positive_integer(v.value).then(|| v.value.to_string())),
+        );
+    }
 
     group(
         u,
