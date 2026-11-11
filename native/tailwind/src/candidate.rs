@@ -626,8 +626,10 @@ fn find_roots(input: &str, exists: &dyn Fn(&str) -> bool) -> Vec<(String, Option
         idx = input[..i].rfind('-');
     }
 
-    // The `@` root has no dash: `@md`, `@[200px]`.
-    if bytes.first() == Some(&b'@') && exists("@") {
+    // The `@` root has no dash: `@md`, `@[200px]`. Before 4.1.4, an input
+    // with a dash did not get the `@` root.
+    let at_root = switches::AT_ROOT_WITH_DASH.on() || !input.contains('-');
+    if at_root && bytes.first() == Some(&b'@') && exists("@") {
         roots.push(("@".to_string(), Some(input[1..].to_string())));
     }
 

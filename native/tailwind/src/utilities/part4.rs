@@ -87,6 +87,10 @@ fn alpha_replaced_shadow_properties(
         if prefix.is_empty() {
             return x;
         }
+        // Before 4.1.2, the prefix was only before the first shadow.
+        if !crate::switches::INSET_SHADOW_LIST.on() {
+            return format!("{} {x}", js_trim(prefix));
+        }
         segment(&x, b',')
             .into_iter()
             .map(|value| format!("{} {}", js_trim(prefix), js_trim(value)))
@@ -224,7 +228,8 @@ impl ShadowUtility {
                 }
                 return Some(nodes);
             }
-            "inherit" => {
+            // Before 4.1.4, `inherit` was a color as each other.
+            "inherit" if crate::switches::SHADOW_INHERIT.on() => {
                 if candidate.modifier.is_some() {
                     return None;
                 }
@@ -408,7 +413,12 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
             "transition",
             UtilityDescription::new(move |value, _, _| Some(transition(value)))
                 .default_value(Some(
-                    "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events",
+                    // Before 4.1.5, the list ended at `backdrop-filter`.
+                    if crate::switches::TRANSITION_DISPLAY.on() {
+                        "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+                    } else {
+                        "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter"
+                    },
                 ))
                 .theme_keys(&["--transition-property"])
                 .static_values(static_values),
@@ -742,7 +752,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
 
         static_utility(utilities, "ring-inset", vec![n(box_shadow_properties), d("--tw-ring-inset", "inset")]);
 
-        let default_ring_color = theme.get(&["--default-ring-color"]).unwrap_or_else(|| "currentcolor".to_string());
+        let default_ring_color = theme.get(&["--default-ring-color"]).unwrap_or_else(|| super::current_color().to_string());
         let ring_shadow = move |value: &str| {
             vec![
                 box_shadow_properties(),
@@ -771,7 +781,10 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         let inset_ring_shadow = |value: &str| {
             vec![
                 box_shadow_properties(),
-                decl("--tw-inset-ring-shadow", format!("inset 0 0 0 {value} var(--tw-inset-ring-color, currentcolor)")),
+                decl(
+                    "--tw-inset-ring-shadow",
+                    format!("inset 0 0 0 {value} var(--tw-inset-ring-color, {})", super::current_color()),
+                ),
                 decl("box-shadow", CSS_BOX_SHADOW_VALUE),
             ]
         };

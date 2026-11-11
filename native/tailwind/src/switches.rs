@@ -332,6 +332,97 @@ pub const APPLY_NESTED_WALK: Switch = Switch::since(4, 1, 6, "@apply in nested r
 /// the error.
 pub const APPLY_CANDIDATES_AS_KEYS: Switch = Switch::since(4, 1, 6, "the candidates of @apply are in the sequence of object keys");
 
+// --- 4.1.5 ----------------------------------------------------------------
+
+/// A color with an alpha of 100% has no `color-mix(…)`: `bg-red-500/100`.
+/// Before: `color-mix(in oklab, … 100%, transparent)`.
+pub const FULL_ALPHA_NO_COLOR_MIX: Switch = Switch::since(4, 1, 5, "an alpha of 100% gives no color-mix()");
+
+/// The utilities `h-lh`, `min-h-lh` and `max-h-lh`. Before: no such
+/// utilities.
+pub const HEIGHT_LH: Switch = Switch::since(4, 1, 5, "h-lh, min-h-lh and max-h-lh");
+
+/// The default of `transition` has also `display`, `content-visibility`,
+/// `overlay` and `pointer-events`. Before: the list ended at
+/// `backdrop-filter`.
+pub const TRANSITION_DISPLAY: Switch = Switch::since(4, 1, 5, "transition has display, content-visibility, overlay, pointer-events");
+
+// --- 4.1.4 ----------------------------------------------------------------
+
+/// The fallbacks of `color-mix(…)` are made after the removal of the
+/// unused theme variables. Before: at the declaration, so a theme variable
+/// with a fallback was in an `@supports` rule at the time of the removal,
+/// and the removal took the last node of the list.
+pub const COLOR_MIX_FALLBACK_LAST: Switch = Switch::since(4, 1, 4, "color-mix() fallbacks are made after the theme cleanup");
+
+/// The fallback of `color-mix(…)` follows a theme variable to its value:
+/// `var(--a)` with `--a: var(--b)` gives the value of `--b`, and a value
+/// `currentcolor` is known. Before: the value of the first variable went
+/// into the fallback as it was.
+pub const COLOR_MIX_VARIABLE_CHAIN: Switch = Switch::since(4, 1, 4, "color-mix() fallbacks follow a chain of theme variables");
+
+/// A root with dashes can be a value of the `@` variant: `@foo-bar:flex`
+/// with `--container-foo-bar`, `@[calc(1rem-1px)]:flex`. Before: only an
+/// input with no dash got the `@` root.
+pub const AT_ROOT_WITH_DASH: Switch = Switch::since(4, 1, 4, "the value of the @ variant can have a dash");
+
+/// `transform` reads `var(--tw-rotate-x, )` and the four other variables
+/// with an empty fallback, and their `@property` rules have no initial
+/// value. Before: `var(--tw-rotate-x)`, and the initial values
+/// `rotateX(0)`, `rotateY(0)`, `rotateZ(0)`, `skewX(0)`, `skewY(0)`.
+pub const TRANSFORM_EMPTY_FALLBACKS: Switch = Switch::since(4, 1, 4, "the transform variables have empty fallbacks");
+
+/// `shadow-inherit`, `inset-shadow-inherit`, `text-shadow-inherit` and
+/// `drop-shadow-inherit` set the color variable to `inherit`. Before:
+/// `inherit` was a color as each other: `color-mix(in oklab, inherit
+/// var(--tw-shadow-alpha), transparent)`.
+pub const SHADOW_INHERIT: Switch = Switch::since(4, 1, 4, "shadow-inherit sets the color variable to inherit");
+
+/// A range of the brace expansion goes from its start to its end, also
+/// when the step has the other sign: `{10..0..5}`. Before: the sign of the
+/// step gave the direction, and such a range was empty.
+pub const BRACE_RANGE_DIRECTION: Switch = Switch::since(4, 1, 4, "a brace range ignores the sign of its step");
+
+// --- 4.1.2 ----------------------------------------------------------------
+
+/// The fallback of `color-mix(…)` is made for each variable and for
+/// `currentcolor`: a `color-mix(…)` with a color that is not known gives
+/// its first color. Before: only a variable with a value in the theme gave
+/// a fallback.
+pub const COLOR_MIX_FALLBACK_FOR_EACH_COLOR: Switch = Switch::since(4, 1, 2, "color-mix() gets a fallback also for colors that are not known");
+
+/// The fallbacks of `@property` are in `@layer properties` at the end of
+/// the stylesheet, and an empty `@layer properties;` is at the start.
+/// Before: one rule `@supports … { @layer base { … } }` near the start.
+pub const PROPERTIES_LAYER: Switch = Switch::since(4, 1, 2, "the @property fallbacks are in @layer properties");
+
+/// `currentcolor` is in lowercase: `bg-current`, the default color of
+/// `ring-*` and `inset-ring-*`, and the default theme of
+/// `theme(borderColor.DEFAULT)`. Before: `currentColor`.
+pub const CURRENTCOLOR_LOWERCASE: Switch = Switch::since(4, 1, 2, "currentcolor is in lowercase");
+
+/// A `--drop-shadow-*` theme value with more than one shadow gives one
+/// `drop-shadow(…)` for each. Before: one `drop-shadow(…)` with all the
+/// text.
+pub const DROP_SHADOW_LIST: Switch = Switch::since(4, 1, 2, "one drop-shadow() for each shadow of a theme value");
+
+/// `inset-shadow-[…]` with more than one shadow puts `inset` before each.
+/// Before: only before the first.
+pub const INSET_SHADOW_LIST: Switch = Switch::since(4, 1, 2, "inset before each shadow of inset-shadow-[…]");
+
+// --- 4.1.1 ----------------------------------------------------------------
+
+/// The fallbacks of `@property` go after the `@charset` rules, the
+/// `@import` rules and the `@layer` rules with no body at the start, or
+/// at the end of the rules. Before: after the comments at the start, or
+/// at the start.
+pub const FALLBACKS_AFTER_IMPORTS: Switch = Switch::since(4, 1, 1, "the @property fallbacks go after @import and @layer statements");
+
+/// A number of a range of the brace expansion has no zeros before it.
+/// Before: each number had the length of the longer limit: `{0..10}` gave
+/// `00`, `01`, … `10`.
+pub const BRACE_RANGE_NO_PADDING: Switch = Switch::since(4, 1, 1, "a brace range has no padding");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -392,4 +483,20 @@ pub const ALL: &[&Switch] = &[
     &REFERENCE_NO_UTILITIES,
     &APPLY_NESTED_WALK,
     &APPLY_CANDIDATES_AS_KEYS,
+    &FULL_ALPHA_NO_COLOR_MIX,
+    &HEIGHT_LH,
+    &TRANSITION_DISPLAY,
+    &COLOR_MIX_FALLBACK_LAST,
+    &COLOR_MIX_VARIABLE_CHAIN,
+    &AT_ROOT_WITH_DASH,
+    &TRANSFORM_EMPTY_FALLBACKS,
+    &SHADOW_INHERIT,
+    &BRACE_RANGE_DIRECTION,
+    &COLOR_MIX_FALLBACK_FOR_EACH_COLOR,
+    &PROPERTIES_LAYER,
+    &CURRENTCOLOR_LOWERCASE,
+    &DROP_SHADOW_LIST,
+    &INSET_SHADOW_LIST,
+    &FALLBACKS_AFTER_IMPORTS,
+    &BRACE_RANGE_NO_PADDING,
 ];

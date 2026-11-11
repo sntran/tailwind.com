@@ -235,11 +235,36 @@ impl Optimizer<'_> {
                     && value.contains("color-mix(");
 
                 let id = self.arena.add(Item::Node(node.clone()));
-                self.arena.attach(parent, id);
                 if is_theme_variable && !context.keyframes {
                     self.css_theme_variables.entry(parent).or_default().push(id);
                 }
-                if needs_color_mix {
+
+                // Before 4.1.4, the fallback was made here, before the
+                // removal of the unused theme variables. A theme variable
+                // with a fallback is then not in its list.
+                if needs_color_mix && !switches::COLOR_MIX_FALLBACK_LAST.on() {
+                    if let Some(fallback_value) = color_mix_fallback(value, &self.design_system.theme) {
+                        let fallback = self.arena.add(Item::Node(AstNode::Declaration(Declaration {
+                            property: decl.property.clone(),
+                            value: Some(fallback_value),
+                            important: decl.important,
+                            loc: Loc::default(),
+                        })));
+                        let query = self.arena.add(Item::AtRule {
+                            name: "@supports".to_string(),
+                            params: "(color: color-mix(in lab, red, red))".to_string(),
+                            nodes: vec![id],
+                            loc: Loc::default(),
+                        });
+                        self.arena.entries[id].parent = Some(query);
+                        self.arena.attach(parent, fallback);
+                        self.arena.attach(parent, query);
+                        return;
+                    }
+                }
+
+                self.arena.attach(parent, id);
+                if needs_color_mix && switches::COLOR_MIX_FALLBACK_LAST.on() {
                     self.color_mix_declarations.entry(parent).or_default().push(id);
                 }
             }
@@ -594,6 +619,9 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
     // Upstream makes a new array here (`concat`). A later change of the old
     // root list has no effect on the result.
     let mut new_ast: Vec<Id> = optimizer.arena.children(root).clone();
+    // Before 4.1.2, the at-roots were added after the fallbacks of
+    // `@property`, so the fallbacks went before them.
+    let before_at_roots = new_ast.len();
     new_ast.extend(optimizer.arena.children(at_roots).iter().copied());
 
     if polyfills & crate::POLYFILLS_COLOR_MIX != 0 {
@@ -617,7 +645,26 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
             );
         }
 
-        if !fallback_ast.is_empty() {
+        if !fallback_ast.is_empty() && !switches::PROPERTIES_LAYER.on() {
+            // Before 4.1.2: one `@supports` rule with `@layer base`, near
+            // the start. From 4.1.1 it goes after the comments, the
+            // `@charset` rules, the `@import` rules and the `@layer` rules
+            // with no body, or at the end. Before 4.1.1 it goes after the
+            // comments, or at the start.
+            let after_imports = switches::FALLBACKS_AFTER_IMPORTS.on();
+            let first_valid_node_index = new_ast[..before_at_roots].iter().position(|node| match node {
+                AstNode::Comment(_) => false,
+                AstNode::AtRule(rule) if after_imports => {
+                    rule.name != "@charset" && rule.name != "@import" && !(rule.name == "@layer" && rule.nodes.is_empty())
+                }
+                _ => true,
+            });
+            let index = first_valid_node_index.unwrap_or(if after_imports { before_at_roots } else { 0 });
+            new_ast.insert(
+                index,
+                at_rule("@supports", at_property_supports(), vec![at_rule("@layer", "base", fallback_ast)]),
+            );
+        } else if !fallback_ast.is_empty() {
             // The empty `@layer properties;` goes after the comments, the
             // `@charset` and the `@import` rules at the start.
             let first_valid_node_index = new_ast.iter().position(|node| match node {
@@ -744,6 +791,35 @@ fn color_mix_fallback(value: &str, theme: &Theme) -> Option<String> {
             }
         }
 
+        // Before 4.1.2: only a variable with a value in the theme gave a
+        // fallback, `currentcolor` gave none, and each `color-mix(…)` of
+        // the value got `srgb`.
+        if !switches::COLOR_MIX_FALLBACK_FOR_EACH_COLOR.on() {
+            walk(&mut function.nodes, |node, _| {
+                let ValueAstNode::Function(var) = node else { return WalkAction::Continue };
+                if var.value != "var" {
+                    return WalkAction::Continue;
+                }
+                let Some(ValueAstNode::Word(first_child)) = var.nodes.first() else { return WalkAction::Continue };
+                match theme.resolve_value(None, &[&first_child.value]) {
+                    Some(color) if !color.is_empty() => {
+                        requires_polyfill = true;
+                        WalkAction::Replace(vec![value_parser::word(color)])
+                    }
+                    _ => WalkAction::Continue,
+                }
+            });
+            if let Some(ValueAstNode::Word(colorspace)) = function.nodes.get_mut(2) {
+                if matches!(colorspace.value.as_str(), "oklab" | "oklch" | "lab" | "lch") {
+                    colorspace.value = "srgb".to_string();
+                }
+            }
+            return WalkAction::Continue;
+        }
+
+        // Before 4.1.4: the value of a variable was not examined.
+        let follows_variables = switches::COLOR_MIX_VARIABLE_CHAIN.on();
+
         let mut contains_unresolvable_vars = false;
         let mut contains_currentcolor = false;
         walk(&mut function.nodes, |node, _| {
@@ -781,6 +857,9 @@ fn color_mix_fallback(value: &str, theme: &Theme) -> Option<String> {
                         return WalkAction::Continue;
                     }
                 };
+                if !follows_variables {
+                    break;
+                }
                 if js_to_lower_case(&inlined_color) == "currentcolor" {
                     contains_currentcolor = true;
                     return WalkAction::Continue;

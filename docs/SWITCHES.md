@@ -318,6 +318,57 @@ No switch: the source maps (`ast.ts`, `css-parser.ts`, `at-import.ts`,
 for a utility that is also a candidate: `@apply` and the build shared
 the compiled rules.
 
+### 4.1.5 (3 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `FULL_ALPHA_NO_COLOR_MIX` | form | S | common | `bg-red-500/100` gave `color-mix(in oklab, … 100%, transparent)` |
+| `HEIGHT_LH` | feature | S | rare | No `h-lh`, `min-h-lh`, `max-h-lh` |
+| `TRANSITION_DISPLAY` | data | S | common | The default of `transition` ended at `backdrop-filter` |
+
+No switch: the suggestions of the editor tools (the default shadows, and
+`_` between digits in a theme key of `@utility`).
+
+### 4.1.4 (6 switches, all there; 1 change in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `COLOR_MIX_FALLBACK_LAST` | fix | M | rare | The fallback of `color-mix(…)` was made at the declaration: a theme variable with a fallback was not in its list, and the removal of an unused one took the last node of the list |
+| `COLOR_MIX_VARIABLE_CHAIN` | fix | S | rare | A theme variable with the value `var(--other)` went into the fallback as it was |
+| `AT_ROOT_WITH_DASH` | fix | S | rare | `@foo-bar:flex` and `@[calc(1rem-1px)]:flex` were not valid: an input with a dash did not get the `@` root |
+| `TRANSFORM_EMPTY_FALLBACKS` | form | S | common | `transform: var(--tw-rotate-x) …`, and `@property --tw-rotate-x` with the initial value `rotateX(0)` |
+| `SHADOW_INHERIT` | fix | S | rare | `shadow-inherit` gave `color-mix(in oklab, inherit var(--tw-shadow-alpha), transparent)` |
+| `BRACE_RANGE_DIRECTION` | fix | S | edge | `{10..0..5}` and `{0..10..-5}` in `@source inline(…)` were empty |
+| font-size-tuple (JS) | fix | S | rare | A `fontSize` array of a config gave one theme value with the two texts |
+
+### 4.1.3 (no switch)
+
+A `--value(…)` of `@utility` with a data type that is not valid for a
+bare value gives a warning (`console.warn`). The result is the same. The
+Rust compiler gives the warning as each version.
+
+### 4.1.2 (5 switches, all there; 1 change in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `COLOR_MIX_FALLBACK_FOR_EACH_COLOR` | fix | M | common | Only a variable with a value in the theme gave a fallback: `bg-current/50` and `bg-(--x)/50` had none |
+| `PROPERTIES_LAYER` | form | S | each build | The fallbacks of `@property` were `@supports … { @layer base { … } }` near the start, not `@layer properties` at the end |
+| `CURRENTCOLOR_LOWERCASE` | data | S | common | `currentColor`: `bg-current`, `ring`, `inset-ring`, `theme(borderColor.DEFAULT)` |
+| `DROP_SHADOW_LIST` | fix | S | rare | A `--drop-shadow-*` value with two shadows gave one `drop-shadow(a, b)` |
+| `INSET_SHADOW_LIST` | fix | S | edge | `inset-shadow-[a,b]` had `inset` only before the first shadow |
+| plugin-current-color (JS) | data | S | rare | `currentColor` in `colors.current` and in the plugin API |
+
+Data, from the package: `currentcolor` in `preflight.css`. No switch:
+before 4.1.2, a `color-mix(…)` with less than three parts
+(`color-mix(red)`) stopped the official compiler.
+
+### 4.1.1 (2 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `FALLBACKS_AFTER_IMPORTS` | fix | S | rare | The fallbacks of `@property` went after the comments at the start: before an `@charset`, an `@import` or an `@layer` with no body |
+| `BRACE_RANGE_NO_PADDING` | fix | S | rare | `{0..10}` in `@source inline(…)` gave `00`, `01`, … `10` |
+
 The scanner of the source files follows no version, in each engine. Its
 changes in these releases: the Markdown and Ruby pre-processors, and the
 `.jsonl` and `.ndjson` files.

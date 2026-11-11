@@ -184,6 +184,15 @@ impl CompatTheme {
             }
         }
 
+        // Before 4.1.2, the default colors of the border and of the ring
+        // were `currentColor`.
+        if !crate::switches::CURRENTCOLOR_LOWERCASE.on() {
+            for key in ["borderColor", "ringColor"] {
+                let parts = vec![Part::Entry("DEFAULT", s("currentColor")), Part::Spread("colors")];
+                theme.insert(key.to_string(), Val::Lazy(Rc::new(Lazy::Object(parts))));
+            }
+        }
+
         let spread = |key: &'static str| Val::Lazy(Rc::new(Lazy::Object(vec![Part::SpreadOrEmpty(key)])));
         let default_of = |key: &str| {
             let mut map = Object::new();
