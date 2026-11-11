@@ -153,6 +153,13 @@ the known differences, and [`docs/TESTING.md`](docs/TESTING.md) for the
 other tests: unit tests from the test files of Tailwind CSS, property
 tests, and a TLA+ model of the watch.
 
+[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) compares the time, the memory
+and the size with the official npm CLI and the official standalone
+program. For example, the Phoenix project: 10 ms with `tailwind.com`,
+141 ms with the npm CLI and 123 ms with the standalone program. A
+project with daisyUI: 140 ms, 241 ms and 186 ms, with 13 MB of memory in
+place of 101 MB and 91 MB.
+
 CI runs `tailwind.com` on Linux (x86_64 and aarch64), macOS (arm64 and
 x86_64), Windows (x86_64), FreeBSD, NetBSD and OpenBSD 7.3 (x86_64, in
 a VM): the projects of the official program, and the watch with the
@@ -241,6 +248,7 @@ WASI file system. It has the same JavaScript engine for `@plugin` and
 | [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) | The results against Tailwind CSS, and the known differences. |
 | [`docs/INTERNALS.md`](docs/INTERNALS.md) | The parts of the compiler and of the file, and how they relate to Tailwind CSS. |
 | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/TESTING.md`](docs/TESTING.md) | Build `tailwind.com`, and the tests. |
+| [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) | The time, the memory and the size, against the official programs. |
 | [`docs/SYNC.md`](docs/SYNC.md) | Move to a new version of Tailwind CSS. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What comes next. |
 

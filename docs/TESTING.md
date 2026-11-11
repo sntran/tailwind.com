@@ -278,3 +278,12 @@ The fuzzer found two faults of the JavaScript support:
   prints its name to stdout). Now only a syntax error compiles again,
   with no message of a plugin. The case `cli-js/error-daisyui-apply`
   keeps it fixed.
+
+## Benchmarks
+
+`tests/bench/run.mjs` measures the time, the memory and the size of
+`tailwind.com`, of the native program and of `tailwind.wasm`, against
+the official npm CLI and the official standalone program. It also
+compares each output with the output of the npm CLI. The job `bench` of
+`.github/workflows/build.yml` runs it on Linux and macOS. See
+[`BENCHMARKS.md`](BENCHMARKS.md) for the results and the commands.

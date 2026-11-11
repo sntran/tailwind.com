@@ -320,6 +320,48 @@ jobs:
       - run: mix format --check-formatted
       - run: TAILWIND_COM=$PWD/build/tailwind.com mix test
 
+  # The benchmarks against the official programs (tests/bench/run.mjs,
+  # docs/BENCHMARKS.md). The table goes to the summary of the run. CI
+  # machines are shared: a difference of less than about 10% does not
+  # tell much. No gate: the numbers are for a person to read.
+  bench:
+    name: Benchmarks on ${{ matrix.os }}
+    needs: [build, wasm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, macos-26]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: build
+          merge-multiple: true
+      # Node.js 22 can stop with SIGSEGV when tailwind.wasm minifies a
+      # large output (docs/BENCHMARKS.md).
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: The official programs
+        run: |
+          chmod +x build/tailwind.com
+          sh tests/fuzz/install.sh "$RUNNER_TEMP/official"
+          if [ "$RUNNER_OS" = Linux ]; then
+            sh tests/standalone.sh --download "$RUNNER_TEMP/standalone"
+          fi
+      - name: The benchmarks
+        run: |
+          standalone=
+          if [ -f "$RUNNER_TEMP/standalone/tailwindcss-linux-x64" ]; then
+            standalone="--standalone $RUNNER_TEMP/standalone/tailwindcss-linux-x64"
+          fi
+          # shellcheck disable=SC2086
+          node tests/bench/run.mjs --official "$RUNNER_TEMP/official" \
+            --program build/tailwind.com --wasm build/tailwind.wasm $standalone | tee bench.md
+          { echo "### Benchmarks: ${{ matrix.os }}"; echo; cat bench.md; } >> "$GITHUB_STEP_SUMMARY"
+
   npm:
     name: The npm package
     needs: [build, wasm]
