@@ -462,9 +462,15 @@ jobs:
         run: |
           . ./UPSTREAM
           cd dist
-          gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz SHA256SUMS \
-            --repo "$GITHUB_REPOSITORY" --generate-notes \
-            --title "$GITHUB_REF_NAME (Tailwind CSS $TAILWINDCSS_VERSION)"
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # A re-run can reach this step after a later publication failed.
+            gh release upload "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz SHA256SUMS \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz SHA256SUMS \
+              --repo "$GITHUB_REPOSITORY" --generate-notes \
+              --title "$GITHUB_REF_NAME (Tailwind CSS $TAILWINDCSS_VERSION)"
+          fi
           # The release with the version of Tailwind CSS: the newest files
           # for that version.
           moving="v$TAILWINDCSS_VERSION"
@@ -483,7 +489,8 @@ jobs:
             echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > "$RUNNER_TEMP/npmrc"
             export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc"
           fi
-          npm publish dist/tailwind.com-*.tgz --access public --provenance
+          # npm treats a path without ./ as a GitHub repository shorthand.
+          npm publish ./dist/tailwind.com-*.tgz --access public --provenance
       # GitHub Packages accepts only a name with the scope of the owner:
       # the same package, with the name @OWNER/tailwind.com.
       - name: Publish to GitHub Packages
