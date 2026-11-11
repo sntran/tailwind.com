@@ -344,6 +344,50 @@ pub const SOURCE_INLINE_WHITESPACE: Switch = Switch::since(4, 2, 0, "@source inl
 /// these nodes made an endless loop: see docs/SWITCHES.md.)
 pub const SLOT_NODES_STAY: Switch = Switch::since(4, 2, 0, "the nodes that replace @slot stay as they are");
 
+// --- 4.1.18 ---------------------------------------------------------------
+
+/// A declaration in `@keyframes` gets no `color-mix(…)` fallback. Before:
+/// it got a fallback and an `@supports` rule, as each other declaration.
+pub const KEYFRAMES_NO_COLOR_MIX_FALLBACK: Switch = Switch::since(4, 1, 18, "no color-mix() fallback in @keyframes");
+
+/// A named value of a utility or a variant, and a named modifier, have
+/// only letters, digits, `_`, `.`, `%` and `-`: `bg-foo=bar` and
+/// `data-foo=bar:flex` are not valid. Before: no check.
+pub const NAMED_VALUE_CHARACTERS: Switch = Switch::since(4, 1, 18, "a named value has only letters, digits, _ . % and -");
+
+/// The message of a CSS syntax error starts with the file, the line and
+/// the column, when the compiler has the path of the stylesheet (`from`).
+/// Before: only the message.
+pub const CSS_ERROR_LOCATION: Switch = Switch::since(4, 1, 18, "a CSS syntax error has the file, the line and the column");
+
+/// `content-*` reads the theme key `--content`: `content-slash`. Before:
+/// only arbitrary values.
+pub const CONTENT_THEME_KEY: Switch = Switch::since(4, 1, 18, "content-* reads --content");
+
+/// `theme(…)` with a path of Tailwind CSS v3 reads the `DEFAULT` of
+/// `borderWidth`, `outlineWidth`, `ringColor`, `ringWidth`,
+/// `transitionDuration` and `transitionTimingFunction` from the
+/// `--default-*` namespace: `theme(ringColor.DEFAULT)` is
+/// `--default-ring-color`. Before: `--ring-color`.
+pub const THEME_FN_DEFAULT_NAMESPACE: Switch = Switch::since(4, 1, 18, "theme(ringColor.DEFAULT) reads --default-ring-color");
+
+/// `theme(…)` with a path of Tailwind CSS v3 keeps the case of a key:
+/// `theme(colors.fooBar)` is `--color-fooBar`. Only the namespace, a
+/// nested key of a tuple and `lineHeight` change to kebab case. Before:
+/// each key changed to kebab case (`--color-foo-bar`).
+pub const THEME_FN_KEEPS_KEY_CASE: Switch = Switch::since(4, 1, 18, "theme(colors.fooBar) keeps the case of the key");
+
+// --- 4.1.16 ---------------------------------------------------------------
+
+/// The `@supports` rule of a `color-mix(…)` fallback holds the declaration
+/// itself. Before: the declaration was in a rule with the selector `&` in
+/// that `@supports` rule.
+pub const COLOR_MIX_FALLBACK_NO_AMPERSAND: Switch = Switch::since(4, 1, 16, "the @supports rule of a color-mix() fallback has no & rule");
+
+/// An arbitrary value with an empty data type is not valid: `bg-[:red]`.
+/// Before: the value was the text after the `:`, with no data type.
+pub const EMPTY_DATA_TYPE_IS_INVALID: Switch = Switch::since(4, 1, 16, "an empty data type of an arbitrary value is not valid");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -407,4 +451,12 @@ pub const ALL: &[&Switch] = &[
     &SUPPORTS_COLOR_MIX_NO_FALLBACK,
     &SOURCE_INLINE_WHITESPACE,
     &SLOT_NODES_STAY,
+    &KEYFRAMES_NO_COLOR_MIX_FALLBACK,
+    &NAMED_VALUE_CHARACTERS,
+    &CSS_ERROR_LOCATION,
+    &CONTENT_THEME_KEY,
+    &THEME_FN_DEFAULT_NAMESPACE,
+    &THEME_FN_KEEPS_KEY_CASE,
+    &COLOR_MIX_FALLBACK_NO_AMPERSAND,
+    &EMPTY_DATA_TYPE_IS_INVALID,
 ];

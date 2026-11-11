@@ -304,6 +304,41 @@ compiler (a fault that stops the compiler). The new walk of the tree
 (`walk.ts`) gives the same result. Data, from the package: the colors
 `mauve`, `olive`, `mist` and `taupe` of `theme.css`.
 
+### 4.1.18 (6 switches, all there; 1 change in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `KEYFRAMES_NO_COLOR_MIX_FALLBACK` | fix | S | rare | A declaration with `color-mix(…)` in `@keyframes` got a fallback and an `@supports` rule |
+| `NAMED_VALUE_CHARACTERS` | fix | S | edge | `bg-foo=bar` and `data-foo=bar:flex` were valid: a named value had no check of its characters |
+| `CSS_ERROR_LOCATION` | form | S | rare | The message of a CSS syntax error had no `file:line:column: ` at its start (the compiler has the file only with the `from` option) |
+| `CONTENT_THEME_KEY` | feature | S | rare | `content-*` did not read `--content`: `content-slash` gave nothing |
+| `THEME_FN_DEFAULT_NAMESPACE` | fix | S | edge | `theme(ringColor.DEFAULT)` read `--ring-color`, not `--default-ring-color` (also `borderWidth`, `outlineWidth`, `ringWidth`, `transitionDuration`, `transitionTimingFunction`) |
+| `THEME_FN_KEEPS_KEY_CASE` | fix | S | edge | `theme(colors.fooBar)` read `--color-foo-bar`, not `--color-fooBar` |
+| config-theme-keys (JS) | fix | M | rare | The keys of the theme of a config changed to kebab case, and `ringColor.DEFAULT` of a config was `--ring-color` |
+
+No switch: the new function `candidatesToAst` and the file `cartesian.ts`
+are for the editor tools and the canonical form of candidates. The
+check of `source(…)` against the directory of its file, and its new
+message, are in the code of the command line (`cli/mod.rs`). That code
+has no switches: it gives the result of 4.1.18 for each version.
+
+### 4.1.17 (no switch)
+
+No switch: an `@variant` rule in the rules of a candidate
+(`[@variant_hover]:flex`) stayed in the output, which was not valid CSS.
+The Rust compiler replaces it in each version, as 4.1.17 does.
+
+### 4.1.16 (2 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `COLOR_MIX_FALLBACK_NO_AMPERSAND` | form | S | common | The `@supports` rule of a `color-mix(…)` fallback had the declaration in a `& { … }` rule |
+| `EMPTY_DATA_TYPE_IS_INVALID` | fix | S | edge | `bg-[:red]` gave `background-color: red` |
+
+No switch: the changes of `canonicalize-candidates.ts`, `signatures.ts`,
+`expand-declaration.ts` and `intellisense.ts` do not change the result of
+a build.
+
 The scanner of the source files follows no version, in each engine. Its
 changes in these releases: the Markdown and Ruby pre-processors, and the
 `.jsonl` and `.ndjson` files.

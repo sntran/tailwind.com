@@ -44,7 +44,8 @@ pub struct CssSyntaxError {
 impl CssSyntaxError {
     fn new(message: impl Into<String>, loc: Option<SourceLocation>) -> Self {
         let mut message = message.into();
-        if let Some(loc) = &loc {
+        // Before 4.1.18, the message had no location.
+        if let Some(loc) = loc.as_ref().filter(|_| crate::switches::CSS_ERROR_LOCATION.on()) {
             let start = LineTable::new(&loc.source.code).find(loc.start);
             let file = loc.source.file.as_deref().unwrap_or("null");
             message = format!("{}:{}:{}: {}", file, start.line, start.column + 1, message);

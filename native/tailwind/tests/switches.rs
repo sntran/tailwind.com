@@ -54,6 +54,34 @@ fn the_compiler_gives_the_result_of_each_recorded_version() {
     assert!(with_a_change * 2 >= cases, "{with_a_change} of {cases} cases have a result that changes");
 }
 
+/// The message of the error of `compile`, with the path of the stylesheet
+/// (the `from` option). The records have no such option.
+fn error_with_from(css: &str, version: Version) -> String {
+    let options =
+        CompileOptions { test_mode: true, version: Some(version), from: Some("input.css".to_string()), ..CompileOptions::default() };
+    match compile(css, options) {
+        Ok(_) => String::new(),
+        Err(error) => error.message,
+    }
+}
+
+#[test]
+fn a_css_syntax_error_has_its_location_from_4_1_18() {
+    // The results of the official compiler of 4.1.17 and 4.1.18, with
+    // `compile(css, { from: 'input.css' })`.
+    let cases = [
+        (".a { color: red; ", "Missing closing } at .a", "input.css:1:1: Missing closing } at .a"),
+        (".a {\n  color red;\n}", "Invalid declaration: `color red`", "input.css:2:3: Invalid declaration: `color red`"),
+        ("@tailwind utilities;\n  }", "Missing opening {", "input.css:2:3: Missing opening {"),
+        (".c { content: \"a\nb\"; }", "Unterminated string: \"a\"", "input.css:1:15: Unterminated string: \"a\""),
+    ];
+    for (css, before, after) in cases {
+        assert_eq!(error_with_from(css, Version(4, 1, 17)), before, "{css:?}, as Tailwind CSS 4.1.17");
+        assert_eq!(error_with_from(css, Version(4, 1, 18)), after, "{css:?}, as Tailwind CSS 4.1.18");
+        assert_eq!(error_with_from(css, Version::NATIVE), after, "{css:?}, as the newest version");
+    }
+}
+
 #[test]
 fn each_switch_is_in_the_list() {
     // The list is for the documents: a switch that is not in it is easy

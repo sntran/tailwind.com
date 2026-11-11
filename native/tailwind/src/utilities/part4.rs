@@ -495,7 +495,8 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 decl("content", "var(--tw-content)"),
             ])
         })
-        .theme_keys(&["--content"]),
+        // Before 4.1.18, `content-*` did not read the theme.
+        .theme_keys(if crate::switches::CONTENT_THEME_KEY.on() { &["--content"] } else { &[] }),
     );
 
     {

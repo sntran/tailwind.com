@@ -176,6 +176,10 @@ impl Candidate {
 
 /// `/^[a-zA-Z0-9_.%-]+$/`
 fn is_valid_named_value(value: &str) -> bool {
+    // Before 4.1.18, there was no check.
+    if !crate::switches::NAMED_VALUE_CHARACTERS.on() {
+        return true;
+    }
     !value.is_empty()
         && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'%' | b'-'))
 }
@@ -377,7 +381,11 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
                     continue;
                 }
                 if typehint.as_deref() == Some("") {
-                    continue;
+                    // Before 4.1.16, an empty data type was no data type.
+                    if crate::switches::EMPTY_DATA_TYPE_IS_INVALID.on() {
+                        continue;
+                    }
+                    typehint = None;
                 }
                 candidate.value = Some(UtilityValue::Arbitrary { data_type: typehint, value: arbitrary });
             }
