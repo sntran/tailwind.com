@@ -34,6 +34,22 @@ bug, except the items of "Known differences".
 The scanner is the crate of Tailwind CSS itself, so the classes that it
 finds in the source files are the same by construction.
 
+## The other versions of Tailwind CSS
+
+The results above are for the Rust compiler and Tailwind CSS 4.3.5. For
+each other version of Tailwind CSS 4, the file runs the official
+compiler of that version in its JavaScript engine (the script engine,
+[`VERSIONS.md`](VERSIONS.md)). The results of the script engine:
+
+| Check | Result |
+|---|---|
+| The 150 recorded projects of the official program, with the package of 4.3.5 (output, exit status, errors, source maps) | 150 of 150 the same |
+| 75,082 candidates in one build, against the Rust compiler (24 MB of CSS) | the same |
+| The fuzzer against the official compiler of the same version in Node.js, for 4.0.0, 4.1.0, 4.2.0 and 4.3.5: 600 cases each, about 200 of them with JavaScript plugins and configs | 0 different |
+| Random projects against the official command line program of 4.1.0 and 4.2.0, with no optimizer | the same |
+| The same projects with `--minify` or `--optimize` | Small differences in the optimized text: the optimizer is the Lightning CSS of this program, and not the one of the old release. |
+| Each of the 48 versions of `PACKAGES` on a project with a JavaScript plugin | 48 of 48 build |
+
 ## The two official programs
 
 The official standalone program and the official npm CLI give different

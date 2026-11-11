@@ -35,7 +35,8 @@ You need, on Linux x86_64:
 - a nightly Rust with `rust-src` (default `nightly-2026-11-01`), for the
   aarch64 half of the file;
 - `curl` and `unzip`, for the download of `cosmocc` 4.0.2 (the script
-  checks its SHA-256).
+  checks its SHA-256);
+- `zip` and `tar`, for the packages of Tailwind CSS in the file.
 
 ```sh
 rustup target add x86_64-unknown-linux-musl
@@ -46,8 +47,16 @@ make                       # build/tailwind.com
 `cosmocc` also compiles QuickJS for each CPU: the C library of the file
 is Cosmopolitan, so the C compiler of the system is not used here.
 
+After the link, the build downloads the npm package `tailwindcss` of
+each version of the file `PACKAGES` (`scripts/packages.sh`, with a
+SHA-256 check) and adds its files to the ZIP directory `tailwindcss/`
+of `tailwind.com`. `PACKAGES=none make` builds a file with no packages,
+and `PACKAGES="4.2.4 4.3.0" make` a file with these versions only. See
+[`VERSIONS.md`](VERSIONS.md).
+
 `scripts/build.sh` has the steps, and its header names the environment
-variables (`COSMOCC`, `COSMOCC_VERSION`, `RUST_NIGHTLY`, `CPUS`).
+variables (`COSMOCC`, `COSMOCC_VERSION`, `RUST_NIGHTLY`, `CPUS`,
+`PACKAGES`).
 `CPUS=x86_64 sh scripts/build.sh` makes a file for x86_64 only, with no
 nightly Rust. See "The file tailwind.com" in
 [`INTERNALS.md`](INTERNALS.md) for how the link works.

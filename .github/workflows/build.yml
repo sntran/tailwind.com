@@ -53,6 +53,20 @@ jobs:
         run: CASES=tests/upstream/cli-js sh tests/cli.sh target/release/tailwind
       - name: The program with --map, against the record
         run: CASES=tests/upstream/cli-map sh tests/cli.sh target/release/tailwind
+      # The second engine: the official compiler of a package, in the
+      # JavaScript engine of the program (docs/VERSIONS.md). With the
+      # package of the version of UPSTREAM, it must give the same records.
+      - name: The script engine, against the same records
+        run: |
+          sh scripts/packages.sh build/packages
+          export TAILWIND_COM_PACKAGES=$PWD/build/packages TAILWIND_COM_ENGINE=script
+          sh tests/cli.sh target/release/tailwind
+          CASES=tests/upstream/cli-js sh tests/cli.sh target/release/tailwind
+          CASES=tests/upstream/cli-map sh tests/cli.sh target/release/tailwind
+      - name: Each version of PACKAGES, with its own compiler
+        run: TAILWIND_COM_PACKAGES=$PWD/build/packages sh tests/versions.sh target/release/tailwind
+      - name: The sort and Intl.ListFormat of the runtime, against V8
+        run: node --experimental-strip-types tests/v8.mjs
       - name: The watch, with the poll
         run: sh tests/watch.sh target/release/tailwind
 
@@ -180,6 +194,15 @@ jobs:
       # WATCH_EXPECT=events: the watch must use the events of the system
       # (inotify, kqueue, ReadDirectoryChangesW), and builds must start at
       # an event. A watch that polls in their place is an error.
+      # The packages of the other versions are in the ZIP directory of
+      # the file: each system must read them there.
+      - name: The versions of Tailwind CSS in the file
+        run: sh tests/versions.sh build/tailwind.com
+      - name: The script engine, against the record of the official program
+        run: |
+          export TAILWIND_COM_ENGINE=script
+          sh tests/cli.sh build/tailwind.com
+          CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com
       - name: The watch, with the file events of the system
         run: WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com
       - name: The watch, with the poll
@@ -245,6 +268,7 @@ jobs:
             sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com || exit 1
+            sh tests/versions.sh build/tailwind.com || exit 1
             WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com || exit 1
             WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100 || exit 1
             # The action copies the work directory back from the VM: the
@@ -269,6 +293,7 @@ jobs:
             sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com || exit 1
+            sh tests/versions.sh build/tailwind.com || exit 1
             WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com || exit 1
             WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100 || exit 1
             rm -rf build
@@ -290,6 +315,7 @@ jobs:
             sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com || exit 1
+            sh tests/versions.sh build/tailwind.com || exit 1
             WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com || exit 1
             WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100 || exit 1
             echo "== Through sh"
@@ -359,7 +385,7 @@ jobs:
           fi
           # shellcheck disable=SC2086
           node tests/bench/run.mjs --official "$RUNNER_TEMP/official" \
-            --program build/tailwind.com --wasm build/tailwind.wasm $standalone | tee bench.md
+            --program build/tailwind.com --script --wasm build/tailwind.wasm $standalone | tee bench.md
           { echo "### Benchmarks: ${{ matrix.os }}"; echo; cat bench.md; } >> "$GITHUB_STEP_SUMMARY"
 
   npm:

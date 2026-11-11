@@ -279,6 +279,27 @@ The fuzzer found two faults of the JavaScript support:
   with no message of a plugin. The case `cli-js/error-daisyui-apply`
   keeps it fixed.
 
+## The versions of Tailwind CSS and the script engine
+
+The script engine runs the official compiler of a package in QuickJS
+([`VERSIONS.md`](VERSIONS.md)). Its tests:
+
+| Test | What it shows |
+|---|---|
+| `TAILWIND_COM_ENGINE=script sh tests/cli.sh PROGRAM`, also with `CASES` for `cli-js` and `cli-map` | With the package of the version of `UPSTREAM`, the script engine gives the records of the official program: the 150 projects, with plugins, errors and source maps. |
+| `sh tests/versions.sh PROGRAM` | Each version of `PACKAGES` builds a project with a plugin with its own compiler; the two engines give the same output for the version of `UPSTREAM`; a version that is not there is an error. CI runs it with `tailwind.com` on each system, so each system reads the ZIP directory of the file. |
+| `node tests/v8.mjs [CASES]` | The sort of the runtime makes the same calls of the compare function as V8 (Node.js), also for compare functions that are not consistent, and `Intl.ListFormat` gives the same text. |
+| `FUZZ_ENGINE=script node tests/fuzz/fuzz.mjs ... --projects 0` | The fuzzer with the script engine as the builder: the official compiler of one version in QuickJS against the same compiler in Node.js. `sh tests/fuzz/install.sh DIR VERSION` installs the official packages of a version. The job `script` of `.github/workflows/fuzz.yml` runs it for 4.0.17, 4.1.18, 4.2.4, 4.3.0 and 4.3.5. |
+
+A program of `cargo build` has no packages in its file. Get them with
+`sh scripts/packages.sh build/packages` and set
+`TAILWIND_COM_PACKAGES=build/packages`.
+
+The fuzzer found one fault of the script engine: Tailwind CSS uses
+`Intl.ListFormat` in an error message, and QuickJS has no `Intl`. The
+first run of the recorded projects found the other one: the sort (see
+"How the script engine stays the same as V8" in `VERSIONS.md`).
+
 ## Benchmarks
 
 `tests/bench/run.mjs` measures the time, the memory and the size of

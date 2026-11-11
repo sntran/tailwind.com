@@ -1,7 +1,18 @@
 # A new version of Tailwind CSS
 
+A new version of Tailwind CSS has two steps, and the first one is
+enough for a release:
+
+1. **Add the version to the file.** `sh scripts/packages.sh --record
+   4.4.0` writes one line into [`PACKAGES`](../PACKAGES). The next
+   build of `tailwind.com` has the official compiler of that version,
+   and the script engine runs it ([`VERSIONS.md`](VERSIONS.md)). No
+   code changes.
+2. **Port the version to the Rust compiler**, so that the native engine
+   (the fast one) has it. The rest of this document is about this step.
+
 The file [`UPSTREAM`](../UPSTREAM) names the version of Tailwind CSS that
-this repository follows. `scripts/sync-upstream.sh` moves the repository
+the Rust compiler follows. `scripts/sync-upstream.sh` moves the repository
 to another version. The script does all the mechanical work, and it
 gives a list for the work by hand.
 
@@ -84,7 +95,8 @@ release" in [`BUILDING.md`](BUILDING.md).
 
 The workflow `.github/workflows/upstream.yml` runs each Monday. When
 Tailwind CSS has a release that is newer than `UPSTREAM`, it runs
-`report` and opens an issue with `PORT.md`.
+`report` and opens an issue with `PORT.md`. The issue also names the
+command of step 1.
 
 ## The other projects
 

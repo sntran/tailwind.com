@@ -15,24 +15,29 @@ cell has the mark: all programs give the same CSS.
 Linux x86_64, 4 CPUs (Intel Xeon at 2.30 GHz), Node.js 24.22.2, Tailwind
 CSS 4.3.5. The median of 9 runs, and the fastest run in parentheses.
 
-| Workload | tailwind.com | native | tailwind.wasm | official npm CLI | official standalone |
-|---|---:|---:|---:|---:|---:|
-| start: --help | 3 ms (3 ms) | 3 ms (2 ms) |  | 102 ms (99 ms) | 72 ms (69 ms) |
-| preflight only | 7 ms (6 ms) | 6 ms (6 ms) | 115 ms (107 ms) | 139 ms (132 ms) | 98 ms (95 ms) |
-| Phoenix | 10 ms (9 ms) | 8 ms (7 ms) | 141 ms (116 ms) | 141 ms (137 ms) | 123 ms (115 ms) |
-| Phoenix, --minify | 13 ms (10 ms) | 10 ms (9 ms) | 219 ms (205 ms) | 154 ms (148 ms) | 119 ms (117 ms) |
-| Phoenix 1.8.9 with daisyUI | 140 ms (129 ms) | 126 ms (123 ms) | 374 ms (352 ms) | 241 ms (221 ms) | 186 ms (182 ms) |
-| typography and forms | 109 ms (108 ms) | 102 ms (99 ms) | 323 ms (304 ms) | 211 ms (206 ms) | 170 ms (161 ms) |
-| large project | 202 ms (188 ms) | 167 ms (153 ms) | 298 ms (293 ms) | 395 ms (377 ms) | 309 ms (299 ms) |
-| large project, --minify | 354 ms (344 ms) | 296 ms (286 ms) | 587 ms (558 ms) | 523 ms (494 ms) | 463 ms (439 ms) |
-| watch: an edit to a new output | 24 ms | 204 ms |  | 55 ms | 55 ms |
-| peak memory: Phoenix 1.8.9 with daisyUI | 13 MB | 15 MB | 111 MB | 101 MB | 91 MB |
-| peak memory: large project | 74 MB | 75 MB | 134 MB | 189 MB | 146 MB |
-| size on disk | 18.2 MB | 10.9 MB | 8.5 MB | 37.7 MB + Node.js | 103.9 MB |
+| Workload | tailwind.com | tailwind.com, script engine | native | tailwind.wasm | official npm CLI | official standalone |
+|---|---:|---:|---:|---:|---:|---:|
+| start: --help | 3 ms (3 ms) | 3 ms (2 ms) | 3 ms (3 ms) |  | 113 ms (99 ms) | 77 ms (72 ms) |
+| preflight only | 9 ms (7 ms) | 65 ms (54 ms) | 7 ms (7 ms) | 119 ms (109 ms) | 151 ms (142 ms) | 108 ms (98 ms) |
+| Phoenix | 10 ms (9 ms) | 69 ms (58 ms) | 9 ms (8 ms) | 130 ms (118 ms) | 165 ms (158 ms) | 131 ms (123 ms) |
+| Phoenix, --minify | 12 ms (9 ms) | 75 ms (64 ms) | 11 ms (10 ms) | 234 ms (218 ms) | 174 ms (149 ms) | 126 ms (109 ms) |
+| Phoenix 1.8.9 with daisyUI | 137 ms (115 ms) | 221 ms (176 ms) | 133 ms (97 ms) | 373 ms (358 ms) | 282 ms (268 ms) | 217 ms (200 ms) |
+| typography and forms | 111 ms (94 ms) | 167 ms (160 ms) | 106 ms (89 ms) | 347 ms (309 ms) | 255 ms (229 ms) | 175 ms (160 ms) |
+| large project | 224 ms (212 ms) | 1.31 s (1.20 s) | 197 ms (176 ms) | 327 ms (313 ms) | 461 ms (447 ms) | 385 ms (344 ms) |
+| large project, --minify | 411 ms (374 ms) | 1.50 s (1.40 s) | 364 ms (342 ms) | 655 ms (626 ms) | 634 ms (584 ms) | 558 ms (483 ms) |
+| watch: an edit to a new output | 26 ms | 28 ms | 206 ms |  | 58 ms | 58 ms |
+| peak memory: Phoenix 1.8.9 with daisyUI | 13 MB | 18 MB | 15 MB | 109 MB | 100 MB | 88 MB |
+| peak memory: large project | 74 MB | 67 MB | 75 MB | 132 MB | 186 MB | 150 MB |
+| size on disk | 22.3 MB | 22.3 MB | 11.0 MB | 8.7 MB | 37.7 MB + Node.js | 103.9 MB |
 
 The columns:
 
-- **tailwind.com**: the file of the release (`make`).
+- **tailwind.com**: the file of the release (`make`), with its native
+  engine: the Rust compiler.
+- **tailwind.com, script engine**: the same file with
+  `TAILWIND_COM_ENGINE=script`: the official compiler of the package
+  of 4.3.5, in the QuickJS of the file. Each other version of Tailwind
+  CSS has this speed ([`VERSIONS.md`](VERSIONS.md)).
 - **native**: the program of `cargo build --release` for this system.
 - **tailwind.wasm**: the WASI program, in Node.js, with `runWasm` of
   the npm package (`tests/bench/wasm.mjs`).
@@ -53,7 +58,7 @@ The workloads:
 - **typography and forms**: `@tailwindcss/typography` and
   `@tailwindcss/forms`, from `tests/upstream/cli-js`.
 - **large project**: 1000 HTML files with 30 classes each, from the
-  classes of the design system (about 18000 different classes, 1.9 MB of
+  classes of the design system (about 5600 different classes, 1.9 MB of
   CSS).
 - **--minify**: the same project, with `--minify` (Lightning CSS).
 - **watch**: `--watch`, then the time from the write of a source file to
@@ -67,25 +72,34 @@ The workloads:
 ## What the results show
 
 - **The start.** `tailwind.com` starts in 3 ms. The official programs
-  start a JavaScript engine and load the compiler first: 70 ms to
-  100 ms. For a small project, the start is most of the time, so
-  `tailwind.com` is 12 to 20 times faster.
+  start a JavaScript engine and load the compiler first: 77 ms to
+  113 ms. For a small project, the start is most of the time, so
+  `tailwind.com` is 12 to 17 times faster.
 - **JavaScript plugins.** QuickJS is an interpreter, and V8 and
   JavaScriptCore compile JavaScript to machine code. daisyUI is a large
-  plugin: about 120 ms of the 140 ms is the time of QuickJS. Then
-  `tailwind.com` is 1.3 to 1.9 times faster than the official programs,
+  plugin: most of the 137 ms is the time of QuickJS. Then
+  `tailwind.com` is 1.6 to 2.3 times faster than the official programs,
   and not 10 times. The peak memory is 7 to 8 times smaller.
 - **Large projects.** The scanner is the same Rust crate
   (`tailwindcss-oxide`) in all programs, and `--minify` uses Lightning
   CSS in all programs. The difference is the compiler: `tailwind.com` is
-  1.3 to 2 times faster, and uses less than half the memory of the npm
-  CLI.
+  1.4 to 2.1 times faster, and uses less than half the memory of the
+  npm CLI.
+- **The script engine.** The official compiler in QuickJS needs about
+  60 ms more than the native engine for a small project: the engine
+  reads the compiler (about 25 ms) and compiles the stylesheet. This is
+  still less than the start of the official programs, so a Phoenix
+  project builds in 69 ms, against 131 ms and 165 ms. QuickJS is an
+  interpreter, so the large project needs 1.3 s: about 3 times the time
+  of the official programs, and 6 times the time of the native engine.
+  A build of the watch after an edit is fast in each engine, because
+  the compiler keeps its state.
 - **The watch.** `tailwind.com` gets the file events of the system
   (inotify here) and builds again in 24 ms. The native program of
   `cargo build` has no file events: they are in the C part of the APE
   build (the feature `ape`), so it polls, and the poll interval is most
   of its time.
-- **tailwind.com and native.** The APE file is about 20% slower than
+- **tailwind.com and native.** The APE file is 10% to 20% slower than
   the native program on the large project. The two programs have the
   same Rust code. Thus the difference is in the C library and the
   memory allocator of Cosmopolitan.

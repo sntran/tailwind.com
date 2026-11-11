@@ -8,7 +8,8 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 
 ## Unreleased
 
-The first version: 0.1.0, with Tailwind CSS 4.3.5.
+The first version: 0.1.0, with Tailwind CSS 4.3.5 in the Rust compiler,
+and each version from 4.0.0 to 4.3.5 with the script engine.
 
 ### Added
 
@@ -42,6 +43,33 @@ The first version: 0.1.0, with Tailwind CSS 4.3.5.
     program.
 - An engine error has the V8 text of the official program for the
   common errors.
+
+#### The versions of Tailwind CSS
+
+- A second engine, the script engine: the official compiler of the npm
+  package `tailwindcss` of a version (`dist/lib.js`), with no change, in
+  the QuickJS of the file. The Rust compiler (the native engine) stays
+  the engine of its version, 4.3.5.
+- `tailwind.com` has the package of each stable version of Tailwind
+  CSS 4, from 4.0.0 to 4.3.5 (48 versions, 4.1 MB), in its ZIP
+  directory `tailwindcss/`: an APE file is also a ZIP file.
+- `TAILWINDCSS_VERSION` selects the version, `TAILWIND_COM_ENGINE` the
+  engine (`native` or `script`), and `TAILWIND_COM_PACKAGES` a
+  directory with more packages. `--version` shows the selection.
+- The file `PACKAGES` lists the versions with the SHA-256 of each
+  package. `scripts/packages.sh` gets the packages, and `--record` adds
+  a version. A new version of Tailwind CSS needs one line in
+  `PACKAGES`, and no change of the code.
+- The Erlang and Elixir modules give `version` of the configuration to
+  the program, so each version of Tailwind CSS 4 works in a Phoenix
+  project (for example `"4.3.0"` of Phoenix 1.8.9). The default URL of
+  the download has the version of this package (`$program`).
+- For the script engine, the JavaScript runtime has the sort algorithm
+  of V8 and `Intl.ListFormat` for English, so that the compiler gives
+  the same output as in Node.js. A plugin gets them too.
+- With the script engine, a plugin or a config can load the module
+  `tailwindcss` itself.
+- `docs/VERSIONS.md`.
 
 #### The programs
 
@@ -96,6 +124,11 @@ The first version: 0.1.0, with Tailwind CSS 4.3.5.
   `tests/upstream/fuzz-found.jsonl`.
 - Benchmarks against the official npm CLI and standalone program
   (`tests/bench/`, `docs/BENCHMARKS.md`), in CI on Linux and macOS.
+- Tests of the script engine: the 150 recorded projects with the
+  package of 4.3.5, each version of `PACKAGES` on each system
+  (`tests/versions.sh`), the sort and `Intl.ListFormat` against V8
+  (`tests/v8.mjs`), and the fuzzer against the official compiler of
+  five versions in Node.js.
 - `scripts/sync-upstream.sh` and a weekly workflow for a new version of
   Tailwind CSS.
 - Remote SSH to a CI runner (also a BSD VM), with a bridge in Rust
@@ -116,12 +149,20 @@ These faults were found and fixed before this first version:
 
 ### Known limits
 
-- `version:` in the configuration of the Hex package must be `4.3.5`.
-  There is no release for other versions of Tailwind CSS.
+- For another version than 4.3.5, the scanner and the optimizer are the
+  code of this program (the versions of 4.3.5). With `--minify` or
+  `--optimize`, the text can be different from the official program of
+  that version in small details. `--map` needs Tailwind CSS 4.1.6 or
+  later.
+- The script engine is slower than the native engine: about 70 ms in
+  place of 10 ms for a Phoenix project, and about 1.3 s in place of
+  0.2 s for a project with 5600 different classes.
+- Tailwind CSS 3 does not work.
 - `canonicalize`, the second command of the official program, is not
   there.
-- The other modules of Node.js (`crypto`, `stream`, ...), `Intl`,
-  `Temporal`, and `.tsx` files do not work in plugins.
+- The other modules of Node.js (`crypto`, `stream`, ...), `Intl`
+  (except `Intl.ListFormat` for English), `Temporal`, and `.tsx` files
+  do not work in plugins.
 - NetBSD and OpenBSD need the APE loader of cosmocc. Cosmopolitan
   supports OpenBSD 7.3 or earlier.
 - Node.js 22.23 can stop with SIGSEGV when `tailwind.wasm` minifies a

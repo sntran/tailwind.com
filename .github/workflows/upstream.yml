@@ -43,7 +43,10 @@ jobs:
             exit 0
           fi
           {
-            echo "Tailwind CSS $LATEST is out. Run \`sh scripts/sync-upstream.sh apply $LATEST\` and port the changes below (docs/SYNC.md)."
+            echo "Tailwind CSS $LATEST is out."
+            echo
+            echo "1. Run \`sh scripts/packages.sh --record $LATEST\`: the next build of tailwind.com then has this version, with the script engine (docs/VERSIONS.md)."
+            echo "2. Run \`sh scripts/sync-upstream.sh apply $LATEST\` and port the changes below, for the native engine (docs/SYNC.md)."
             echo
             head -c 60000 build/sync/PORT.md
           } > body.md

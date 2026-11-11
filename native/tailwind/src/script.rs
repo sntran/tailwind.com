@@ -269,3 +269,125 @@ impl ScriptCompiler {
         Ok(DecodedSourceMap { file: optional(value.get("file")), sources, mappings })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compat::module_loader::MemoryLoader;
+
+    /// A small package with the interface of the package `tailwindcss`:
+    /// the tests are for the engine, and not for a compiler.
+    struct TestPackage;
+
+    const LIB: &str = r#"
+exports.compile = async function (css, options) {
+  if (css.includes('@fail')) throw new TypeError('the compiler failed')
+  let sheet = await options.loadStylesheet('theme', options.base)
+  let plugin = css.includes('@plugin') ? await options.loadModule('./plugin.js', options.base, 'plugin') : null
+  let own = require('tailwindcss/plugin')
+  let all = []
+  return {
+    sources: [{ base: options.base, pattern: 'src/**', negated: true }],
+    root: css.includes('none') ? 'none' : css.includes('root') ? { base: '/r', pattern: 'x' } : null,
+    features: 5,
+    build(candidates) {
+      for (let c of candidates) if (!all.includes(c)) all.push(c)
+      if (all.includes('bad')) throw new Error('a bad candidate')
+      // A compare function that is not consistent: the sort of V8.
+      let sorted = [3, 1, 2].sort(() => 1).join('')
+      return [css, sheet.content, options.from, all.join(','), plugin ? plugin.module.name : 'no plugin', typeof own, sorted].join('|')
+    },
+    buildSourceMap() {
+      let source = { url: 'a.css', content: 'x', ignore: false }
+      return {
+        file: null,
+        sources: [source],
+        mappings: [
+          { generatedPosition: { line: 1, column: 0 }, originalPosition: { source, line: 2, column: 3 }, name: null },
+          { generatedPosition: { line: 1, column: 5 }, originalPosition: null, name: 'n' },
+        ],
+      }
+    },
+  }
+}
+"#;
+
+    impl Package for TestPackage {
+        fn version(&self) -> &str {
+            "9.9.9"
+        }
+        fn read(&self, name: &str) -> Option<String> {
+            match name {
+                "package.json" => Some(
+                    r#"{"name":"tailwindcss","version":"9.9.9","exports":{".":{"require":"./dist/lib.js"},"./plugin":{"require":"./dist/plugin.js"}}}"#
+                        .to_string(),
+                ),
+                "dist/lib.js" => Some(LIB.to_string()),
+                "dist/plugin.js" => Some("module.exports = function plugin() {}".to_string()),
+                _ => None,
+            }
+        }
+    }
+
+    fn compile_test(css: &str) -> Result<ScriptCompiler> {
+        let load = |id: &str, base: &str| {
+            if id == "theme" {
+                Ok(Stylesheet { path: "/t/theme.css".into(), base: base.into(), content: "THEME".into() })
+            } else {
+                Err(Error::new(format!("Could not resolve '{id}'")))
+            }
+        };
+        let files = MemoryLoader::new(&[("/p/plugin.js", "module.exports = { name: 'from the file' }")]);
+        compile(
+            css,
+            ScriptOptions { base: "/p".into(), from: Some("/p/app.css".into()), load_stylesheet: Some(&load), module_loader: Rc::new(files) },
+            Rc::new(TestPackage),
+        )
+    }
+
+    #[test]
+    fn compiles_and_builds_with_the_compiler_of_the_package() {
+        let mut compiler = compile_test("a @plugin").unwrap();
+        assert_eq!(compiler.version(), "9.9.9");
+        assert_eq!(compiler.sources, vec![Source { base: "/p".into(), pattern: "src/**".into(), negated: true }]);
+        assert_eq!(compiler.root, Root::Default);
+        assert_eq!(compiler.features, 5);
+        // [3, 1, 2].sort(() => 1) is 3,1,2 in V8.
+        assert_eq!(compiler.try_build(&["flex".into()]).unwrap(), "a @plugin|THEME|/p/app.css|flex|from the file|function|312");
+        // The compiler keeps the candidates of the earlier builds.
+        assert!(compiler.try_build(&["block".into()]).unwrap().contains("|flex,block|"));
+    }
+
+    #[test]
+    fn gives_the_root_of_the_compiler() {
+        assert_eq!(compile_test("none").unwrap().root, Root::None);
+        assert_eq!(compile_test("root").unwrap().root, Root::Pattern { base: "/r".into(), pattern: "x".into() });
+    }
+
+    #[test]
+    fn gives_the_source_map_of_the_compiler() {
+        let map = compile_test("a").unwrap().build_source_map().unwrap();
+        assert_eq!(map.file, None);
+        assert_eq!(map.sources, vec![DecodedSource { url: Some("a.css".into()), content: Some("x".into()), ignore: false }]);
+        assert_eq!(
+            map.mappings,
+            vec![
+                DecodedMapping {
+                    generated_position: Position { line: 1, column: 0 },
+                    original_position: Some(OriginalPosition { source: 0, line: 2, column: 3 }),
+                    name: None,
+                },
+                DecodedMapping { generated_position: Position { line: 1, column: 5 }, original_position: None, name: Some("n".into()) },
+            ]
+        );
+    }
+
+    #[test]
+    fn an_exception_is_an_error_with_its_name() {
+        let error = compile_test("@fail").err().unwrap();
+        assert_eq!(error.message, "the compiler failed");
+        assert_eq!(error.name, "TypeError");
+        let mut compiler = compile_test("a").unwrap();
+        assert_eq!(compiler.try_build(&["bad".into()]).err().unwrap().message, "a bad candidate");
+    }
+}
