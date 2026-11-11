@@ -97,21 +97,43 @@ let css = compiler.build(&["flex".to_string(), "md:p-4".to_string()]);
 
 ## The JavaScript parts
 
-The repository has two generated or copied parts. A build needs no
-Node.js for them.
+The repository has generated or copied parts. A build needs no Node.js
+for them.
 
 - `c_src/quickjs` is the git submodule of QuickJS, with no change.
   `sh scripts/sync-quickjs.sh COMMIT_OR_TAG` moves it to another version
   (see `c_src/QUICKJS.md`).
 - `native/tailwind/assets/compat.js` is the plugin layer of Tailwind
-  CSS in one file. After a change of `native/tailwind/js`, or for a new
-  version of Tailwind CSS, make it again with Node.js and a clone of
-  Tailwind CSS:
+  CSS with the parts of Node.js of `native/tailwind/js`, in one file.
+  After a change of `native/tailwind/js`, or for a new version of
+  Tailwind CSS, make it again with Node.js and a clone of Tailwind CSS:
 
   ```sh
-  (cd tests/upstream/tools && npm install)      # esbuild
+  (cd tests/upstream/tools && npm install)      # esbuild, sucrase, the three plugins
   node tests/upstream/tools/build-compat-bundle.mjs /path/to/tailwindcss
   ```
+
+- `native/tailwind/assets/typescript.js` (the TypeScript transform of
+  Sucrase, with `native/tailwind/js/typescript-entry.ts`) and
+  `native/tailwind/assets/plugins/` (`@tailwindcss/forms`,
+  `@tailwindcss/typography`, `@tailwindcss/aspect-ratio`, each one with
+  its dependencies) come from the packages of
+  `tests/upstream/tools/package.json`:
+
+  ```sh
+  node tests/upstream/tools/build-plugin-bundles.mjs /path/to/tailwindcss
+  ```
+
+  The script stops when the version of a plugin is not the version of
+  the lock file of that clone.
+
+After a change of a part of Node.js in `native/tailwind/js`, add a case
+to `native/tailwind/tests/fixtures/node_api_cases.cjs`, and record the
+values of Node.js 22 again:
+
+```sh
+node tests/upstream/tools/gen-node-api.mjs
+```
 
 ## The Erlang and Elixir modules
 

@@ -16,9 +16,16 @@
 # absolute path of the copy of the project. A case with a file
 # stderr-contains.txt has an error message that this program cannot
 # repeat (a message of the JavaScript parser of Node.js): then only the
-# lines of stderr-contains.txt must be in the error output. The program
+# lines of stderr-contains.txt must be in the error output. A case with
+# the exit status 0 and a file stderr-contains.txt prints a warning: each
+# line of the file must be in the error output of the program, without
+# the color codes. A case can have env.txt: the environment variables for
+# the program, one NAME=VALUE for each line, with <project> at the place
+# of the path of the project. The program
 # runs on a copy of project/ outside this repository, as the record was
-# made: the .gitignore of this repository must not change the scan.
+# made: the .gitignore of this repository must not change the scan. A
+# case with a file project.txt has no project/: the file names another
+# case, and the case runs on a copy of the project of that case.
 #
 # A case can also have stdin.txt (the standard input of the program) and
 # files/ (each file that the official program made in the project: the
@@ -106,9 +113,18 @@ failed=0
 count=0
 for name in "$@"; do
     [ -f "$cases/$name/args.txt" ] || continue
+    # A list of paths in the environment (NODE_PATH) has another form on
+    # Windows, and the shell changes it: these cases do not run there.
+    if [ -f "$cases/$name/env.txt" ]; then
+        case "$(uname -s)" in
+            MINGW*|MSYS*|CYGWIN*) echo "cli.sh: $name: not on Windows (env.txt)"; continue ;;
+        esac
+    fi
     count=$((count + 1))
     mkdir -p "$work/$name"
-    cp -R "$cases/$name/project" "$work/$name/project"
+    source=$cases/$name/project
+    [ -f "$cases/$name/project.txt" ] && source=$cases/$(tr -d "\r\n" < "$cases/$name/project.txt")/project
+    cp -R "$source" "$work/$name/project"
     # The arguments: one for each line of args.txt.
     set --
     while IFS= read -r arg; do
@@ -118,8 +134,19 @@ for name in "$@"; do
     status=0
     stdin=/dev/null
     [ -f "$cases/$name/stdin.txt" ] && stdin=$cases/$name/stdin.txt
-    (cd "$work/$name/project" && export NO_COLOR=1 && run "$@" > "$work/$name/stdout.raw" 2> "$work/$name/stderr.txt" < "$stdin") || status=$?
     project=$(cd "$work/$name/project" && pwd -P)
+    (
+        cd "$work/$name/project"
+        # The environment of the case.
+        if [ -f "$cases/$name/env.txt" ]; then
+            while IFS= read -r line || [ -n "$line" ]; do
+                line=$(printf "%s" "$line" | tr -d "\r" | sed "s|<project>|$project|g")
+                case "$line" in *=*) export "${line%%=*}=${line#*=}" ;; esac
+            done < "$cases/$name/env.txt"
+        fi
+        export NO_COLOR=1
+        run "$@" > "$work/$name/stdout.raw" 2> "$work/$name/stderr.txt" < "$stdin"
+    ) || status=$?
     normalize "$work/$name/stdout.raw" "$work/$name/stdout.css"
     expected=$(cat "$cases/$name/exit.txt")
     ok=1
@@ -152,8 +179,23 @@ for name in "$@"; do
     # For an error: each message line of the official program (the lines
     # of the box, or all the lines after the header when there is no box)
     # must be in the output, without the colors.
+    esc=$(printf '\033')
+    # For a build with no error: each line of the warnings of the official
+    # program must be in the error output, without the colors.
+    if [ ! -f "$cases/$name/stderr.txt" ] && [ -f "$cases/$name/stderr-contains.txt" ]; then
+        sed "s/$esc\[[0-9;]*m//g" "$work/$name/stderr.txt" | tr -d "\r" > "$work/$name/stderr.plain"
+        case "$(uname -s)" in
+            MINGW*|MSYS*|CYGWIN*) grep -v '<project>' "$cases/$name/stderr-contains.txt" > "$work/$name/expected.txt" || true ;;
+            *) sed "s|<project>|$project|g" "$cases/$name/stderr-contains.txt" > "$work/$name/expected.txt" ;;
+        esac
+        while IFS= read -r line; do
+            if ! grep -qF -- "$line" "$work/$name/stderr.plain"; then
+                echo "cli.sh: $name: the error output does not have the warning line: $line" >&2
+                ok=0
+            fi
+        done < "$work/$name/expected.txt"
+    fi
     if [ -f "$cases/$name/stderr.txt" ]; then
-        esc=$(printf '\033')
         if [ -f "$cases/$name/stderr-contains.txt" ]; then
             cat "$cases/$name/stderr-contains.txt" > "$work/$name/expected.raw"
         else

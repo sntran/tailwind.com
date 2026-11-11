@@ -36,6 +36,10 @@ typedef void (*TwJsRelease)(void *user, char *text);
 TwJs *tw_js_new(size_t memory_limit, size_t stack_limit, TwJsHost host, TwJsRelease release, void *user);
 void tw_js_free(TwJs *js);
 void tw_js_free_text(char *text);
+/* `process.platform` of Node.js for the system that runs the program:
+ * "linux", "darwin", "win32", "freebsd", "openbsd", "netbsd" or "wasi".
+ * The text is static. */
+const char *tw_js_platform(void);
 
 /*
  * Each function below returns 0 for success. If not, `*out` is the message

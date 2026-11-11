@@ -1,0 +1,14 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .p-wide {
+    padding: 6rem;
+  }
+  .text-accent {
+    color: #f97316;
+  }
+  .stripe {
+    border-left: 4px solid;
+  }
+}
+

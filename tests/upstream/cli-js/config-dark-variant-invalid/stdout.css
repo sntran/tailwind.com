@@ -1,0 +1,18 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --spacing: 0.25rem;
+  }
+}
+@layer utilities {
+  .p-1 {
+    padding: var(--spacing);
+  }
+  @media (prefers-color-scheme: dark) {
+    .dark\:flex {
+      display: flex;
+    }
+  }
+}
+

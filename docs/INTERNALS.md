@@ -7,9 +7,11 @@ native/tailwind/        the compiler and the command line program (Rust)
   src/*.rs              the compiler: one file for each file of Tailwind CSS
   src/cli/              the command line program
   src/compat/js/        the JavaScript engine for @plugin and @config (Rust)
-  js/                   the entry and the shims of the plugin layer (TypeScript)
+  js/                   the entry and the shims of the plugin layer, and the parts of Node.js (TypeScript)
   assets/*.css          the stylesheets of Tailwind CSS, in the program
   assets/compat.js      the plugin layer of Tailwind CSS, in the program (generated)
+  assets/typescript.js  the TypeScript transform, in the program (generated)
+  assets/plugins/       the three plugins of the standalone program of Tailwind CSS (generated)
 c_src/                  the entry in C, the calls of Rust for Cosmopolitan, the file events
 c_src/quickjs/, js.c    QuickJS, and its API for Rust
 scripts/build.sh        the link of the Rust library into tailwind.com
@@ -102,13 +104,20 @@ bindings:
 | `tw_js_eval` | Evaluate a script or an ES module from text. |
 | `tw_js_call` | Call a global function with one string, and get a string or nothing. |
 | `tw_js_run_jobs` | Run the pending jobs of promises until none is left. |
+| `tw_js_platform` | `process.platform` for the system that runs the file. `tailwind.com` is one file for all the systems, so Cosmopolitan gives the answer at run time. |
 
-JavaScript gets two global functions from `js.c`: `__host(op, text)`
-calls a function of Rust and returns its text, and `__await(promise)`
-runs the pending jobs until the promise settles (the modules load
-synchronously). The loader of ES modules of QuickJS asks the host for
-the name of a module (`module.resolve`) and for its source
-(`module.load`). An exception comes back as its message, its name and
+JavaScript gets three global functions from `js.c`: `__host(op, text)`
+calls a function of Rust and returns its text, `__await(promise)` runs
+the pending jobs until the promise settles (the modules load
+synchronously), and `__compile(source, filename)` evaluates a script
+that has the name of its file. A CommonJS module is such a script: the
+stack of an error has the file, and an `import()` in the module
+resolves from the file. When no job is pending, the job loop calls the
+function `__tw_run_timer` of the bundle: this is the clock of
+`setTimeout` (`js/timers.ts`). The loader of ES modules of QuickJS asks
+the host for the name of a module (`module.resolve`) and for its source
+(`module.load`), and gives the module `import.meta.url`,
+`import.meta.dirname` and `import.meta.filename`. An exception comes back as its message, its name and
 its stack. Each side frees its own text: text from C is from `malloc`
 and Rust gives it back with `tw_js_free_text`, and C gives the text of a
 host result back to Rust.
@@ -120,7 +129,8 @@ design system in `runtime.rs` (see below), the file events
 
 ### The bundle and the shims
 
-`assets/compat.js` is one JavaScript file (89 KB, minified), made by
+`assets/compat.js` is one JavaScript file (130 KB, minified: 89 KB for
+the plugin layer, and 41 KB for the parts of Node.js), made by
 `tests/upstream/tools/build-compat-bundle.mjs` with esbuild from the
 source of Tailwind CSS and from `native/tailwind/js`. It is in the
 repository, so a build needs no Node.js.
@@ -154,7 +164,11 @@ The modules with state are replaced (`js/shims`, and
 (run `applyCompatibilityHooks` on the tree of the stylesheet: the tree,
 the sources and the features go as JSON and come back),
 `__tw_utility`, `__tw_variant`, `__tw_compare`,
-`__tw_resolve_theme_value` and `__tw_module_source`.
+`__tw_resolve_theme_value` and `__tw_module_source`. When an exception
+leaves one of these functions, the bundle gives the host the text of
+each error of its `cause` chain (`error.causes`), and the error of the
+compiler has them (`Error::causes`): the program prints each one in a
+`Caused by:` box, as `formatError` of the official program.
 
 `src/compat/js/json.rs` has the JSON of the tree, the candidates and the
 variants, in the shapes of `ast.ts` and `candidate.ts`. The node of
@@ -178,37 +192,138 @@ of a plugin utility or variant has a counted reference to it.
 
 `src/compat/js/resolve.rs` resolves a name to a file, as Node.js and
 `enhanced-resolve` do: relative paths, the extensions `.js`, `.json`,
-`.cjs` and `.mjs`, index files, `node_modules` in each parent
-directory, `exports` (conditions and patterns) and `main` of a
-`package.json`, and `NODE_PATH`. The path of a `@plugin` or `@config`
-rule uses the conditions `node` and `import`, and then `node` and
-`require`, as `@tailwindcss/node`.
+`.cjs`, `.mjs`, `.ts`, `.mts` and `.cts`, index files, `node_modules`
+in each parent directory, `exports` (conditions and patterns),
+`imports` (`#name`) and `main` of a `package.json`, and `NODE_PATH`.
+The path of a `@plugin` or `@config` rule uses the conditions `node`
+and `import`, and then `node` and `require`, as `@tailwindcss/node`.
+`require` and `import` in a module use the conditions of Node.js 22.
+The first key of the package that is a condition gives the target:
+the sequence of the keys of the package has the meaning, as in Node.js
+(`serde_json` keeps it). A test compares 160 answers with
+`require.resolve` and `import.meta.resolve` of Node.js.
 
 `js/modules.ts` runs the modules. A CommonJS module runs in a function
 with `module`, `exports`, `require`, `__filename` and `__dirname`. An
 ES module is a module of QuickJS. `require` of an ES module gives its
 namespace. An `import` of a CommonJS module, of a JSON file or of a
 module of the program gets a small ES module that exports its values.
-`tailwindcss/plugin`, `tailwindcss/colors`, `tailwindcss/defaultTheme`,
-`tailwindcss/lib/util/flattenColorPalette`, `fs`, `path` and `util` are
-in the bundle (`js/node-fs.ts`, `js/node-path.ts`, `js/node-util.ts`).
+
+The modules of the program are in the bundle:
+
+| Module | File |
+|---|---|
+| `tailwindcss/plugin`, `tailwindcss/colors`, `tailwindcss/defaultTheme`, `tailwindcss/lib/util/flattenColorPalette` | The source of Tailwind CSS. |
+| `fs`, `fs/promises` | `js/node-fs.ts`: reads through the host. |
+| `path` | `js/node-path.ts` |
+| `util`, `util/types` | `js/node-util.ts`: `inspect` and `format` follow the code of Node.js. |
+| `buffer`, `Buffer`, `TextEncoder`, `TextDecoder`, `atob`, `btoa` | `js/node-buffer.ts`, `js/encoding.ts` |
+| `url`, `URL`, `URLSearchParams` | `js/node-url.ts` |
+| `os`, `assert`, `module`, `process` | `js/node-os.ts`, `js/node-assert.ts`, `js/modules.ts`, `js/globals.ts` |
+| `timers`, `setTimeout`, `setInterval`, `setImmediate` | `js/timers.ts` |
+| `child_process`, `http`, `net`, ... | `js/denied.ts`: each function throws the error of its rule. |
+
+`tests/node_api.rs` runs one file of cases
+(`tests/fixtures/node_api_cases.cjs`) in the engine, and compares each
+value with the record of the same file in Node.js 22
+(`tests/upstream/tools/gen-node-api.mjs`).
 
 The library has no file access. The caller of `compile` gives a
-`ModuleLoader` (`compat/module_loader.rs`: read a file, the kind of a
-path, the names in a directory, and optional functions for the
-dependencies, `console`, `NODE_PATH` and `process.env`). The command
-line program gives the file system (`cli/modules.rs`), and the tests
-give files in memory (`MemoryLoader`). Each module file that is not in
-`node_modules` is a dependency: the watch makes a new compiler when it
-changes.
+`ModuleLoader` (`compat/module_loader.rs`: read a file as text or as
+bytes, the kind of a path, the names in a directory, and optional
+functions for symbolic links, the dependencies, `console`,
+`NODE_PATH`, `process.env`, `process.argv` and `process.platform`).
+The command line program gives the file system and its environment
+(`cli/modules.rs`), and the tests give files in memory
+(`MemoryLoader`). Each module file that is not in `node_modules` is a
+dependency: the watch makes a new compiler when it changes.
+
+### TypeScript
+
+A TypeScript module (`.ts`, `.mts`, `.cts`) must lose its types before
+the engine can run it. Upstream uses Node.js or Bun, and then jiti.
+Two ways were built and measured for this program (Linux x86_64, the
+release profile of the workspace: `opt-level = "s"`, fat LTO, strip):
+
+| Way | Native program | `wasm32-wasip1` | Builds for `x86_64-unknown-linux-musl` and for aarch64 with `-Zbuild-std` | In `tailwind.com` (two CPUs) |
+|---|---|---|---|---|
+| Rust, `oxc` 0.158 (parser, semantic, transformer, codegen) | +1.94 MB | +1.95 MB | yes, yes | about +3.9 MB |
+| Rust, `swc_ts_fast_strip` | +3.52 MB | +2.88 MB | yes, yes | about +7.1 MB |
+| JavaScript in QuickJS: the TypeScript transform of Sucrase 3.35.1, as a second file | +0.21 MB | +0.21 MB | no Rust code | +0.41 MB |
+
+The numbers of the two Rust ways are the size of a program that only
+removes the types of one file, minus the size of the same program with
+no transformer. The number for `tailwind.com` is two times the number
+for musl. The numbers of the JavaScript way are the size of the file
+`assets/typescript.js` (206 KB): the program holds it as text.
+
+The program uses the JavaScript way: it adds one tenth of the size of
+the smallest Rust way. Its costs:
+
+- **Time.** The engine evaluates the file at the first TypeScript
+  module of a build, and not for a project with no TypeScript. This
+  adds about 25 ms to a build on Linux x86_64 (the case `ts-config`,
+  a config of 60 lines with a plugin of 30 lines: 78 ms. The case
+  `config-esm`, a JavaScript config: 53 ms).
+- **Namespaces.** Sucrase removes a `namespace` with its content. The
+  recorded case `ts-plugin` has a namespace with values, so
+  `js/typescript-entry.ts` has a step before Sucrase: it finds each
+  namespace with the tokenizer of Sucrase, and writes the function
+  that the TypeScript compiler makes for it (`var N; (function (N) { …
+  })(N || (N = {}))`), with the exported names at the end of the body.
+- **Decorators and JSX** are not there. `oxc` has them.
+
+`js/typescript.ts` loads the file (`asset` of the host) and keeps the
+function. `read` of `js/modules.ts` calls it for each TypeScript file
+before the file runs as CommonJS or as an ES module.
+`tests/upstream/tools/build-plugin-bundles.mjs` makes the file.
+
+### The plugins in the program
+
+The standalone program of Tailwind CSS has three plugins in its file:
+`@tailwindcss/forms`, `@tailwindcss/typography` and
+`@tailwindcss/aspect-ratio`
+(`packages/@tailwindcss-standalone/src/index.ts`). Its function
+`__tw_resolve` gives the name itself for these three names, before the
+resolver looks at the disk, and `__tw_load` gives the copy of the
+program. So `@plugin "@tailwindcss/typography"` always loads that copy,
+also when the project has the package in `node_modules`. `loadModule`
+of `js/modules.ts` has the same rule: the path of the module is the
+name, and its base is `@tailwindcss`, as there. A `require` of the
+package in a config file is not a part of the rule: it finds
+`node_modules`, or fails.
+
+`assets/plugins/NAME.js` has each plugin with its dependencies as one
+CommonJS file (esbuild, minified): 83 KB for typography with
+`postcss-selector-parser`, 11 KB for forms, 1 KB for aspect-ratio. The
+versions are the versions of the lock file of Tailwind CSS (`UPSTREAM`
+has them, and `sync-upstream.sh check` compares). The engine evaluates
+a file only when a stylesheet names the plugin.
 
 ### What a plugin can do
 
 A plugin can read each file that the `ModuleLoader` gives (in the
-program: each file that the user can read), and can use the CPU and
-the memory of the engine. It cannot write files, start a process, open
-a network connection, or read the environment except `NODE_ENV`. See
-[`SECURITY.md`](../SECURITY.md).
+program: each file that the user can read) and the environment, and
+can use the CPU and the memory of the engine. It cannot write files,
+start a process, or open a network connection: `js/denied.ts` has the
+functions for these calls, and each one throws an error that names
+its rule. See [`SECURITY.md`](../SECURITY.md).
+
+### Warnings
+
+Tailwind CSS gives its warnings to `console.warn`. The program prints
+the same text to the standard error:
+
+- The plugin layer is the JavaScript of Tailwind CSS, so its warnings
+  (`darkMode`, a prefix with `-`) come from that code, through
+  `console` of the `ModuleLoader`.
+- `utilities/css_utility.rs` has the warning for a data type that
+  `--value(…)` cannot have. The design system collects the texts, and
+  `Compiler::take_warnings` gives them to the program.
+- `cli/optimize_css.rs` has the warnings of Lightning CSS: the parser
+  recovers from an error and gives a warning, and the program prints
+  the lines around it as `optimize.ts` does, without the warnings for
+  the pseudo-classes of Vue and Angular.
 
 ### Source maps
 
@@ -272,7 +387,8 @@ source map, the JSON text has none of these keys.
   `node_modules` with the `style` condition, and the stylesheets of
   Tailwind CSS in the program).
 - `optimize_css.rs`: Lightning CSS for `--minify` and `--optimize`: the
-  same version and options as Tailwind CSS, in two passes. With a
+  same version and options as Tailwind CSS, in two passes, and the
+  warnings of the first pass. With a
   source map, each pass gets the map of its input (the crate
   `parcel_sourcemap`, as the Node.js package of Lightning CSS).
 - `source_maps.rs`: the JSON text of a source map, as the package
@@ -389,20 +505,29 @@ the method of BEAM.com for Rust:
 
 ### The size of the file
 
-The file is about 18 MB: two copies of the program, one for x86_64 and
-one for aarch64, of about 9 MB each. In one copy:
+The file is about 19 MB: two copies of the program, one for x86_64 and
+one for aarch64, of about 9.5 MB each. In one copy:
 
 | Part | Size |
 |---|---|
 | Lightning CSS with its CSS parser, for `--minify` and `--optimize`, and its source maps | about 3.5 MB |
 | The compiler (the utilities, the variants, the default theme of v3) | about 1 MB |
 | The scanner of Tailwind CSS with its regular expressions and its `.gitignore` code | about 1 MB |
-| QuickJS with its Unicode tables, the JSON code, and the plugin layer of Tailwind CSS (89 KB) | about 1.5 MB |
+| QuickJS with its Unicode tables, and the JSON code | about 1.4 MB |
+| The JavaScript files of the program, as text: the plugin layer of Tailwind CSS with the parts of Node.js (130 KB), the TypeScript transform (206 KB), the three plugins of the standalone program (96 KB) | 0.43 MB |
 | The Rust standard library, the unwind tables, the stylesheets, Cosmopolitan | the rest |
 
 The source maps (the code of the compiler and of the program, and the
 source maps of Lightning CSS with the crate `parcel_sourcemap`) are
 about 0.15 MB of one copy.
+
+The JavaScript files are in the two copies, so they are 0.86 MB of
+the file. Before TypeScript, the three plugins and the parts of Node.js,
+the file had 18.3 MB, with 89 KB of JavaScript in a copy. Now it has
+19.1 MB: 0.41 MB for the TypeScript transform, 0.19 MB for the three
+plugins, 0.08 MB for the parts of Node.js, and the rest for the Rust
+and C code of the loader and of the warnings. `tailwind.wasm` has one
+copy: 8.6 MB before, and 8.95 MB now.
 
 The dependencies build for size (`opt-level = "s"`), and the compiler
 and QuickJS (`-O2`) build for speed. With all the code built for speed,

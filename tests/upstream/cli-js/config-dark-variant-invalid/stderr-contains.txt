@@ -1,0 +1,2 @@
+When using `variant` for `darkMode`, your selector must contain `&`.
+Example `darkMode: ["variant", ".your-selector &"]`

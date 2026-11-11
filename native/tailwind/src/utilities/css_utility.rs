@@ -54,7 +54,7 @@ pub fn create_css_utility_shared(node: SharedAtRule) -> Option<RegisterUtility> 
 
     if is_valid_functional_utility_name(&name) {
         return Some(Box::new(move |design_system: &mut DesignSystem| {
-            normalize_declarations(&mut node.borrow_mut().nodes);
+            normalize_declarations(&mut node.borrow_mut().nodes, &mut design_system.warnings.borrow_mut());
             let node = node.clone();
             design_system.utilities.functional_full(
                 &name[..name.len() - 2],
@@ -78,8 +78,9 @@ pub fn create_css_utility_shared(node: SharedAtRule) -> Option<RegisterUtility> 
 // The work at the registration.
 
 /// Make the arguments of each `--value(…)` and `--modifier(…)` regular, in
-/// each declaration of the tree.
-fn normalize_declarations(nodes: &mut [AstNode]) {
+/// each declaration of the tree. `warnings` gets the texts that upstream
+/// gives to `console.warn` for a data type that a bare value cannot have.
+fn normalize_declarations(nodes: &mut [AstNode], warnings: &mut Vec<String>) {
     for node in nodes {
         match node {
             AstNode::Declaration(declaration) => {
@@ -88,27 +89,56 @@ fn normalize_declarations(nodes: &mut [AstNode]) {
                     continue;
                 }
                 let mut value_ast = value_parser::parse(value);
-                normalize_value_functions(&mut value_ast);
+                normalize_value_functions(&mut value_ast, warnings);
                 declaration.value = Some(value_parser::to_css(&value_ast));
             }
             other => {
                 if let Some(children) = other.children_mut() {
-                    normalize_declarations(children);
+                    normalize_declarations(children, warnings);
                 }
             }
         }
     }
 }
 
-fn normalize_value_functions(nodes: &mut [ValueAstNode]) {
+fn normalize_value_functions(nodes: &mut [ValueAstNode], warnings: &mut Vec<String>) {
     for node in nodes {
         let ValueAstNode::Function(function) = node else { continue };
         if function.value == "--value" || function.value == "--modifier" {
             let css = value_parser::to_css(&function.nodes);
             let args: Vec<String> = segment(&css, b',').into_iter().map(normalize_argument).collect();
             function.nodes = value_parser::parse(&args.join(","));
+            warn_about_bare_value_data_types(function, warnings);
         }
-        normalize_value_functions(&mut function.nodes);
+        normalize_value_functions(&mut function.nodes, warnings);
+    }
+}
+
+/// The warning of upstream for a word of `--value(…)` or `--modifier(…)`
+/// that is not a literal, not a theme key, not an arbitrary value, and not
+/// a data type of a bare value: two calls of `console.warn`.
+fn warn_about_bare_value_data_types(function: &ValueFunctionNode, warnings: &mut Vec<String>) {
+    let utf16_len = |text: &str| text.encode_utf16().count();
+    for (index, node) in function.nodes.iter().enumerate() {
+        let ValueAstNode::Word(word) = node else { continue };
+        let value = word.value.as_str();
+        let first = value.chars().next();
+        // A literal: the same quote at the two ends.
+        if matches!(first, Some('"' | '\'')) && value.chars().next_back() == first {
+            continue;
+        }
+        if value.starts_with("--") || (value.starts_with('[') && value.ends_with(']')) || BARE_VALUE_DATA_TYPES.contains(&value) {
+            continue;
+        }
+        let types: Vec<String> = BARE_VALUE_DATA_TYPES.iter().map(|name| format!("\"{name}\"")).collect();
+        warnings.push(format!("Unsupported bare value data type: \"{value}\".\nOnly valid data types are: {}.\n", types.join(", ")));
+        let offset = utf16_len(&function.value) + 1 + utf16_len(&value_parser::to_css(&function.nodes[..index]));
+        warnings.push(format!(
+            "```css\n{}\n{}{}\n```",
+            value_parser::to_css(std::slice::from_ref(&ValueAstNode::Function(function.clone()))),
+            " ".repeat(offset),
+            "^".repeat(utf16_len(value)),
+        ));
     }
 }
 

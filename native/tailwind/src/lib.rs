@@ -39,11 +39,15 @@ pub struct Error {
     /// `CssSyntaxError` for an error of the CSS parser, or the name of a
     /// JavaScript exception of a plugin, for example `TypeError`.
     pub name: std::borrow::Cow<'static, str>,
+    /// The `cause` chain of a JavaScript exception: the text of each cause
+    /// (`${cause}` in JavaScript), the direct cause first. The official
+    /// program prints each one in a `Caused by:` box.
+    pub causes: Vec<String>,
 }
 
 impl Error {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into(), name: std::borrow::Cow::Borrowed("Error") }
+        Self { message: message.into(), name: std::borrow::Cow::Borrowed("Error"), causes: Vec::new() }
     }
 }
 
@@ -57,7 +61,7 @@ impl std::error::Error for Error {}
 
 impl From<css_parser::CssSyntaxError> for Error {
     fn from(e: css_parser::CssSyntaxError) -> Self {
-        Error { message: e.message, name: std::borrow::Cow::Borrowed("CssSyntaxError") }
+        Error { message: e.message, name: std::borrow::Cow::Borrowed("CssSyntaxError"), causes: Vec::new() }
     }
 }
 

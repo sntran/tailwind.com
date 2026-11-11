@@ -1,0 +1,11 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .tab-4 {
+    tab-size: 4;
+  }
+  .tab-\[8\] {
+    tab-size: 8;
+  }
+}
+

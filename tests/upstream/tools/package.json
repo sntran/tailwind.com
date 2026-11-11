@@ -1,7 +1,11 @@
 {
   "private": true,
-  "description": "The tools of tests/upstream. esbuild makes native/tailwind/assets/compat.js.",
+  "description": "The tools of tests/upstream. esbuild makes the JavaScript files of native/tailwind/assets: compat.js, typescript.js (from sucrase) and plugins/ (the three plugins of the standalone program of Tailwind CSS, at the versions of its lock file).",
   "devDependencies": {
-    "esbuild": "0.27.7"
+    "@tailwindcss/aspect-ratio": "0.4.2",
+    "@tailwindcss/forms": "0.5.11",
+    "@tailwindcss/typography": "0.5.20",
+    "esbuild": "0.27.7",
+    "sucrase": "3.35.1"
   }
 }

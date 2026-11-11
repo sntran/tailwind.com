@@ -30,6 +30,15 @@ extern "C" {
     fn tw_js_call(js: *mut TwJs, name: *const c_char, text: *const c_char, out: *mut *mut c_char, stack: *mut *mut c_char) -> c_int;
     fn tw_js_run_jobs(js: *mut TwJs, out: *mut *mut c_char, stack: *mut *mut c_char) -> c_int;
     fn tw_js_memory_used(js: *mut TwJs) -> usize;
+    fn tw_js_platform() -> *const c_char;
+}
+
+/// `process.platform` of Node.js for the system that runs the program.
+/// `tailwind.com` is one file for all the systems, so the C code finds
+/// the system at run time.
+pub fn platform() -> String {
+    // SAFETY: the function gives static text with a NUL at its end.
+    unsafe { CStr::from_ptr(tw_js_platform()) }.to_string_lossy().into_owned()
 }
 
 /// An exception of JavaScript.

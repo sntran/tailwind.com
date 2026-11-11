@@ -148,6 +148,11 @@ Cases for the official CLI. Each case is a directory `cli/NAME/`:
 - `stdout.css`: the exact stdout of the official CLI. The current directory is `project/`.
 - `exit.txt`: the exit code.
 - `stderr.txt`: the stderr text, only when the exit code is not 0. It contains ANSI color codes.
+- `stderr-contains.txt`: only when the exit code is 0 and the CLI prints a warning: each line of the stderr text
+  with no color codes, except the header, the empty lines and the line `Done in ...`. `tools/run-cli.mjs` writes it.
+  The record runs with `NODE_NO_WARNINGS=1`, so a warning of Node.js itself is not in the file.
+- `env.txt`: optional. The environment variables for the CLI, one `NAME=VALUE` for each line. `<project>` is the path of the project.
+- `project.txt`: optional, in place of `project/`. The name of another case: the two cases use one project.
 
 The CLI does not run with `NODE_ENV=test`. Thus `stdout.css` starts with the license banner comment.
 
@@ -170,6 +175,9 @@ The CLI does not run with `NODE_ENV=test`. Thus `stdout.css` starts with the lic
 | `cwd` | The `--cwd` argument. |
 | `error-circular-apply` | A circular `@apply`. The exit code is 1 and stdout is empty. |
 | `error-unknown-apply` | An `@apply` of an unknown utility. The exit code is 1 and stdout is empty. |
+| `warning-value-type` | `@utility` with `--value()` and `--modifier()` arguments that are not data types of a bare value: three warnings on stderr. |
+| `warning-optimize` | `--minify` with a pseudo-class that the optimizer does not know: one warning with the lines around it. The pseudo-classes of Vue and Angular (`:deep`, `:slotted`, `:global`, `::ng-deep`, `:host-context`) give no warning. |
+| `warning-optimize-many` | `--optimize` with three such rules: each warning has a number (`Issue #1:`). |
 
 Some projects contain a `.gitignore` file and files that it ignores (for example `cli/auto-detect/project/ignored/`).
 Git also obeys these nested `.gitignore` files. Use `git add -f tests/upstream/cli` to add the ignored files.
@@ -241,7 +249,7 @@ and 30 lists of random candidates of `classes.jsonl.gz` (the seed is `20260405`)
 
 Cases for the official CLI with JavaScript plugins and JavaScript configs (`@plugin` and `@config`).
 The layout of a case is the same as in `cli/`: `project/`, `args.txt`, `stdout.css`, `exit.txt` and, for an error, `stderr.txt`.
-There are 88 cases. Each project is small. A project does not use files outside its `project/` directory.
+There are 100 cases. Each project is small. A project does not use files outside its `project/` directory.
 The only exception is the module `tailwindcss` (`tailwindcss/plugin`, `tailwindcss/colors`, `tailwindcss/defaultTheme`):
 the program that runs the case gives these modules.
 
@@ -260,13 +268,22 @@ Most cases start with these lines, thus the output has no preflight and the scan
 ```
 
 In `stderr.txt`, the text `<project>` replaces the absolute path of the project directory.
-The message of `error-plugin-syntax` comes from the parser of the official program (jiti). Another JavaScript engine gives a different text.
+The message of `error-plugin-syntax` and of `error-ts-syntax` comes from the parser of the official program (jiti). Another JavaScript engine gives a different text.
+For these two cases, `stderr-contains.txt` is written by hand: it has the path of the file, which must be in the error output.
 
-A case with a file `standalone.txt` uses the module interop of the standalone program (`tools/bun-interop.mjs`).
-The standalone program runs on Bun. Phoenix uses the standalone program.
-For a CommonJS module with the exports `__esModule` and `default`, Bun gives the `default` export as the plugin. Node.js gives the full exports object.
-Without the interop, the npm CLI stops with the message `The plugin "../vendor/daisyui" does not accept options` for the Phoenix project.
-The record of these cases comes from the npm CLI with the interop hook, and not from the standalone program file.
+A case with a file `standalone.txt` uses the module rules of the standalone program (`tools/bun-interop.mjs`).
+The standalone program runs on Bun. Phoenix uses the standalone program. The rules are:
+
+1. For a CommonJS module with the exports `__esModule` and `default`, Bun gives the `default` export as the plugin. Node.js gives the full exports object.
+   Without this rule, the npm CLI stops with the message `The plugin "../vendor/daisyui" does not accept options` for the Phoenix project.
+2. The standalone program has `@tailwindcss/forms`, `@tailwindcss/typography` and `@tailwindcss/aspect-ratio` in its file.
+   For these three names in `@plugin`, it loads its own copy, also when the project has the package in `node_modules`
+   (`__tw_resolve` and `__tw_load` of `packages/@tailwindcss-standalone/src/index.ts`).
+
+The record of these cases comes from the npm CLI with a copy of these rules, and not from the standalone program file.
+`sh tests/standalone.sh PROGRAM` runs the real standalone program on these cases and compares its output with the record.
+The job `standalone` of CI does this with `tailwindcss-linux-x64` of the release. A difference there means that the copy of the rules is wrong:
+correct `tools/bun-interop.mjs` and record the case again.
 
 Plugin API cases (`@plugin` with a local file):
 
@@ -316,7 +333,8 @@ Config cases (`@config`):
 | `config-dark-class-custom`, `config-dark-selector-custom` | `darkMode` as `['class', ...]` and `['selector', ...]`. |
 | `config-dark-variant`, `config-dark-variant-list` | `darkMode` as `['variant', ...]` with one selector and with a list. |
 | `config-dark-css-wins` | `darkMode` in the config and a `@custom-variant dark` in the CSS file. |
-| `config-prefix`, `config-prefix-legacy` | `prefix` in the config. The legacy form `tw-` gives a warning on stderr and the exit code 0. |
+| `config-prefix`, `config-prefix-legacy` | `prefix` in the config. The legacy form `tw-` gives a warning on stderr and the exit code 0 (`stderr-contains.txt`). |
+| `config-dark-variant-invalid` | `darkMode` as `['variant', ...]` with a selector that has no `&`: a warning on stderr, and no `dark` variant from the config. |
 | `config-important-true` | `important: true`, with plugins and `@utility`. |
 | `config-important-selector` | `important: '#app'` with `source(none)` on the import of the utilities. The selector is not in the output. |
 | `config-important-selector-wrap` | `important: '#app'` with no `source(none)`. The selector is in the output. |
@@ -332,6 +350,27 @@ Config cases (`@config`):
 | `config-theme-function-css` | The legacy `theme('colors.blue.500')` function in CSS with values from the config. |
 | `config-and-plugin` | `@theme`, `@config` and `@plugin` give the same theme keys. |
 | `config-two-configs` | Two `@config` rules in one file. |
+
+TypeScript cases (`@config` and `@plugin` with TypeScript files; the official program removes the types with Node.js and jiti):
+
+| Case | Content |
+| --- | --- |
+| `ts-config` | `tailwind.config.ts` in the ESM style: `import type { Config } from 'tailwindcss'`, an interface, type aliases, `satisfies`, `as const`, generics, an enum and a `const enum`, type annotations, an old type assertion (`<const>`). It imports a `.ts` plugin (a class with parameter properties, an abstract class, `declare`, `plugin.withOptions<T>`) and a `.ts` file with type exports, with no extension in the import. |
+| `ts-plugin` | `@plugin` with `.ts`, `.mts` and `.cts` files: a `namespace` with values, an assertion function, an enum with computed members, `import x = require()` and `export =`, `import.meta.filename`, `@plugin` options, and an import of a `.ts` file by the name `./lib/rules.js`. |
+| `ts-config-commonjs` | `tailwind.config.ts` in the CommonJS style: `require` (also of a `.ts` file) and `module.exports`, with types. |
+| `ts-from-js` | A JavaScript config (`.js`, ESM) that imports a `.ts` file and a `.mts` file, and a `.cjs` plugin that loads a `.cts` file with `require`. |
+| `error-ts-syntax` | A syntax error in `tailwind.config.ts`. The exit code is 1. `stderr-contains.txt` has the path of the file. |
+
+The plugins in the program (`@tailwindcss/forms`, `@tailwindcss/typography`, `@tailwindcss/aspect-ratio`). These projects have NO `node_modules` directory:
+the case shows that the program that runs it has the plugin in its file. For the record, `tools/run-cli.mjs` installs the three packages
+(the versions of `tools/package.json`) into its scratch directory, next to the CLI, and the npm CLI finds them there. All four cases use `standalone.txt`.
+
+| Case | Content |
+| --- | --- |
+| `embedded-typography` | The project of `typography` with no `node_modules`. The record is the same file. |
+| `embedded-forms` | `@plugin "@tailwindcss/forms"` with the option `strategy: "class"`. |
+| `embedded-aspect-ratio` | The three plugins in one stylesheet, with a `className` option for typography. |
+| `embedded-wins` | The project has its own `node_modules/@tailwindcss/aspect-ratio` (a marker, not the npm package). `@plugin "@tailwindcss/aspect-ratio"` loads the copy of the program, as the standalone program does. A `require` of a file of that package in the config file finds `node_modules`. |
 
 Error cases (the exit code is 1, stdout is empty):
 
@@ -359,11 +398,30 @@ Third-party plugins. Each project has its own `node_modules` directory, as `npm 
 | `daisyui-bundle` | The one-file bundle of daisyUI with the `themes` option, `btn` and `card` classes. Uses `standalone.txt`. |
 | `phoenix` | A Phoenix 1.8 project: `assets/css/app.css` and the vendor files of `mix phx.new`, heroicons, `.heex` and `.ex` files. Uses `standalone.txt`. |
 | `phoenix-minify` | The same project with `--minify`. |
+| `phoenix-deps` | A Phoenix 1.8.9 project: daisyUI from `deps/daisyui/packages/bundle` through `NODE_PATH`, heroicons from `deps/heroicons`, and the `phoenix-colocated` import with its generated directory in `_build/dev`. Uses `standalone.txt` and `env.txt`. |
+| `phoenix-deps-minify` | The same project (`project.txt`) with `--minify`. |
 
 The Phoenix project comes from the installer templates of Phoenix `v1.8.5`.
 The values of the template are: the application `my_app`, with LiveView, gettext and daisyUI.
 The first line of `stdout.css` of the Phoenix cases is `/*! 🌼 daisyUI 5.0.35 */`. The daisyUI plugin prints it with `console.log`.
 Phoenix `v1.8.6` and later versions do not have the daisyUI files in `assets/vendor`. They load daisyUI from the `deps` directory with `NODE_PATH`.
+
+The project of `phoenix-deps` is the output of `mix phx.new my_app --no-install --no-ecto --no-mailer --no-dashboard` of the Phoenix installer `v1.8.9`
+(the files that Tailwind CSS reads, and `mix.exs` and `config/config.exs` for the record). Its stylesheet has:
+
+- `@plugin "daisyui/packages/bundle/daisyui"` and `@plugin "daisyui/packages/bundle/daisyui-theme"`: there is no `node_modules` directory.
+  The name resolves in the directories of `NODE_PATH`, to `deps/daisyui/packages/bundle/daisyui.js`. The directory also has `daisyui.mjs`: the `.js` file wins.
+- `@plugin "../vendor/heroicons"`: the plugin reads the icons of `deps/heroicons/optimized`.
+- `@import "phoenix-colocated/my_app/colocated.css"`: a stylesheet in the second directory of `NODE_PATH`, `_build/dev`. Phoenix LiveView writes this
+  directory when the project compiles. A new project has an empty `colocated.css`. The fixture has one component with a `<style>` tag
+  (`lib/my_app_web/components/note.ex`, not a file of Phoenix), so `colocated.css` imports one CSS file, which uses `@apply`.
+- `@source "../../_build/dev/phoenix-colocated/my_app/*/"`.
+
+`env.txt` gives the environment of the `tailwind` profile of `config/config.exs`:
+`env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}`, and the current directory is the project (`cd: Path.expand("..", __DIR__)`).
+The first line of `stdout.css` is `/*! 🌼 daisyUI 5.5.20 */`.
+The daisyUI bundle of this project is a second copy of daisyUI in the fixtures (another version than the vendor files of `phoenix`): the two `-minify` cases
+could share a project (`project.txt`), and `phoenix-deps-minify` does.
 
 The npm package `daisyui` (version 5) has a size of 4.2 MB. For this reason, there is no case with `@plugin "daisyui"` from `node_modules`.
 
@@ -375,9 +433,10 @@ Versions of the third-party packages (the file `cli-js/NOTICE.md` gives the sour
 | `@tailwindcss/forms` | 0.5.11 (with `mini-svg-data-uri` 1.4.4) |
 | `tailwindcss-animate` | 1.0.7 |
 | `@tailwindcss/container-queries` | 0.1.1 |
-| daisyUI bundle (`daisyui.js`, `daisyui-theme.js`) | 5.0.35 |
+| daisyUI bundle (`daisyui.js`, `daisyui-theme.js`) | 5.0.35 (`phoenix`, `daisyui-bundle`), 5.5.20 (`phoenix-deps`) |
 | heroicons | 2.2.0 |
-| Phoenix installer templates | 1.8.5 |
+| Phoenix installer templates | 1.8.5 (`phoenix`), 1.8.9 (`phoenix-deps`) |
+| The plugins of the standalone program, for the `embedded-` cases | `@tailwindcss/forms` 0.5.11, `@tailwindcss/typography` 0.5.20, `@tailwindcss/aspect-ratio` 0.4.2 |
 
 To record the cases again:
 
@@ -386,7 +445,8 @@ node tests/upstream/tools/run-cli.mjs /path/to/scratch/cli tests/upstream/cli-js
 ```
 
 To record only some cases, add the case names after the version.
-The script does not install the third-party packages. They are in the repository.
+The script does not install the third-party packages of the projects. They are in the repository.
+It installs the three plugins of the standalone program into the scratch directory, for the `embedded-` cases.
 To install the packages of one project again, run this command in its `project/` directory.
 The `package.json` file of the project has the exact versions.
 
@@ -398,12 +458,13 @@ The option `--legacy-peer-deps` keeps the peer package `tailwindcss` out of the 
 
 After the install, delete the directory `node_modules/.bin` of the project. Its entries are symbolic links,
 and a copy of a symbolic link fails on Windows. The fixtures keep no symbolic link:
-`find tests/upstream -type l` must print nothing.
+`find tests/upstream -type l -not -path '*/tools/node_modules/*'` must print nothing
+(`tools/node_modules` is the install of the tools, and is not in the repository).
 
 Some projects contain a `.gitignore` file, a `node_modules` directory or a `deps` directory.
 Use `git add -f tests/upstream/cli-js` to add all the files.
 
-## The plugin layer of the program
+## The JavaScript files of the program
 
 `native/tailwind/assets/compat.js` is not a test file, but it comes from the same clone: it is the plugin layer of Tailwind CSS
 (`packages/tailwindcss/src/compat`) as one JavaScript file, for the JavaScript engine of the program.
@@ -416,6 +477,35 @@ The script uses esbuild. It takes esbuild from `tests/upstream/tools/node_module
 or from the pnpm store of the clone. The entry and the shims are in `native/tailwind/js`: see `docs/INTERNALS.md`.
 The script stops when a module of the compiler that a shim must replace (`design-system.ts`, `compile.ts`, `at-import.ts`,
 `property-order.ts`) is in the bundle.
+
+`native/tailwind/assets/plugins/` and `native/tailwind/assets/typescript.js` come from the packages of `tools/package.json`:
+
+```sh
+(cd tests/upstream/tools && npm install)
+node tests/upstream/tools/build-plugin-bundles.mjs /path/to/tw
+```
+
+`plugins/forms.js`, `plugins/typography.js` and `plugins/aspect-ratio.js` are the three plugins that the standalone program of Tailwind CSS has in its file,
+each one with its dependencies as one CommonJS file. The script reads the list of the plugins from `packages/@tailwindcss-standalone` of the clone
+and their versions from `pnpm-lock.yaml`, and stops when `tools/package.json` has another version.
+`typescript.js` is the TypeScript transform of Sucrase with the entry `native/tailwind/js/typescript-entry.ts`.
+
+## The records of Node.js
+
+`native/tailwind/tests/fixtures/node_api.json` records Node.js 22, and not Tailwind CSS: the values of 124 cases for the parts of Node.js that the
+program gives to a plugin (`native/tailwind/tests/fixtures/node_api_cases.cjs`), and the files that `require.resolve` and `import.meta.resolve`
+find for 80 names in a tree of packages (the tree is in the record).
+
+```sh
+node tests/upstream/tools/gen-node-api.mjs
+```
+
+`native/tailwind/tests/fixtures/optimize_warnings.json` records the warnings of the optimizer of the official program
+(`optimize` of `@tailwindcss/node`) for 13 inputs, plain and minified: the code and the exact text for `console.warn`.
+
+```sh
+node tests/upstream/tools/gen-optimize-warnings.mjs /path/to/scratch/cli
+```
 
 ## How to make the files again
 
@@ -467,6 +557,13 @@ node tests/upstream/tools/gen-candidates.mjs /path/to/tw tests/upstream
 # native/tailwind/assets/compat.js
 node tests/upstream/tools/build-compat-bundle.mjs /path/to/tw
 
+# native/tailwind/assets/plugins/ and native/tailwind/assets/typescript.js (the first step of the script)
+node tests/upstream/tools/build-plugin-bundles.mjs /path/to/tw
+
+# native/tailwind/tests/fixtures/node_api.json and optimize_warnings.json
+node tests/upstream/tools/gen-node-api.mjs
+node tests/upstream/tools/gen-optimize-warnings.mjs /path/to/scratch/cli
+
 # Read each file and print the number of records.
 python3 tests/upstream/tools/check.py tests/upstream
 ```
@@ -481,14 +578,16 @@ python3 tests/upstream/tools/check.py tests/upstream
 | `tools/gen-plugin-suite.mjs` | Makes `plugin-suite.jsonl.gz`: runs the unit tests with the recorder and `TW_ORACLE_MODULES=1`, and checks each record with the upstream compiler. |
 | `tools/gen-candidates.mjs` | Makes `candidates.jsonl.gz`. |
 | `tools/build-compat-bundle.mjs` | Makes `native/tailwind/assets/compat.js` with esbuild (`tools/package.json` names the version). |
-| `tools/bun-interop.mjs` | The module interop of the standalone program, for the cases of `cli-js/` with `standalone.txt`. |
+| `tools/build-plugin-bundles.mjs` | Makes `native/tailwind/assets/plugins/*.js` and `native/tailwind/assets/typescript.js` with esbuild. |
+| `tools/gen-node-api.mjs` | Makes `native/tailwind/tests/fixtures/node_api.json`: the values of Node.js 22 for the cases of `node_api_cases.cjs`, and its answers for the resolver. |
+| `tools/gen-optimize-warnings.mjs` | Makes `native/tailwind/tests/fixtures/optimize_warnings.json`: the warnings of the optimizer of the official program. |
+| `tools/bun-interop.mjs` | The module rules of the standalone program, for the cases of `cli-js/` with `standalone.txt`. |
 | `tools/lib.mjs` | Shared helpers: loads the upstream TypeScript sources with jiti, the stylesheet loader, the random number generator. |
 | `tools/candidate-lists.mjs` | The hand-made lists: arbitrary forms, variants for the random stacks, modifiers, edge candidates. |
 | `tools/gen-classes.mjs` | Makes `classes.jsonl.gz` and `classes-all.json.gz`. |
 | `tools/gen-full.mjs` | Makes `full.json.gz` and `css/`. |
-| `tools/run-cli.mjs` | Installs the npm packages into the scratch directory, copies each project there, runs the CLI. It records `cli/`, `cli-js/` and `cli-map/`, also the files that the CLI made. |
+| `tools/run-cli.mjs` | Installs the npm packages into the scratch directory, copies each project there, runs the CLI. It records `cli/`, `cli-js/` and `cli-map/`, also the files that the CLI made and the warnings on stderr. |
 | `tools/gen-source-maps.mjs` | Makes `source-maps.jsonl.gz`: `node tests/upstream/tools/gen-source-maps.mjs /path/to/tw tests/upstream`. |
-| `tools/bun-interop.mjs` | The module interop of the standalone program, for the `cli-js/` cases with a `standalone.txt` file. |
 | `tools/gen-extra.mjs` | Makes `suite-extra.jsonl.gz`: `node tests/upstream/tools/gen-extra.mjs /path/to/tw tests/upstream`. |
 | `tools/gen-default-theme.mjs` | Makes `native/tailwind/src/compat/default_theme.rs` from `compat/default-theme.ts`: `node tests/upstream/tools/gen-default-theme.mjs /path/to/tw native/tailwind/src/compat/default_theme.rs`. |
 | `tools/check.py` | Reads each file and prints the number of records. |

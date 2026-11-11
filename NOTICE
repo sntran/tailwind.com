@@ -31,12 +31,39 @@ packages that Tailwind CSS uses for its source maps)
   Copyright 2018 Rich Harris. MIT License (licenses/magic-string.txt).
   Copyright 2019-2024 Justin Ridgewell. MIT License
   (licenses/jridgewell.txt).
+
 QuickJS 2026-06-04 (the JavaScript engine for @plugin and @config, in
 c_src/quickjs)
   Copyright (c) 2017-2021 Fabrice Bellard; Copyright (c) 2017-2021
   Charlie Gordon.
   MIT License (licenses/quickjs.txt).
   https://github.com/bellard/quickjs (commit e585640)
+
+@tailwindcss/forms 0.5.11 with mini-svg-data-uri 1.4.4,
+@tailwindcss/typography 0.5.20 with postcss-selector-parser 6.0.10,
+cssesc 3.0.0 and util-deprecate 1.0.2, and @tailwindcss/aspect-ratio 0.4.2
+(the plugins that the standalone program of Tailwind CSS has in its file,
+in native/tailwind/assets/plugins)
+  Copyright (c) Tailwind Labs, Inc.; Copyright (c) 2018 Taylor Hunt;
+  Copyright (c) Ben Briggs; Copyright Mathias Bynens; Copyright (c) 2014
+  Nathan Rajlich.
+  MIT License (licenses/tailwindcss-plugins.txt).
+  https://github.com/tailwindlabs/tailwindcss-forms
+  https://github.com/tailwindlabs/tailwindcss-typography
+  https://github.com/tailwindlabs/tailwindcss-aspect-ratio
+
+Sucrase 3.35.1 with lines-and-columns 1.2.4, ts-interface-checker 0.1.13,
+@jridgewell/gen-mapping and @jridgewell/sourcemap-codec (the TypeScript
+transform for TypeScript configs and plugins, in
+native/tailwind/assets/typescript.js)
+  Copyright (c) 2012-2018 various contributors (the authors of Sucrase
+  and of Babel); Copyright (c) 2015 Brian Donovan. MIT License
+  (licenses/sucrase.txt).
+  ts-interface-checker: Copyright Grist Labs. Apache License 2.0
+  (licenses/sucrase.txt).
+  Copyright 2019-2024 Justin Ridgewell. MIT License
+  (licenses/jridgewell.txt).
+  https://github.com/alangpierce/sucrase
 
 Cosmopolitan Libc 4.0.2 (the C runtime of the APE file)
   Copyright 2020 Justine Alexandra Roberts Tunney.

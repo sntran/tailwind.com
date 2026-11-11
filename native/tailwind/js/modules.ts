@@ -14,16 +14,33 @@
 // JSON. A `.js` file has the `type` of the nearest `package.json`. With no
 // `type`, the file is CommonJS, unless it has a syntax error as CommonJS
 // (`import` or `export`): then it is ESM.
+//
+// A TypeScript file (`.ts`, `.mts`, `.cts`) loses its types first
+// (`typescript.ts`). `.mts` is ESM, `.cts` is CommonJS, and `.ts` is
+// CommonJS unless it has the syntax of an ES module.
+//
+// The three plugins that the standalone program of Tailwind CSS has in
+// its file (`@tailwindcss/forms`, `@tailwindcss/typography`,
+// `@tailwindcss/aspect-ratio`) are in the program too: see `loadModule`.
 import colors from 'tailwindcss-src/compat/colors'
 import defaultTheme from 'tailwindcss-src/compat/default-theme'
 import flattenColorPalette from 'tailwindcss-src/compat/flatten-color-palette'
 import createPlugin from 'tailwindcss-src/plugin'
+import { deniedModule } from './denied'
 import { host } from './host'
-import fs from './node-fs'
+import assert from './node-assert'
+import buffer from './node-buffer'
+import fs, { promises as fsPromises } from './node-fs'
+import os from './node-os'
 import path, { dirname } from './node-path'
-import util from './node-util'
+import url, { fileURLToPath, pathToFileURL, URL } from './node-url'
+import util, { types as utilTypes } from './node-util'
+import timers from './timers'
+import { isTypeScript, stripTypes } from './typescript'
 
 declare function __await<T>(promise: Promise<T>): T
+declare function __compile(source: string, file: string): any
+declare function __host(op: string, text?: string): string | undefined
 
 type Format = 'esm' | 'cjs' | 'json' | 'unknown'
 type CachedModule = { exports: any; loaded: boolean }
@@ -35,9 +52,32 @@ const BUILTIN: Record<string, () => any> = {
   'tailwindcss/defaultTheme': () => defaultTheme,
   'tailwindcss/lib/util/flattenColorPalette': () => flattenColorPalette,
   'tailwindcss/package.json': () => ({ name: 'tailwindcss', version: host('version') }),
+  assert: () => assert,
+  'assert/strict': () => assert.strict,
+  buffer: () => buffer,
   fs: () => fs,
+  'fs/promises': () => fsPromises,
+  module: () => moduleModule,
+  os: () => os,
   path: () => path,
+  'path/posix': () => path,
+  process: () => (globalThis as any).process,
+  timers: () => timers,
+  'timers/promises': () => timers.promises,
+  url: () => url,
   util: () => util,
+  'util/types': () => utilTypes,
+}
+
+// The modules of Node.js for a process or for the network: they load, and
+// each of their functions throws (`denied.ts`).
+for (let name of ['child_process', 'cluster', 'worker_threads']) {
+  let module = deniedModule(name, 'process')
+  BUILTIN[name] = () => module
+}
+for (let name of ['dgram', 'dns', 'http', 'http2', 'https', 'net', 'tls']) {
+  let module = deniedModule(name, 'network')
+  BUILTIN[name] = () => module
 }
 
 function builtinName(name: string): string | null {
@@ -46,13 +86,35 @@ function builtinName(name: string): string | null {
   return Object.hasOwn(BUILTIN, name) ? name : null
 }
 
+// The plugins that are in the program, as the standalone program of
+// Tailwind CSS has them (`__tw_resolve` and `__tw_load` of
+// `@tailwindcss/standalone`).
+const EMBEDDED = ['@tailwindcss/forms', '@tailwindcss/typography', '@tailwindcss/aspect-ratio']
+let embedded = new Map<string, any>()
+
+function loadEmbedded(id: string): any {
+  if (!embedded.has(id)) {
+    let source = __host('asset', `plugin:${id}`)
+    if (typeof source !== 'string') throw new Error(`The plugin '${id}' is not in this program.`)
+    let file = `/$tailwindcss/${id}.js`
+    let module = { exports: {} as any, id: file, filename: file, loaded: false }
+    compileCommonJs(source, file).call(module.exports, module.exports, createRequire(file), module, file, dirname(file))
+    module.loaded = true
+    embedded.set(id, module.exports)
+  }
+  return embedded.get(id)
+}
+
 let cache = new Map<string, CachedModule>()
 // The `.js` files with no `type` that are ESM.
 let detectedEsm = new Set<string>()
 
-function compileCommonJs(source: string): Function {
+// The function of a CommonJS module. The script has the name of the file,
+// so the stack of an error has the file, and an `import()` in the module
+// resolves from the file.
+function compileCommonJs(source: string, file: string): Function {
   if (source.startsWith('#!')) source = '//' + source
-  return new Function('exports', 'require', 'module', '__filename', '__dirname', source)
+  return __compile(`(function (exports, require, module, __filename, __dirname) {${source}\n})`, file)
 }
 
 function runCommonJs(file: string, fn: Function): any {
@@ -93,8 +155,24 @@ function importEsm(file: string): any {
   }
 }
 
+// The source of a file, with no types for a TypeScript file.
+let stripped = new Map<string, { original: string; source: string }>()
+
 function read(file: string): { format: Format; source: string } {
-  return host('module.read', file)
+  let result: { format: Format; source: string } = host('module.read', file)
+  if (isTypeScript(file)) {
+    let known = stripped.get(file)
+    if (known === undefined || known.original !== result.source) {
+      try {
+        known = { original: result.source, source: stripTypes(result.source, file) }
+      } catch (error) {
+        throw locate(error, file)
+      }
+      stripped.set(file, known)
+    }
+    result.source = known.source
+  }
+  return result
 }
 
 // Load the file `file`, as `require` does.
@@ -116,7 +194,7 @@ function load(file: string): any {
     } else {
       let fn: Function
       try {
-        fn = compileCommonJs(source)
+        fn = compileCommonJs(source, file)
       } catch (error) {
         if (!(error instanceof SyntaxError)) throw error
         detectedEsm.add(file)
@@ -129,7 +207,7 @@ function load(file: string): any {
   if (format === 'esm') return finishEsm(file)
   let fn: Function
   try {
-    fn = compileCommonJs(source)
+    fn = compileCommonJs(source, file)
   } catch (error) {
     throw locate(error, file)
   }
@@ -165,11 +243,45 @@ export function requireModule(name: string, from: string): any {
 
 function createRequire(file: string) {
   let require: any = (name: string) => requireModule(String(name), file)
-  require.resolve = (name: string) =>
-    builtinName(name) ?? host('module.resolve', { name, base: file, kind: 'require' })
+  require.resolve = (name: string) => {
+    if (builtinName(name)) return name
+    try {
+      return host('module.resolve', { name, base: file, kind: 'require' })
+    } catch (error: any) {
+      if (String(error.message).startsWith('Cannot find module')) {
+        error.message += `\nRequire stack:\n- ${file}`
+        error.code = 'MODULE_NOT_FOUND'
+      }
+      throw error
+    }
+  }
+  require.resolve.paths = () => null
   require.cache = {}
+  require.main = undefined
   return require
 }
+
+// The module `module` of Node.js: `createRequire` for a file or a `file:` URL.
+const moduleModule: any = function Module() {}
+Object.assign(moduleModule, {
+  createRequire(from: unknown) {
+    let file = from instanceof URL || (typeof from === 'string' && from.startsWith('file:')) ? fileURLToPath(from) : from
+    if (typeof file !== 'string' || !file.startsWith('/')) {
+      let error: any = new TypeError(
+        `The argument 'filename' must be a file URL object, file URL string, or absolute path string. Received ${typeof from === 'string' ? `'${from}'` : String(from)}`,
+      )
+      error.code = 'ERR_INVALID_ARG_VALUE'
+      throw error
+    }
+    return createRequire(file)
+  },
+  isBuiltin: (name: string) => builtinName(String(name)) !== null && !String(name).startsWith('tailwindcss/'),
+})
+Object.defineProperty(moduleModule, 'builtinModules', {
+  get: () => Object.keys(BUILTIN).filter((name) => !name.startsWith('tailwindcss/')),
+  enumerable: true,
+})
+moduleModule.default = moduleModule
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 const RESERVED = new Set(
@@ -201,7 +313,7 @@ export function moduleSource(name: string): string {
   if (format === 'json') return `export default ${source}\n`
   if (format === 'unknown' && !cache.has(name)) {
     try {
-      compileCommonJs(source)
+      compileCommonJs(source, name)
     } catch (error) {
       if (!(error instanceof SyntaxError)) throw error
       detectedEsm.add(name)
@@ -213,11 +325,22 @@ export function moduleSource(name: string): string {
 
 ;(globalThis as any).__tw_builtin = (name: string) => BUILTIN[name]()
 ;(globalThis as any).__tw_load = load
+// For the host: the name of a module of the program, or nothing.
+;(globalThis as any).__tw_is_builtin = (name: string) => (builtinName(name) === null ? undefined : name)
+// For `import.meta.url` (`js.c`).
+;(globalThis as any).__tw_file_url = (file: string) => pathToFileURL(file).href
 
 // `loadModule` of the compiler: the module of a `@plugin` or `@config`.
 export async function loadModule(id: string, base: string, _hint: 'plugin' | 'config') {
   let builtin = builtinName(id)
   if (builtin) return { path: id, base, module: BUILTIN[builtin]() }
+
+  // The standalone program gives its own copy of these plugins, also when
+  // the project has one in `node_modules`. The path is the name, as there.
+  if (EMBEDDED.includes(id)) {
+    let exports = loadEmbedded(id)
+    return { path: id, base: dirname(id), module: exports.default ?? exports }
+  }
 
   let resolved: { path: string; base: string } = host('module.resolve', { name: id, base, kind: 'entry' })
   let file = resolved.path

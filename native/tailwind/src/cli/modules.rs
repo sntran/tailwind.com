@@ -20,6 +20,23 @@ impl FileSystem {
     }
 }
 
+/// The directories of the environment variable `NODE_PATH`.
+///
+/// The separator is `;` on Windows and `:` on the other systems, as in
+/// Node.js. `tailwind.com` is one file for all the systems, so the system
+/// is the system at run time. (`std::env::split_paths` is for the system
+/// of the build, and is not there for WASI.)
+pub fn node_path() -> Vec<PathBuf> {
+    let Some(paths) = std::env::var_os("NODE_PATH") else { return Vec::new() };
+    #[cfg(tw_js)]
+    let windows = crate::compat::js::engine::platform() == "win32";
+    // A build with no JavaScript engine has no C code for this question.
+    #[cfg(not(tw_js))]
+    let windows = cfg!(windows);
+    let separator = if windows { ';' } else { ':' };
+    paths.to_string_lossy().split(separator).filter(|path| !path.is_empty()).map(PathBuf::from).collect()
+}
+
 fn kind(file_type: std::fs::FileType) -> FileKind {
     if file_type.is_dir() {
         FileKind::Directory
@@ -32,6 +49,22 @@ impl ModuleLoader for FileSystem {
     fn read(&self, path: &str) -> Option<String> {
         let bytes = std::fs::read(path).ok()?;
         Some(String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    fn read_bytes(&self, path: &str) -> Option<Vec<u8>> {
+        std::fs::read(path).ok()
+    }
+
+    fn is_symlink(&self, path: &str) -> bool {
+        std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
+    }
+
+    fn real_path(&self, path: &str) -> Option<String> {
+        let real = std::fs::canonicalize(path).ok()?;
+        // Windows gives a path with the prefix `\\?\`: keep the path that
+        // the module gave there.
+        let text = real.to_string_lossy();
+        Some(if text.starts_with('/') { text.into_owned() } else { path.to_string() })
     }
 
     fn stat(&self, path: &str) -> Option<FileStat> {
@@ -70,8 +103,7 @@ impl ModuleLoader for FileSystem {
     }
 
     fn node_path(&self) -> Vec<String> {
-        let Some(paths) = std::env::var_os("NODE_PATH") else { return Vec::new() };
-        std::env::split_paths(&paths).map(|path| path.to_string_lossy().into_owned()).filter(|path| !path.is_empty()).collect()
+        node_path().into_iter().map(|path| path.to_string_lossy().into_owned()).collect()
     }
 
     fn cwd(&self) -> String {
@@ -79,7 +111,16 @@ impl ModuleLoader for FileSystem {
     }
 
     fn env(&self) -> Vec<(String, String)> {
-        // Only `NODE_ENV`: a plugin does not get the environment of the user.
-        std::env::var("NODE_ENV").ok().map(|value| ("NODE_ENV".to_string(), value)).into_iter().collect()
+        // The environment of the program, as `process.env` of Node.js. A
+        // variable that is not Unicode text is not there.
+        std::env::vars_os().filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?))).collect()
+    }
+
+    fn argv(&self) -> Vec<String> {
+        let mut args = std::env::args_os().map(|arg| arg.to_string_lossy().into_owned());
+        let program = args.next().unwrap_or_else(|| "tailwindcss".to_string());
+        let mut argv = vec![program.clone(), program];
+        argv.extend(args);
+        argv
     }
 }

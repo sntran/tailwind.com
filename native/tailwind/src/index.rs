@@ -141,6 +141,15 @@ pub struct Compiler {
 }
 
 impl Compiler {
+    /// The warnings of the compiler since the last call: each text that
+    /// Tailwind CSS gives to `console.warn` in its own code (a data type
+    /// that `--value(…)` of `@utility` cannot have). The JavaScript of
+    /// the plugin layer and of a plugin gives its warnings to the
+    /// `ModuleLoader` (`console`).
+    pub fn take_warnings(&self) -> Vec<String> {
+        std::mem::take(&mut *self.design_system.warnings.borrow_mut())
+    }
+
     /// The CSS for all the candidates of this call and of the calls before.
     ///
     /// When a function of a JavaScript plugin throws, upstream throws from

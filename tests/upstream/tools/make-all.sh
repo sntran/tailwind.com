@@ -11,6 +11,14 @@ SCRATCH=$(cd "$2" && pwd)
 TOOLS=$(cd "$(dirname "$0")" && pwd)
 OUT=$(dirname "$TOOLS")
 
+# 0. The JavaScript files of the program that the cases of cli-js need:
+# the plugins of the standalone program and the TypeScript transform
+# (native/tailwind/assets/plugins/, native/tailwind/assets/typescript.js).
+# They need the packages of package.json of this directory.
+[ -d "$TOOLS/node_modules/sucrase" ] ||
+    (cd "$TOOLS" && npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts)
+node "$TOOLS/build-plugin-bundles.mjs" "$CLONE"
+
 # 1. suite.jsonl.gz
 node "$TOOLS/instrument.mjs" "$CLONE"
 rm -rf "$SCRATCH/events"
@@ -39,6 +47,13 @@ node "$TOOLS/gen-candidates.mjs" "$CLONE" "$OUT"
 # 7. native/tailwind/assets/compat.js: the plugin layer for the program
 node "$TOOLS/build-compat-bundle.mjs" "$CLONE"
 
-# 8. Check. source-maps.jsonl.gz uses the records of gen-extra.mjs:
+# 8. native/tailwind/tests/fixtures/node_api.json: the behavior of this
+# Node.js for the parts of Node.js that the program gives to a plugin
+node "$TOOLS/gen-node-api.mjs"
+# and native/tailwind/tests/fixtures/optimize_warnings.json: the warnings
+# of the optimizer of the official program
+node "$TOOLS/gen-optimize-warnings.mjs" "$SCRATCH/cli"
+
+# 9. Check. source-maps.jsonl.gz uses the records of gen-extra.mjs:
 # scripts/sync-upstream.sh makes it after this script.
 python3 "$TOOLS/check.py" "$OUT"

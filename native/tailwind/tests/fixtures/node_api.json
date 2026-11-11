@@ -1,0 +1,1593 @@
+{
+ "node": "v22.23.4",
+ "results": {
+  "Buffer.from utf8": [
+   104,
+   195,
+   169,
+   108,
+   108,
+   111,
+   32,
+   226,
+   130,
+   172,
+   240,
+   157,
+   132,
+   158
+  ],
+  "Buffer.from default encoding": "abc",
+  "Buffer.from base64": "hello world",
+  "Buffer.from base64 no padding and url alphabet": [
+   251,
+   255
+  ],
+  "Buffer.from base64 with spaces": "hello",
+  "Buffer.from hex": [
+   0,
+   255,
+   127,
+   128
+  ],
+  "Buffer.from hex invalid tail": [
+   171
+  ],
+  "Buffer.from latin1": [
+   233,
+   172,
+   97
+  ],
+  "Buffer.from utf16le": [
+   97,
+   0,
+   233,
+   0
+  ],
+  "Buffer.from array": "hi!",
+  "Buffer.from buffer is a copy": [
+   "ab",
+   "zb"
+  ],
+  "Buffer.from ArrayBuffer": {
+   "type": "Buffer",
+   "data": [
+    2,
+    3
+   ]
+  },
+  "Buffer.from number throws": {
+   "name": "TypeError",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "message": "The first argument must be of type string or an instance of Buffer, ArrayBuffer, or Array or an Array-like Object. Received type number (5)"
+  },
+  "Buffer.from unknown encoding": {
+   "name": "TypeError",
+   "code": "ERR_UNKNOWN_ENCODING",
+   "message": "Unknown encoding: nope"
+  },
+  "Buffer toString utf8": "€𝄞",
+  "Buffer toString utf8 invalid bytes": "a��b�����",
+  "Buffer toString base64": [
+   "",
+   "YQ==",
+   "YWI=",
+   "YWJj",
+   "+/8="
+  ],
+  "Buffer toString base64url": "-__-",
+  "Buffer toString hex": "68c3a96c6c6f",
+  "Buffer toString latin1 and ascii": [
+   "éA",
+   "iA"
+  ],
+  "Buffer toString range": "bcd",
+  "Buffer.byteLength": [
+   14,
+   5,
+   2,
+   7
+  ],
+  "Buffer.concat": "abcde",
+  "Buffer.concat with length": [
+   "abcd",
+   {
+    "type": "Buffer",
+    "data": [
+     97,
+     0,
+     0
+    ]
+   }
+  ],
+  "Buffer.isBuffer": [
+   true,
+   false,
+   false,
+   true
+  ],
+  "Buffer.isEncoding": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   false,
+   false
+  ],
+  "Buffer.alloc": [
+   {
+    "type": "Buffer",
+    "data": [
+     0,
+     0,
+     0
+    ]
+   },
+   "abab",
+   {
+    "type": "Buffer",
+    "data": [
+     1,
+     1
+    ]
+   }
+  ],
+  "Buffer.compare and equals": [
+   -1,
+   true,
+   1
+  ],
+  "Buffer slice shares memory": [
+   "axc",
+   true,
+   true
+  ],
+  "Buffer indexOf and includes": [
+   2,
+   3,
+   false,
+   4
+  ],
+  "Buffer toJSON": "{\"type\":\"Buffer\",\"data\":[104,105]}",
+  "Buffer write": [
+   4,
+   {
+    "type": "Buffer",
+    "data": [
+     0,
+     104,
+     195,
+     169,
+     121
+    ]
+   }
+  ],
+  "buffer module": [
+   true,
+   true
+  ],
+  "atob and btoa": [
+   "aOlsbG8=",
+   "héllo",
+   "InvalidCharacterError",
+   "hi"
+  ],
+  "TextEncoder": [
+   [
+    97,
+    226,
+    130,
+    172,
+    240,
+    157,
+    132,
+    158
+   ],
+   "utf-8",
+   []
+  ],
+  "TextEncoder lone surrogate": [
+   97,
+   239,
+   191,
+   189,
+   98
+  ],
+  "TextEncoder encodeInto": [
+   {
+    "read": 2,
+    "written": 4
+   },
+   [
+    97,
+    226,
+    130,
+    172
+   ]
+  ],
+  "TextDecoder": [
+   "€",
+   "utf-8",
+   "",
+   "a"
+  ],
+  "TextDecoder invalid bytes": "a��b",
+  "TextDecoder fatal": "TypeError",
+  "TextDecoder ArrayBuffer and view": [
+   "hi",
+   "i"
+  ],
+  "TextDecoder utf-16le": "a€",
+  "TextDecoder unknown label": "RangeError",
+  "URL parts": [
+   "https://user:pa%20ss@example.com:8443/a/c%20d/?x=1&y=two#frag",
+   "https:",
+   "user",
+   "pa%20ss",
+   "example.com:8443",
+   "example.com",
+   "8443",
+   "/a/c%20d/",
+   "?x=1&y=two",
+   "#frag",
+   "https://example.com:8443"
+  ],
+  "URL default port": [
+   "https://example.com/",
+   "example.com",
+   "8080"
+  ],
+  "URL relative": [
+   "https://example.com/a/x",
+   "https://example.com/a/b/y?z",
+   "https://example.com/abs",
+   "https://example.com/a/b/c?q",
+   "https://example.com/a/b/c?old#h",
+   "https://other.org/p",
+   "https://example.com/a/b/g/h",
+   "https://example.com/a/b/c?old"
+  ],
+  "URL file": [
+   "file:///home/user/my%20file.txt",
+   "/home/user/my%20file.txt",
+   "",
+   "null",
+   "file:///a/b/sub/x.js",
+   "file:///a/c"
+  ],
+  "URL encoding": [
+   "https://example.com/a%20b/%C3%A9?q=a%20b&%C3%A9#h%20h",
+   "/a/b"
+  ],
+  "URL data and opaque": [
+   "data:",
+   "text/plain;base64,aGk=",
+   "data:text/plain;base64,aGk=",
+   "null",
+   "a@b.c"
+  ],
+  "URL invalid": [
+   {
+    "name": "TypeError",
+    "code": "ERR_INVALID_URL",
+    "message": "Invalid URL"
+   },
+   "ERR_INVALID_URL",
+   "ERR_INVALID_URL"
+  ],
+  "URL canParse and parse": [
+   true,
+   false,
+   true,
+   null,
+   "/c"
+  ],
+  "URL toString and toJSON": [
+   "https://a.b/c",
+   "{\"u\":\"https://a.b/c\"}"
+  ],
+  "URL searchParams is live": [
+   "?x=2&y=a+b",
+   "https://a.b/?x=2&y=a+b",
+   "a b"
+  ],
+  "URL setters": "https://a.b/x%20y?q=1#top",
+  "URLSearchParams from text": [
+   "1",
+   [
+    "1",
+    "3"
+   ],
+   "two words",
+   "é",
+   "",
+   null,
+   true,
+   5,
+   [
+    "a",
+    "b",
+    "a",
+    "c",
+    "d"
+   ]
+  ],
+  "URLSearchParams from object and pairs": [
+   "a=1&b=x+y",
+   "a=1&a=2",
+   ""
+  ],
+  "URLSearchParams toString encoding": "q=a+b%26c%3Dd%2F%C3%A9%7E*%27%28%29%21&k+k=%2B",
+  "URLSearchParams change": [
+   "b=9&c=4",
+   [
+    "b:9",
+    "c:4"
+   ],
+   [
+    [
+     "b",
+     "9"
+    ],
+    [
+     "c",
+     "4"
+    ]
+   ],
+   [
+    "9",
+    "4"
+   ]
+  ],
+  "url.fileURLToPath": [
+   "/home/user/my fileé.txt",
+   "/a/b",
+   "/a"
+  ],
+  "url.fileURLToPath errors": [
+   "ERR_INVALID_URL_SCHEME",
+   "ERR_INVALID_FILE_URL_HOST",
+   "ERR_INVALID_FILE_URL_PATH",
+   "ERR_INVALID_ARG_TYPE"
+  ],
+  "url.pathToFileURL": [
+   "file:///home/user/my%20file%20%C3%A9%23%3F%25.txt",
+   "file:///a/c/",
+   "file:///"
+  ],
+  "url module has URL": [
+   true,
+   true
+  ],
+  "setTimeout order": [
+   "sync",
+   "microtask",
+   "promise",
+   "a 10",
+   "c 10",
+   "b 20",
+   "d 30"
+  ],
+  "setTimeout arguments": [
+   "x",
+   "y"
+  ],
+  "clearTimeout": [],
+  "nested timers": [
+   "outer",
+   "inner",
+   "later"
+  ],
+  "setImmediate": [
+   "immediate x",
+   "timeout 50"
+  ],
+  "setInterval": 3,
+  "timer object": [
+   "object",
+   "function",
+   "function",
+   true,
+   "number"
+  ],
+  "setTimeout needs a function": "ERR_INVALID_ARG_TYPE",
+  "timers/promises": [
+   "value",
+   "function"
+  ],
+  "process.nextTick": "tick",
+  "structuredClone data": [
+   [
+    1,
+    {
+     "b": 2
+    }
+   ],
+   true,
+   5,
+   true,
+   "/x/gi",
+   [
+    [
+     1,
+     {
+      "deep": true
+     }
+    ]
+   ],
+   [
+    1,
+    2
+   ],
+   true,
+   true
+  ],
+  "structuredClone cycle": [
+   true,
+   true
+  ],
+  "structuredClone bytes": [
+   true,
+   [
+    1,
+    2,
+    3
+   ],
+   false,
+   [
+    97,
+    98
+   ]
+  ],
+  "structuredClone drops the prototype": [
+   1,
+   false,
+   true
+  ],
+  "structuredClone error": [
+   true,
+   "bad",
+   "TypeError",
+   "why"
+  ],
+  "structuredClone function throws": [
+   "DataCloneError",
+   25
+  ],
+  "process.env": [
+   "value",
+   "[undefined]",
+   "string",
+   true
+  ],
+  "process basics": [
+   "string",
+   true,
+   "linux",
+   true,
+   true,
+   "object",
+   "string",
+   true
+  ],
+  "process module": [
+   true,
+   true
+  ],
+  "os": [
+   "\n",
+   "linux",
+   "/home/test",
+   "/tmp/test",
+   "Linux",
+   "LE"
+  ],
+  "util.format": [
+   "a:b c",
+   "42.5 42 42.5",
+   "{\"a\":[1]}",
+   "1 -0 10n null",
+   "{ a: 1 }",
+   "Error: boom",
+   "100% done",
+   "%s",
+   "a b 1 { c: 2 }",
+   "1 2 3",
+   "{ a: { b: { c: [Object] } } }",
+   "%x 1",
+   ""
+  ],
+  "util.inspect primitives": [
+   "1",
+   "-0",
+   "'str'",
+   "\"it's\"",
+   "`\"both' kinds`",
+   "true",
+   "null",
+   "undefined",
+   "10n",
+   "Symbol(s)",
+   "'line\\nbreak'"
+  ],
+  "util.inspect objects": [
+   "{}",
+   "{ '3': [ 1, 2 ], a: 1, 'b-c': 'x' }",
+   "[]",
+   "[ 1, 'two', [ 3 ] ]",
+   "{ a: { b: { c: [Object] } } }",
+   "{ a: [Object] }",
+   "{\n  a: { b: { c: { d: 1 } } }\n}",
+   "Map(1) { 'k' => { v: 1 } }",
+   "Set(2) { 1, 'a' }",
+   "1970-01-01T00:00:00.000Z",
+   "/re/g",
+   "[Object: null prototype] {}",
+   "[ 1, <1 empty item>, 3, <2 empty items> ]",
+   "{ [Symbol(key)]: 1 }"
+  ],
+  "util.inspect functions and classes": [
+   "[Function: named]",
+   "[Function (anonymous)]",
+   "[class A]",
+   "[class Dog extends Animal]",
+   "Dog { legs: 4 }",
+   "[AsyncFunction (anonymous)]",
+   "{ f: [Function: f], g: [Function: max] }"
+  ],
+  "util.inspect long values": [
+   "{\n  first: 'a long string value to fill the line',\n  second: 'another long string value here',\n  third: 3\n}",
+   "[\n   0,  3,  6,  9, 12, 15, 18, 21, 24,\n  27, 30, 33, 36, 39, 42, 45, 48, 51,\n  54, 57, 60, 63, 66, 69, 72, 75, 78,\n  81, 84, 87\n]",
+   "[\n  'item-0', 'item-1',\n  'item-2', 'item-3',\n  'item-4', 'item-5',\n  'item-6', 'item-7'\n]",
+   "]",
+   "{ list: [ { a: 1, b: [Array] }, { a: 2 } ], name: 'nested' }",
+   "[ [ 'a', 1 ], [ 'b', 2 ] ]"
+  ],
+  "util.inspect other": [
+   "<ref *1> { name: 'c', self: [Circular *1] }",
+   "<Buffer 61 62 63>",
+   "Uint8Array(2) [ 1, 2 ]",
+   "{ a: [Getter], b: [Setter] }",
+   "custom!",
+   "Error: boom",
+   "{ a: 1 }"
+  ],
+  "util.promisify": [
+   "ok!",
+   "failed",
+   "ERR_INVALID_ARG_TYPE"
+  ],
+  "util.promisify fs.readFile": 23,
+  "util.deprecate": [
+   3,
+   7,
+   "function"
+  ],
+  "util.types": [
+   true,
+   false,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   false,
+   true,
+   true,
+   false,
+   true,
+   false
+  ],
+  "util.inherits": [
+   "hello",
+   true,
+   true
+  ],
+  "util.isDeepStrictEqual": [
+   true,
+   false,
+   false,
+   true,
+   true,
+   true,
+   false,
+   false,
+   true,
+   false
+  ],
+  "util text encoders": [
+   true,
+   true
+  ],
+  "assert passes": "done",
+  "assert failures": [
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "==",
+    true,
+    true,
+    true
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "==",
+    true,
+    true,
+    true
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "==",
+    true,
+    true,
+    true
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "strictEqual",
+    true,
+    true,
+    true
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "notStrictEqual",
+    true,
+    true,
+    true
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "deepStrictEqual",
+    true,
+    true,
+    true
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "deepEqual",
+    true,
+    true,
+    true
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "throws",
+    true,
+    true,
+    false
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "doesNotThrow",
+    true,
+    true,
+    false
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "match",
+    true,
+    true,
+    true
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "fail",
+    true,
+    true,
+    true
+   ],
+   [
+    "AssertionError",
+    "ERR_ASSERTION",
+    "strictEqual",
+    true,
+    true,
+    true
+   ]
+  ],
+  "assert messages": [
+   "my message",
+   "Missing expected exception: no exception",
+   "failed here",
+   "Failed",
+   "RangeError",
+   "Expected values to be strictly equal:\n\n1 !== 2\n",
+   "Missing expected exception."
+  ],
+  "assert error fields": [
+   "actual value",
+   "expected value",
+   "strictEqual"
+  ],
+  "assert.rejects": "ERR_ASSERTION",
+  "fs.readFileSync text": [
+   "Text with é, € and 𝄞.\n",
+   23
+  ],
+  "fs.readFileSync Buffer": [
+   true,
+   28,
+   "Text with é, € and 𝄞.\n",
+   "VGV4dCB3aXRoIMOpLCDigqwgYW5kIPCdhJ4uCg==",
+   23
+  ],
+  "fs.readFileSync bytes": [
+   [
+    0,
+    255,
+    128,
+    65,
+    195,
+    40,
+    10
+   ],
+   "00ff8041c3280a",
+   7,
+   7,
+   "AP+AQcMoCg=="
+  ],
+  "fs.readFileSync URL and Buffer path": [
+   "a",
+   "a"
+  ],
+  "fs.readFileSync errors": [
+   {
+    "name": "Error",
+    "code": "ENOENT",
+    "message": "ENOENT: no such file or directory, open '<dir>/missing.txt'"
+   },
+   {
+    "name": "Error",
+    "code": "EISDIR",
+    "message": "EISDIR: illegal operation on a directory, read"
+   },
+   "ERR_INVALID_ARG_TYPE"
+  ],
+  "fs.readdirSync": [
+   [
+    "bytes.bin",
+    "sub",
+    "text.txt"
+   ],
+   [
+    "a.txt",
+    "b.json",
+    "deep"
+   ],
+   [
+    "bytes.bin",
+    "sub",
+    "text.txt"
+   ]
+  ],
+  "fs.readdirSync withFileTypes": [
+   [
+    "bytes.bin",
+    true,
+    false,
+    false,
+    true
+   ],
+   [
+    "sub",
+    false,
+    true,
+    false,
+    true
+   ],
+   [
+    "text.txt",
+    true,
+    false,
+    false,
+    true
+   ]
+  ],
+  "fs.readdirSync recursive": [
+   "bytes.bin",
+   "sub",
+   "sub/a.txt",
+   "sub/b.json",
+   "sub/deep",
+   "sub/deep/c.txt",
+   "text.txt"
+  ],
+  "fs.readdirSync errors": [
+   {
+    "name": "Error",
+    "code": "ENOENT",
+    "message": "ENOENT: no such file or directory, scandir '<dir>/missing'"
+   },
+   {
+    "name": "Error",
+    "code": "ENOTDIR",
+    "message": "ENOTDIR: not a directory, scandir '<dir>/text.txt'"
+   }
+  ],
+  "fs.existsSync": [
+   true,
+   true,
+   false,
+   false,
+   false
+  ],
+  "fs.statSync": [
+   true,
+   false,
+   false,
+   28,
+   true,
+   "number",
+   false,
+   true,
+   true
+  ],
+  "fs.statSync errors": [
+   {
+    "name": "Error",
+    "code": "ENOENT",
+    "message": "ENOENT: no such file or directory, stat '<dir>/missing'"
+   },
+   "[undefined]"
+  ],
+  "fs.lstatSync": [
+   true,
+   false,
+   {
+    "name": "Error",
+    "code": "ENOENT",
+    "message": "ENOENT: no such file or directory, lstat '<dir>/missing'"
+   }
+  ],
+  "fs.realpathSync": [
+   true,
+   {
+    "name": "Error",
+    "code": "ENOENT",
+    "message": "ENOENT: no such file or directory, lstat '<dir>/missing'"
+   },
+   "function"
+  ],
+  "fs.accessSync": [
+   "[undefined]",
+   "[undefined]",
+   {
+    "name": "Error",
+    "code": "ENOENT",
+    "message": "ENOENT: no such file or directory, access '<dir>/missing'"
+   },
+   [
+    0,
+    4,
+    2,
+    1
+   ]
+  ],
+  "fs.promises": [
+   "Text with é, € and 𝄞.\n",
+   true,
+   [
+    "a.txt",
+    "b.json",
+    "deep"
+   ],
+   true,
+   true,
+   "[undefined]",
+   true,
+   {
+    "name": "Error",
+    "code": "ENOENT",
+    "message": "ENOENT: no such file or directory, open '<dir>/missing'"
+   },
+   true,
+   true,
+   true
+  ],
+  "fs callbacks": [
+   "before",
+   "after",
+   null,
+   "a",
+   "ENOENT"
+  ],
+  "fs.readFileSync JSON": {
+   "list": [
+    1,
+    2,
+    3
+   ],
+   "name": "b"
+  },
+  "module.createRequire": [
+   {
+    "list": [
+     1,
+     2,
+     3
+    ],
+    "name": "b"
+   },
+   {
+    "list": [
+     1,
+     2,
+     3
+    ],
+    "name": "b"
+   },
+   [
+    1,
+    2,
+    3
+   ],
+   "function",
+   true,
+   true
+  ],
+  "module.createRequire errors": [
+   "ERR_INVALID_ARG_VALUE",
+   "MODULE_NOT_FOUND",
+   "MODULE_NOT_FOUND"
+  ],
+  "module.isBuiltin": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   false,
+   false
+  ],
+  "require.resolve": [
+   "node:fs",
+   "path",
+   "function",
+   "MODULE_NOT_FOUND"
+  ],
+  "require of the modules": [
+   "function",
+   "object",
+   "object",
+   "object",
+   "function",
+   "object",
+   "object",
+   "object",
+   "object",
+   "object",
+   "object",
+   "function",
+   "object",
+   "object"
+  ],
+  "require of a missing module": [
+   "MODULE_NOT_FOUND",
+   "Cannot find module 'this-package-is-not-there'"
+  ]
+ },
+ "resolution": {
+  "files": {
+   "package.json": "{\"name\":\"proj\",\"imports\":{\"#config\":\"./config/main.js\",\"#lib/*\":\"./lib/*.js\",\"#dep\":\"dep-main\",\"#dep/*\":\"dep-patterns/features/*\",\"#cond\":{\"import\":\"./cond/esm.mjs\",\"require\":\"./cond/cjs.cjs\"},\"#default-first\":{\"default\":\"./cond/default.js\",\"import\":\"./cond/esm.mjs\",\"require\":\"./cond/cjs.cjs\"},\"#list\":[\"not-relative-and-not-there\",\"./config/main.js\"]}}",
+   "app.js": "",
+   "sub/mod.js": "",
+   "sub/package.json": "{\"name\":\"sub-scope\",\"imports\":{\"#config\":\"./own.js\"}}",
+   "sub/own.js": "",
+   "config/main.js": "",
+   "lib/a.js": "",
+   "lib/deep/b.js": "",
+   "cond/esm.mjs": "",
+   "cond/cjs.cjs": "",
+   "cond/default.js": "",
+   "node_modules/dep-main/package.json": "{\"main\":\"./lib/main.js\"}",
+   "node_modules/dep-main/lib/main.js": "",
+   "node_modules/dep-index/index.js": "",
+   "node_modules/require-first/package.json": "{\"exports\":{\"require\":\"./r.cjs\",\"import\":\"./i.mjs\",\"default\":\"./d.js\"}}",
+   "node_modules/import-first/package.json": "{\"exports\":{\"import\":\"./i.mjs\",\"require\":\"./r.cjs\",\"default\":\"./d.js\"}}",
+   "node_modules/default-first/package.json": "{\"exports\":{\"default\":\"./d.js\",\"import\":\"./i.mjs\",\"require\":\"./r.cjs\"}}",
+   "node_modules/node-first/package.json": "{\"exports\":{\"node\":\"./n.js\",\"import\":\"./i.mjs\",\"require\":\"./r.cjs\"}}",
+   "node_modules/node-last/package.json": "{\"exports\":{\"import\":\"./i.mjs\",\"require\":\"./r.cjs\",\"node\":\"./n.js\"}}",
+   "node_modules/nested/package.json": "{\"exports\":{\".\":{\"node\":{\"import\":\"./i.mjs\",\"require\":\"./r.cjs\"},\"default\":\"./d.js\"}}}",
+   "node_modules/nested-miss/package.json": "{\"exports\":{\".\":{\"browser\":{\"default\":\"./b.js\"},\"import\":{\"browser\":\"./b.js\"},\"default\":\"./d.js\"}}}",
+   "node_modules/module-sync/package.json": "{\"exports\":{\"module-sync\":\"./m.mjs\",\"import\":\"./i.mjs\",\"require\":\"./r.cjs\"}}",
+   "node_modules/browser/package.json": "{\"exports\":{\"browser\":\"./b.js\",\"worker\":\"./b.js\",\"default\":\"./d.js\"}}",
+   "node_modules/only-import/package.json": "{\"exports\":{\"import\":\"./i.mjs\"}}",
+   "node_modules/only-require/package.json": "{\"exports\":{\"require\":\"./r.cjs\"}}",
+   "node_modules/dep-patterns/package.json": "{\"exports\":{\".\":\"./d.js\",\"./features/*\":\"./src/features/*.js\",\"./features/private/*\":null,\"./exact\":{\"import\":\"./i.mjs\",\"require\":\"./r.cjs\"},\"./ext/*.js\":\"./src/ext/*.js\",\"./package.json\":\"./package.json\"}}",
+   "node_modules/dep-patterns/src/features/a.js": "",
+   "node_modules/dep-patterns/src/features/private/p.js": "",
+   "node_modules/dep-patterns/src/features/deep/c.js": "",
+   "node_modules/dep-patterns/src/ext/e.js": "",
+   "node_modules/dep-patterns/hidden.js": "",
+   "node_modules/list/package.json": "{\"exports\":[\"./d.js\",\"./i.mjs\"]}",
+   "node_modules/@scope/pkg/package.json": "{\"exports\":{\".\":\"./d.js\",\"./sub\":{\"require\":\"./r.cjs\",\"default\":\"./d.js\"}}}",
+   "node_modules/require-first/d.js": "",
+   "node_modules/require-first/i.mjs": "",
+   "node_modules/require-first/r.cjs": "",
+   "node_modules/require-first/n.js": "",
+   "node_modules/require-first/b.js": "",
+   "node_modules/require-first/m.mjs": "",
+   "node_modules/import-first/d.js": "",
+   "node_modules/import-first/i.mjs": "",
+   "node_modules/import-first/r.cjs": "",
+   "node_modules/import-first/n.js": "",
+   "node_modules/import-first/b.js": "",
+   "node_modules/import-first/m.mjs": "",
+   "node_modules/default-first/d.js": "",
+   "node_modules/default-first/i.mjs": "",
+   "node_modules/default-first/r.cjs": "",
+   "node_modules/default-first/n.js": "",
+   "node_modules/default-first/b.js": "",
+   "node_modules/default-first/m.mjs": "",
+   "node_modules/node-first/d.js": "",
+   "node_modules/node-first/i.mjs": "",
+   "node_modules/node-first/r.cjs": "",
+   "node_modules/node-first/n.js": "",
+   "node_modules/node-first/b.js": "",
+   "node_modules/node-first/m.mjs": "",
+   "node_modules/node-last/d.js": "",
+   "node_modules/node-last/i.mjs": "",
+   "node_modules/node-last/r.cjs": "",
+   "node_modules/node-last/n.js": "",
+   "node_modules/node-last/b.js": "",
+   "node_modules/node-last/m.mjs": "",
+   "node_modules/nested/d.js": "",
+   "node_modules/nested/i.mjs": "",
+   "node_modules/nested/r.cjs": "",
+   "node_modules/nested/n.js": "",
+   "node_modules/nested/b.js": "",
+   "node_modules/nested/m.mjs": "",
+   "node_modules/nested-miss/d.js": "",
+   "node_modules/nested-miss/i.mjs": "",
+   "node_modules/nested-miss/r.cjs": "",
+   "node_modules/nested-miss/n.js": "",
+   "node_modules/nested-miss/b.js": "",
+   "node_modules/nested-miss/m.mjs": "",
+   "node_modules/module-sync/d.js": "",
+   "node_modules/module-sync/i.mjs": "",
+   "node_modules/module-sync/r.cjs": "",
+   "node_modules/module-sync/n.js": "",
+   "node_modules/module-sync/b.js": "",
+   "node_modules/module-sync/m.mjs": "",
+   "node_modules/browser/d.js": "",
+   "node_modules/browser/i.mjs": "",
+   "node_modules/browser/r.cjs": "",
+   "node_modules/browser/n.js": "",
+   "node_modules/browser/b.js": "",
+   "node_modules/browser/m.mjs": "",
+   "node_modules/only-import/d.js": "",
+   "node_modules/only-import/i.mjs": "",
+   "node_modules/only-import/r.cjs": "",
+   "node_modules/only-import/n.js": "",
+   "node_modules/only-import/b.js": "",
+   "node_modules/only-import/m.mjs": "",
+   "node_modules/only-require/d.js": "",
+   "node_modules/only-require/i.mjs": "",
+   "node_modules/only-require/r.cjs": "",
+   "node_modules/only-require/n.js": "",
+   "node_modules/only-require/b.js": "",
+   "node_modules/only-require/m.mjs": "",
+   "node_modules/dep-patterns/d.js": "",
+   "node_modules/dep-patterns/i.mjs": "",
+   "node_modules/dep-patterns/r.cjs": "",
+   "node_modules/dep-patterns/n.js": "",
+   "node_modules/dep-patterns/b.js": "",
+   "node_modules/dep-patterns/m.mjs": "",
+   "node_modules/list/d.js": "",
+   "node_modules/list/i.mjs": "",
+   "node_modules/list/r.cjs": "",
+   "node_modules/list/n.js": "",
+   "node_modules/list/b.js": "",
+   "node_modules/list/m.mjs": "",
+   "node_modules/@scope/pkg/d.js": "",
+   "node_modules/@scope/pkg/i.mjs": "",
+   "node_modules/@scope/pkg/r.cjs": "",
+   "node_modules/@scope/pkg/n.js": "",
+   "node_modules/@scope/pkg/b.js": "",
+   "node_modules/@scope/pkg/m.mjs": ""
+  },
+  "questions": [
+   {
+    "name": "./sub/mod.js",
+    "from": "<dir>/app.js",
+    "require": "<dir>/sub/mod.js",
+    "import": "<dir>/sub/mod.js"
+   },
+   {
+    "name": "./config/main.js",
+    "from": "<dir>/app.js",
+    "require": "<dir>/config/main.js",
+    "import": "<dir>/config/main.js"
+   },
+   {
+    "name": "dep-main",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/dep-main/lib/main.js",
+    "import": "<dir>/node_modules/dep-main/lib/main.js"
+   },
+   {
+    "name": "dep-index",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/dep-index/index.js",
+    "import": "<dir>/node_modules/dep-index/index.js"
+   },
+   {
+    "name": "require-first",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/require-first/r.cjs",
+    "import": "<dir>/node_modules/require-first/i.mjs"
+   },
+   {
+    "name": "import-first",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/import-first/r.cjs",
+    "import": "<dir>/node_modules/import-first/i.mjs"
+   },
+   {
+    "name": "default-first",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/default-first/d.js",
+    "import": "<dir>/node_modules/default-first/d.js"
+   },
+   {
+    "name": "node-first",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/node-first/n.js",
+    "import": "<dir>/node_modules/node-first/n.js"
+   },
+   {
+    "name": "node-last",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/node-last/r.cjs",
+    "import": "<dir>/node_modules/node-last/i.mjs"
+   },
+   {
+    "name": "nested",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/nested/r.cjs",
+    "import": "<dir>/node_modules/nested/i.mjs"
+   },
+   {
+    "name": "nested-miss",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/nested-miss/d.js",
+    "import": "<dir>/node_modules/nested-miss/d.js"
+   },
+   {
+    "name": "module-sync",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/module-sync/m.mjs",
+    "import": "<dir>/node_modules/module-sync/m.mjs"
+   },
+   {
+    "name": "browser",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/browser/d.js",
+    "import": "<dir>/node_modules/browser/d.js"
+   },
+   {
+    "name": "only-import",
+    "from": "<dir>/app.js",
+    "require": null,
+    "import": "<dir>/node_modules/only-import/i.mjs"
+   },
+   {
+    "name": "only-require",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/only-require/r.cjs",
+    "import": null
+   },
+   {
+    "name": "list",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/list/d.js",
+    "import": "<dir>/node_modules/list/d.js"
+   },
+   {
+    "name": "@scope/pkg",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/@scope/pkg/d.js",
+    "import": "<dir>/node_modules/@scope/pkg/d.js"
+   },
+   {
+    "name": "@scope/pkg/sub",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/@scope/pkg/r.cjs",
+    "import": "<dir>/node_modules/@scope/pkg/d.js"
+   },
+   {
+    "name": "@scope/pkg/other",
+    "from": "<dir>/app.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "dep-patterns",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/dep-patterns/d.js",
+    "import": "<dir>/node_modules/dep-patterns/d.js"
+   },
+   {
+    "name": "dep-patterns/features/a",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/dep-patterns/src/features/a.js",
+    "import": "<dir>/node_modules/dep-patterns/src/features/a.js"
+   },
+   {
+    "name": "dep-patterns/features/deep/c",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/dep-patterns/src/features/deep/c.js",
+    "import": "<dir>/node_modules/dep-patterns/src/features/deep/c.js"
+   },
+   {
+    "name": "dep-patterns/features/private/p",
+    "from": "<dir>/app.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "dep-patterns/exact",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/dep-patterns/r.cjs",
+    "import": "<dir>/node_modules/dep-patterns/i.mjs"
+   },
+   {
+    "name": "dep-patterns/ext/e.js",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/dep-patterns/src/ext/e.js",
+    "import": "<dir>/node_modules/dep-patterns/src/ext/e.js"
+   },
+   {
+    "name": "dep-patterns/hidden.js",
+    "from": "<dir>/app.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "dep-patterns/package.json",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/dep-patterns/package.json",
+    "import": "<dir>/node_modules/dep-patterns/package.json"
+   },
+   {
+    "name": "not-installed",
+    "from": "<dir>/app.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#config",
+    "from": "<dir>/app.js",
+    "require": "<dir>/config/main.js",
+    "import": "<dir>/config/main.js"
+   },
+   {
+    "name": "#lib/a",
+    "from": "<dir>/app.js",
+    "require": "<dir>/lib/a.js",
+    "import": "<dir>/lib/a.js"
+   },
+   {
+    "name": "#lib/deep/b",
+    "from": "<dir>/app.js",
+    "require": "<dir>/lib/deep/b.js",
+    "import": "<dir>/lib/deep/b.js"
+   },
+   {
+    "name": "#lib/missing",
+    "from": "<dir>/app.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#dep",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/dep-main/lib/main.js",
+    "import": "<dir>/node_modules/dep-main/lib/main.js"
+   },
+   {
+    "name": "#dep/a",
+    "from": "<dir>/app.js",
+    "require": "<dir>/node_modules/dep-patterns/src/features/a.js",
+    "import": "<dir>/node_modules/dep-patterns/src/features/a.js"
+   },
+   {
+    "name": "#cond",
+    "from": "<dir>/app.js",
+    "require": "<dir>/cond/cjs.cjs",
+    "import": "<dir>/cond/esm.mjs"
+   },
+   {
+    "name": "#default-first",
+    "from": "<dir>/app.js",
+    "require": "<dir>/cond/default.js",
+    "import": "<dir>/cond/default.js"
+   },
+   {
+    "name": "#list",
+    "from": "<dir>/app.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#missing",
+    "from": "<dir>/app.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#",
+    "from": "<dir>/app.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#/config",
+    "from": "<dir>/app.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "./sub/mod.js",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "./config/main.js",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "dep-main",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/dep-main/lib/main.js",
+    "import": "<dir>/node_modules/dep-main/lib/main.js"
+   },
+   {
+    "name": "dep-index",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/dep-index/index.js",
+    "import": "<dir>/node_modules/dep-index/index.js"
+   },
+   {
+    "name": "require-first",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/require-first/r.cjs",
+    "import": "<dir>/node_modules/require-first/i.mjs"
+   },
+   {
+    "name": "import-first",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/import-first/r.cjs",
+    "import": "<dir>/node_modules/import-first/i.mjs"
+   },
+   {
+    "name": "default-first",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/default-first/d.js",
+    "import": "<dir>/node_modules/default-first/d.js"
+   },
+   {
+    "name": "node-first",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/node-first/n.js",
+    "import": "<dir>/node_modules/node-first/n.js"
+   },
+   {
+    "name": "node-last",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/node-last/r.cjs",
+    "import": "<dir>/node_modules/node-last/i.mjs"
+   },
+   {
+    "name": "nested",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/nested/r.cjs",
+    "import": "<dir>/node_modules/nested/i.mjs"
+   },
+   {
+    "name": "nested-miss",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/nested-miss/d.js",
+    "import": "<dir>/node_modules/nested-miss/d.js"
+   },
+   {
+    "name": "module-sync",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/module-sync/m.mjs",
+    "import": "<dir>/node_modules/module-sync/m.mjs"
+   },
+   {
+    "name": "browser",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/browser/d.js",
+    "import": "<dir>/node_modules/browser/d.js"
+   },
+   {
+    "name": "only-import",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": "<dir>/node_modules/only-import/i.mjs"
+   },
+   {
+    "name": "only-require",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/only-require/r.cjs",
+    "import": null
+   },
+   {
+    "name": "list",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/list/d.js",
+    "import": "<dir>/node_modules/list/d.js"
+   },
+   {
+    "name": "@scope/pkg",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/@scope/pkg/d.js",
+    "import": "<dir>/node_modules/@scope/pkg/d.js"
+   },
+   {
+    "name": "@scope/pkg/sub",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/@scope/pkg/r.cjs",
+    "import": "<dir>/node_modules/@scope/pkg/d.js"
+   },
+   {
+    "name": "@scope/pkg/other",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "dep-patterns",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/dep-patterns/d.js",
+    "import": "<dir>/node_modules/dep-patterns/d.js"
+   },
+   {
+    "name": "dep-patterns/features/a",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/dep-patterns/src/features/a.js",
+    "import": "<dir>/node_modules/dep-patterns/src/features/a.js"
+   },
+   {
+    "name": "dep-patterns/features/deep/c",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/dep-patterns/src/features/deep/c.js",
+    "import": "<dir>/node_modules/dep-patterns/src/features/deep/c.js"
+   },
+   {
+    "name": "dep-patterns/features/private/p",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "dep-patterns/exact",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/dep-patterns/r.cjs",
+    "import": "<dir>/node_modules/dep-patterns/i.mjs"
+   },
+   {
+    "name": "dep-patterns/ext/e.js",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/dep-patterns/src/ext/e.js",
+    "import": "<dir>/node_modules/dep-patterns/src/ext/e.js"
+   },
+   {
+    "name": "dep-patterns/hidden.js",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "dep-patterns/package.json",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/node_modules/dep-patterns/package.json",
+    "import": "<dir>/node_modules/dep-patterns/package.json"
+   },
+   {
+    "name": "not-installed",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#config",
+    "from": "<dir>/sub/mod.js",
+    "require": "<dir>/sub/own.js",
+    "import": "<dir>/sub/own.js"
+   },
+   {
+    "name": "#lib/a",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#lib/deep/b",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#lib/missing",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#dep",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#dep/a",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#cond",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#default-first",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#list",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#missing",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   },
+   {
+    "name": "#/config",
+    "from": "<dir>/sub/mod.js",
+    "require": null,
+    "import": null
+   }
+  ]
+ }
+}

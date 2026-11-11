@@ -26,8 +26,21 @@ pub struct FileStat {
 pub trait ModuleLoader {
     /// The text of a file.
     fn read(&self, path: &str) -> Option<String>;
+    /// The bytes of a file, for `fs.readFileSync` with no encoding.
+    fn read_bytes(&self, path: &str) -> Option<Vec<u8>> {
+        self.read(path).map(String::into_bytes)
+    }
     /// The kind of a path. `None`: the path is not there.
     fn stat(&self, path: &str) -> Option<FileStat>;
+    /// True when the path itself is a symbolic link (`fs.lstatSync`).
+    fn is_symlink(&self, _path: &str) -> bool {
+        false
+    }
+    /// The path with no symbolic link (`fs.realpathSync`). `None`: the
+    /// path is not there.
+    fn real_path(&self, path: &str) -> Option<String> {
+        self.stat(path).map(|_| path.to_string())
+    }
     /// The names in a directory, with their kinds.
     fn read_dir(&self, path: &str) -> Option<Vec<(String, FileKind)>>;
     /// The file of the module of a `@plugin` or `@config` rule, and the
@@ -53,9 +66,26 @@ pub trait ModuleLoader {
     fn cwd(&self) -> String {
         "/".to_string()
     }
-    /// `process.env`.
+    /// `process.env`: the environment that a module can read. The command
+    /// line program gives the environment of its process.
     fn env(&self) -> Vec<(String, String)> {
         Vec::new()
+    }
+    /// `process.argv`: the program, the program again (the script of
+    /// Node.js), and the arguments.
+    fn argv(&self) -> Vec<String> {
+        vec!["tailwindcss".to_string(), "tailwindcss".to_string()]
+    }
+    /// `process.platform`. The default is the system that runs the program.
+    fn platform(&self) -> String {
+        #[cfg(tw_js)]
+        {
+            crate::compat::js::engine::platform()
+        }
+        #[cfg(not(tw_js))]
+        {
+            "linux".to_string()
+        }
     }
 }
 
@@ -71,6 +101,12 @@ pub struct MemoryLoader {
     /// The answers of `resolve_module`: `(id, base)` to `(path, base)`.
     /// An answer is used one time, in the sequence of the list.
     pub resolutions: std::cell::RefCell<Vec<Resolution>>,
+    /// `process.env`.
+    pub env: Vec<(String, String)>,
+    /// The directories of `NODE_PATH`.
+    pub node_path: Vec<String>,
+    /// The files that are not UTF-8 text.
+    pub binary: std::collections::BTreeMap<String, Vec<u8>>,
 }
 
 impl MemoryLoader {
@@ -126,5 +162,25 @@ impl ModuleLoader for MemoryLoader {
 
     fn console(&self, text: &str, _is_error: bool) {
         self.console.borrow_mut().push(text.to_string());
+    }
+
+    fn read_bytes(&self, path: &str) -> Option<Vec<u8>> {
+        self.binary.get(path).cloned().or_else(|| self.read(path).map(String::into_bytes))
+    }
+
+    fn env(&self) -> Vec<(String, String)> {
+        self.env.clone()
+    }
+
+    fn node_path(&self) -> Vec<String> {
+        self.node_path.clone()
+    }
+
+    fn cwd(&self) -> String {
+        "/app".to_string()
+    }
+
+    fn platform(&self) -> String {
+        "linux".to_string()
     }
 }

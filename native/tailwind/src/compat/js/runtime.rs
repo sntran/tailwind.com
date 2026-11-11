@@ -36,25 +36,39 @@ use std::rc::{Rc, Weak};
 /// The compatibility bundle.
 const COMPAT_JS: &str = include_str!("../../../assets/compat.js");
 
-/// The modules that are in the bundle (see `js/modules.ts`).
-const BUILTIN_MODULES: [&str; 8] = [
-    "tailwindcss/plugin",
-    "tailwindcss/colors",
-    "tailwindcss/defaultTheme",
-    "tailwindcss/lib/util/flattenColorPalette",
-    "tailwindcss/package.json",
-    "fs",
-    "path",
-    "util",
+/// The TypeScript transform (Sucrase). The engine evaluates it at the
+/// first TypeScript module (see `js/typescript.ts`).
+const TYPESCRIPT_JS: &str = include_str!("../../../assets/typescript.js");
+
+/// The plugins that the standalone program of Tailwind CSS has in its
+/// file, each one as one CommonJS file (see `js/modules.ts`).
+const PLUGINS: [(&str, &str); 3] = [
+    ("@tailwindcss/forms", include_str!("../../../assets/plugins/forms.js")),
+    ("@tailwindcss/typography", include_str!("../../../assets/plugins/typography.js")),
+    ("@tailwindcss/aspect-ratio", include_str!("../../../assets/plugins/aspect-ratio.js")),
 ];
 
-fn is_builtin(name: &str) -> bool {
-    let name = name.strip_prefix("node:").unwrap_or(name);
-    let name = match name.strip_suffix(".js") {
-        Some(short) if name.starts_with("tailwindcss/") => short,
-        _ => name,
-    };
-    BUILTIN_MODULES.contains(&name)
+/// A JavaScript file of the program, by its name.
+fn asset(name: &str) -> Option<&'static str> {
+    if name == "typescript" {
+        return Some(TYPESCRIPT_JS);
+    }
+    let plugin = name.strip_prefix("plugin:")?;
+    PLUGINS.iter().find(|(id, _)| *id == plugin).map(|(_, source)| *source)
+}
+
+/// Base64 text of bytes: the bytes of a file go to JavaScript in this form.
+fn base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut text = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], chunk.get(1).copied().unwrap_or(0), chunk.get(2).copied().unwrap_or(0)];
+        text.push(TABLE[(b[0] >> 2) as usize] as char);
+        text.push(TABLE[(((b[0] & 3) << 4) | (b[1] >> 4)) as usize] as char);
+        text.push(if chunk.len() > 1 { TABLE[(((b[1] & 15) << 2) | (b[2] >> 6)) as usize] as char } else { '=' });
+        text.push(if chunk.len() > 2 { TABLE[(b[2] & 63) as usize] as char } else { '=' });
+    }
+    text
 }
 
 /// The design system of a call into JavaScript.
@@ -82,6 +96,8 @@ pub struct JsRuntime {
     stash: RefCell<Vec<VariantFn>>,
     /// The first exception of a plugin function in a build.
     error: RefCell<Option<Error>>,
+    /// The `cause` chain of the exception that JavaScript throws now.
+    causes: RefCell<Vec<String>>,
     /// The source locations of the nodes that are in JavaScript.
     locs: LocTable,
 }
@@ -96,7 +112,11 @@ impl<T: Copy> Drop for Reset<'_, T> {
 }
 
 fn to_error(error: JsError) -> Error {
-    Error { message: error.message, name: error.name.map_or(std::borrow::Cow::Borrowed("Error"), std::borrow::Cow::Owned) }
+    Error {
+        message: error.message,
+        name: error.name.map_or(std::borrow::Cow::Borrowed("Error"), std::borrow::Cow::Owned),
+        causes: Vec::new(),
+    }
 }
 
 fn text_arg(value: &Value) -> std::result::Result<&str, String> {
@@ -158,6 +178,7 @@ impl JsRuntime {
             exclusive: Cell::new(false),
             stash: RefCell::new(Vec::new()),
             error: RefCell::new(None),
+            causes: RefCell::new(Vec::new()),
             locs: LocTable::default(),
         });
         *slot.borrow_mut() = Rc::downgrade(&runtime);
@@ -195,6 +216,13 @@ impl JsRuntime {
         f()
     }
 
+    /// An exception of JavaScript with its `cause` chain (`error.causes`).
+    fn error_from(&self, error: JsError) -> Error {
+        let mut error = to_error(error);
+        error.causes = std::mem::take(&mut *self.causes.borrow_mut());
+        error
+    }
+
     /// Call a function of the bundle in a build.
     fn call(&self, design_system: &DesignSystem, name: &str, argument: &Value) -> std::result::Result<Option<String>, String> {
         self.scope(Access::Build(design_system), || self.engine.call(name, &argument.to_string())).map_err(|error| {
@@ -202,7 +230,7 @@ impl JsRuntime {
             let message = error.message.clone();
             let mut slot = self.error.borrow_mut();
             if slot.is_none() {
-                *slot = Some(to_error(error));
+                *slot = Some(self.error_from(error));
             }
             message
         })
@@ -340,6 +368,10 @@ impl JsRuntime {
         // The loader of the engine gives the name of a module as plain text.
         if op == "module.load" {
             return self.engine.call("__tw_module_source", text).map_err(|error| error.message);
+        }
+        // A JavaScript file of the program, as plain text.
+        if op == "asset" {
+            return Ok(asset(text).map(str::to_string));
         }
 
         let argument: Value = if text.is_empty() { Value::Null } else { serde_json::from_str(text).map_err(|error| error.to_string())? };
@@ -653,7 +685,8 @@ impl JsRuntime {
                 };
                 // The engine asks for an `import`, and gets plain text.
                 if kind == ResolveKind::Import {
-                    if is_builtin(name) {
+                    // The bundle knows the modules of the program.
+                    if self.engine.call("__tw_is_builtin", name).map_err(|error| error.message)?.is_some() {
                         return Ok(Some(name.to_string()));
                     }
                     let directory = if base.starts_with('/') { resolve::dirname(base).to_string() } else { self.loader.cwd() };
@@ -686,12 +719,27 @@ impl JsRuntime {
                 Some(text) => done(json!(text)),
                 None => Ok(None),
             },
-            "fs.stat" => match self.loader.stat(text_arg(arg)?) {
-                Some(stat) => done(json!({
-                    "kind": if stat.kind == FileKind::File { "file" } else { "directory" },
-                    "size": stat.size,
-                    "mtimeMs": stat.modified_ms,
-                })),
+            "fs.readFileBytes" => match self.loader.read_bytes(text_arg(arg)?) {
+                Some(bytes) => done(json!(base64(&bytes))),
+                None => Ok(None),
+            },
+            "fs.stat" | "fs.lstat" => {
+                let path = text_arg(arg)?;
+                let link = op == "fs.lstat" && self.loader.is_symlink(path);
+                match self.loader.stat(path) {
+                    Some(stat) => done(json!({
+                        "kind": if stat.kind == FileKind::File { "file" } else { "directory" },
+                        "size": stat.size,
+                        "mtimeMs": stat.modified_ms,
+                        "link": link,
+                    })),
+                    // A link with no target is there for `lstat`.
+                    None if link => done(json!({ "kind": "file", "size": 0, "mtimeMs": 0, "link": true })),
+                    None => Ok(None),
+                }
+            }
+            "fs.realpath" => match self.loader.real_path(text_arg(arg)?) {
+                Some(path) => done(json!(path)),
                 None => Ok(None),
             },
             "fs.readdir" => match self.loader.read_dir(text_arg(arg)?) {
@@ -707,9 +755,27 @@ impl JsRuntime {
                 self.loader.console(field(arg, "text")?, arg.get("error").and_then(Value::as_bool).unwrap_or(false));
                 Ok(None)
             }
-            "env" => {
+            "process" => {
                 let env: serde_json::Map<String, Value> = self.loader.env().into_iter().map(|(name, value)| (name, Value::String(value))).collect();
-                done(Value::Object(env))
+                let arch = match std::env::consts::ARCH {
+                    "x86_64" => "x64",
+                    "aarch64" => "arm64",
+                    "x86" => "ia32",
+                    other => other,
+                };
+                done(json!({
+                    "env": env,
+                    "argv": self.loader.argv(),
+                    "platform": self.loader.platform(),
+                    "arch": arch,
+                    // `node` is the version of Node.js whose API the
+                    // modules of the program follow.
+                    "versions": { "node": "22.0.0", "tailwindcss": crate::index::VERSION },
+                }))
+            }
+            "error.causes" => {
+                *self.causes.borrow_mut() = text_list(Some(arg));
+                Ok(None)
             }
             "cwd" => done(json!(self.loader.cwd())),
             "version" => done(json!(crate::index::VERSION)),
@@ -740,7 +806,8 @@ pub fn apply_compatibility_hooks(
     let argument = json!({ "base": base, "ast": ast_to_json(ast, &runtime.locs), "sources": source_list }).to_string();
 
     let pointer: *mut DesignSystem = design_system;
-    let result = runtime.scope(Access::Setup(pointer), || runtime.engine.call("__tw_compat", &argument)).map_err(to_error)?;
+    let result =
+        runtime.scope(Access::Setup(pointer), || runtime.engine.call("__tw_compat", &argument)).map_err(|error| runtime.error_from(error))?;
 
     let value: Value = serde_json::from_str(&result.unwrap_or_default()).map_err(|error| Error::new(error.to_string()))?;
     *ast = ast_from_json(value.get("ast").unwrap_or(&Value::Null), &runtime.locs).map_err(Error::new)?;
