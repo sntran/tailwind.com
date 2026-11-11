@@ -296,6 +296,10 @@ fn alpha_replaced_drop_shadow_properties(
 
 /// The value of `--tw-drop-shadow` for a shadow of the theme.
 fn drop_shadow_list(resolved: &str) -> String {
+    // Before 4.1.2, all the text was in one `drop-shadow(…)`.
+    if !crate::switches::DROP_SHADOW_LIST.on() {
+        return format!("drop-shadow({resolved})");
+    }
     segment(resolved, b',').into_iter().map(|v| format!("drop-shadow({v})")).collect::<Vec<_>>().join(" ")
 }
 
@@ -896,7 +900,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         // The color of the shadow.
         let value =
             resolve_theme_color(candidate, theme, &["--drop-shadow-color", "--color"]).filter(|v| !v.is_empty())?;
-        if value == "inherit" {
+        if value == "inherit" && crate::switches::SHADOW_INHERIT.on() {
             return Some(color_nodes("inherit".to_string()));
         }
         Some(color_nodes(with_alpha(&value, "var(--tw-drop-shadow-alpha)")))

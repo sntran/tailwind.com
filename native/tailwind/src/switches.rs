@@ -477,6 +477,153 @@ pub const CUSTOM_VARIANT_CYCLE_ERROR: Switch = Switch::since(4, 1, 14, "a circle
 /// at-rule as each other, so no compound variant took the custom variant.
 pub const CUSTOM_VARIANT_AT_VARIANT_COMPOUNDS: Switch = Switch::since(4, 1, 14, "a custom variant with @variant can be in a compound variant");
 
+// --- 4.1.8 ----------------------------------------------------------------
+
+/// The error of `@apply` for a candidate with no result gives the reason:
+/// no prefix, a class that `@source not inline(…)` removes, a variant that
+/// does not exist, or an empty theme. Before: always `Cannot apply unknown
+/// utility class: NAME`.
+pub const APPLY_ERROR_REASONS: Switch = Switch::since(4, 1, 8, "the error of @apply gives the reason");
+
+// --- 4.1.7 ----------------------------------------------------------------
+
+/// `-rotate-[…]` negates each arbitrary value that is not a vector:
+/// `-rotate-[var(--r)]` gives `calc(var(--r) * -1)`. Before: only a value
+/// with the type angle was negated, and each other value stayed as it was.
+pub const ROTATE_NEGATIVE_ARBITRARY: Switch = Switch::since(4, 1, 7, "-rotate-[…] negates each arbitrary value");
+
+// --- 4.1.6 ----------------------------------------------------------------
+
+/// The parser keeps a `\r\n` that is in a comment, in a string, after a
+/// `\\` or in the value of a custom property. Before: the parser replaced
+/// each `\r\n` of the input with `\n` first.
+pub const CRLF_STAYS: Switch = Switch::since(4, 1, 6, "the parser does not replace \\r\\n in the input");
+
+/// The short form of a variable (`w-(--x)`, `bg-red-500/(--x)`,
+/// `min-(--x):flex`) must start with `--`, and the short form of a value
+/// has no `;` or `}` at the top level. Before: one `-` in the first two
+/// characters was sufficient (`w-(-x)`, `w-(a-b)`), and the short form of
+/// a value had no check of its own.
+pub const PAREN_VALUE_NEEDS_TWO_DASHES: Switch = Switch::since(4, 1, 6, "the short form of a variable must start with --");
+
+/// The short form of a variable in a modifier keeps the `_` of the name
+/// of the variable: `bg-red-500/(--my_opacity)`. Before: each `_` was a
+/// space (`var(--my opacity)`).
+pub const PAREN_MODIFIER_KEEPS_UNDERSCORES: Switch = Switch::since(4, 1, 6, "a modifier with (--x_y) keeps the _ of the variable");
+
+/// `-scale-[…]` negates its arbitrary value: `calc(… * -1)`. Before: the
+/// value stayed as it was.
+pub const SCALE_NEGATIVE_ARBITRARY: Switch = Switch::since(4, 1, 6, "-scale-[…] negates the arbitrary value");
+
+/// `@tailwind utilities` in a reference (`@reference`, `@media reference`)
+/// is removed. Before: it was the utilities node, so a later `@tailwind
+/// utilities` was removed, and the stylesheet had no utilities.
+pub const REFERENCE_NO_UTILITIES: Switch = Switch::since(4, 1, 6, "@tailwind utilities in a reference is removed");
+
+/// The substitution of `@apply` in a parent does each `@apply` below it,
+/// and each parent in the path depends on the applied utilities. Before:
+/// only the children of each parent, so a utility that another `@utility`
+/// applied could lose its nested rules with `@apply`, and an `@apply` at
+/// the top level of a stylesheet gave nothing.
+pub const APPLY_NESTED_WALK: Switch = Switch::since(4, 1, 6, "@apply in nested rules of an applied @utility");
+
+/// The candidates of one `@apply` are the keys of a JavaScript object: a
+/// candidate that is a number comes first. Before: they were a list, in
+/// the sequence of the text. The first candidate that is not valid gives
+/// the error.
+pub const APPLY_CANDIDATES_AS_KEYS: Switch = Switch::since(4, 1, 6, "the candidates of @apply are in the sequence of object keys");
+
+// --- 4.1.5 ----------------------------------------------------------------
+
+/// A color with an alpha of 100% has no `color-mix(…)`: `bg-red-500/100`.
+/// Before: `color-mix(in oklab, … 100%, transparent)`.
+pub const FULL_ALPHA_NO_COLOR_MIX: Switch = Switch::since(4, 1, 5, "an alpha of 100% gives no color-mix()");
+
+/// The utilities `h-lh`, `min-h-lh` and `max-h-lh`. Before: no such
+/// utilities.
+pub const HEIGHT_LH: Switch = Switch::since(4, 1, 5, "h-lh, min-h-lh and max-h-lh");
+
+/// The default of `transition` has also `display`, `content-visibility`,
+/// `overlay` and `pointer-events`. Before: the list ended at
+/// `backdrop-filter`.
+pub const TRANSITION_DISPLAY: Switch = Switch::since(4, 1, 5, "transition has display, content-visibility, overlay, pointer-events");
+
+// --- 4.1.4 ----------------------------------------------------------------
+
+/// The fallbacks of `color-mix(…)` are made after the removal of the
+/// unused theme variables. Before: at the declaration, so a theme variable
+/// with a fallback was in an `@supports` rule at the time of the removal,
+/// and the removal took the last node of the list.
+pub const COLOR_MIX_FALLBACK_LAST: Switch = Switch::since(4, 1, 4, "color-mix() fallbacks are made after the theme cleanup");
+
+/// The fallback of `color-mix(…)` follows a theme variable to its value:
+/// `var(--a)` with `--a: var(--b)` gives the value of `--b`, and a value
+/// `currentcolor` is known. Before: the value of the first variable went
+/// into the fallback as it was.
+pub const COLOR_MIX_VARIABLE_CHAIN: Switch = Switch::since(4, 1, 4, "color-mix() fallbacks follow a chain of theme variables");
+
+/// A root with dashes can be a value of the `@` variant: `@foo-bar:flex`
+/// with `--container-foo-bar`, `@[calc(1rem-1px)]:flex`. Before: only an
+/// input with no dash got the `@` root.
+pub const AT_ROOT_WITH_DASH: Switch = Switch::since(4, 1, 4, "the value of the @ variant can have a dash");
+
+/// `transform` reads `var(--tw-rotate-x, )` and the four other variables
+/// with an empty fallback, and their `@property` rules have no initial
+/// value. Before: `var(--tw-rotate-x)`, and the initial values
+/// `rotateX(0)`, `rotateY(0)`, `rotateZ(0)`, `skewX(0)`, `skewY(0)`.
+pub const TRANSFORM_EMPTY_FALLBACKS: Switch = Switch::since(4, 1, 4, "the transform variables have empty fallbacks");
+
+/// `shadow-inherit`, `inset-shadow-inherit`, `text-shadow-inherit` and
+/// `drop-shadow-inherit` set the color variable to `inherit`. Before:
+/// `inherit` was a color as each other: `color-mix(in oklab, inherit
+/// var(--tw-shadow-alpha), transparent)`.
+pub const SHADOW_INHERIT: Switch = Switch::since(4, 1, 4, "shadow-inherit sets the color variable to inherit");
+
+/// A range of the brace expansion goes from its start to its end, also
+/// when the step has the other sign: `{10..0..5}`. Before: the sign of the
+/// step gave the direction, and such a range was empty.
+pub const BRACE_RANGE_DIRECTION: Switch = Switch::since(4, 1, 4, "a brace range ignores the sign of its step");
+
+// --- 4.1.2 ----------------------------------------------------------------
+
+/// The fallback of `color-mix(…)` is made for each variable and for
+/// `currentcolor`: a `color-mix(…)` with a color that is not known gives
+/// its first color. Before: only a variable with a value in the theme gave
+/// a fallback.
+pub const COLOR_MIX_FALLBACK_FOR_EACH_COLOR: Switch = Switch::since(4, 1, 2, "color-mix() gets a fallback also for colors that are not known");
+
+/// The fallbacks of `@property` are in `@layer properties` at the end of
+/// the stylesheet, and an empty `@layer properties;` is at the start.
+/// Before: one rule `@supports … { @layer base { … } }` near the start.
+pub const PROPERTIES_LAYER: Switch = Switch::since(4, 1, 2, "the @property fallbacks are in @layer properties");
+
+/// `currentcolor` is in lowercase: `bg-current`, the default color of
+/// `ring-*` and `inset-ring-*`, and the default theme of
+/// `theme(borderColor.DEFAULT)`. Before: `currentColor`.
+pub const CURRENTCOLOR_LOWERCASE: Switch = Switch::since(4, 1, 2, "currentcolor is in lowercase");
+
+/// A `--drop-shadow-*` theme value with more than one shadow gives one
+/// `drop-shadow(…)` for each. Before: one `drop-shadow(…)` with all the
+/// text.
+pub const DROP_SHADOW_LIST: Switch = Switch::since(4, 1, 2, "one drop-shadow() for each shadow of a theme value");
+
+/// `inset-shadow-[…]` with more than one shadow puts `inset` before each.
+/// Before: only before the first.
+pub const INSET_SHADOW_LIST: Switch = Switch::since(4, 1, 2, "inset before each shadow of inset-shadow-[…]");
+
+// --- 4.1.1 ----------------------------------------------------------------
+
+/// The fallbacks of `@property` go after the `@charset` rules, the
+/// `@import` rules and the `@layer` rules with no body at the start, or
+/// at the end of the rules. Before: after the comments at the start, or
+/// at the start.
+pub const FALLBACKS_AFTER_IMPORTS: Switch = Switch::since(4, 1, 1, "the @property fallbacks go after @import and @layer statements");
+
+/// A number of a range of the brace expansion has no zeros before it.
+/// Before: each number had the length of the longer limit: `{0..10}` gave
+/// `00`, `01`, … `10`.
+pub const BRACE_RANGE_NO_PADDING: Switch = Switch::since(4, 1, 1, "a brace range has no padding");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -562,4 +709,29 @@ pub const ALL: &[&Switch] = &[
     &AT_THEME_IS_A_FEATURE,
     &CUSTOM_VARIANT_CYCLE_ERROR,
     &CUSTOM_VARIANT_AT_VARIANT_COMPOUNDS,
+    &APPLY_ERROR_REASONS,
+    &ROTATE_NEGATIVE_ARBITRARY,
+    &CRLF_STAYS,
+    &PAREN_VALUE_NEEDS_TWO_DASHES,
+    &PAREN_MODIFIER_KEEPS_UNDERSCORES,
+    &SCALE_NEGATIVE_ARBITRARY,
+    &REFERENCE_NO_UTILITIES,
+    &APPLY_NESTED_WALK,
+    &APPLY_CANDIDATES_AS_KEYS,
+    &FULL_ALPHA_NO_COLOR_MIX,
+    &HEIGHT_LH,
+    &TRANSITION_DISPLAY,
+    &COLOR_MIX_FALLBACK_LAST,
+    &COLOR_MIX_VARIABLE_CHAIN,
+    &AT_ROOT_WITH_DASH,
+    &TRANSFORM_EMPTY_FALLBACKS,
+    &SHADOW_INHERIT,
+    &BRACE_RANGE_DIRECTION,
+    &COLOR_MIX_FALLBACK_FOR_EACH_COLOR,
+    &PROPERTIES_LAYER,
+    &CURRENTCOLOR_LOWERCASE,
+    &DROP_SHADOW_LIST,
+    &INSET_SHADOW_LIST,
+    &FALLBACKS_AFTER_IMPORTS,
+    &BRACE_RANGE_NO_PADDING,
 ];

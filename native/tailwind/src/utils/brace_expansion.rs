@@ -138,18 +138,38 @@ fn expand_sequence(seq: &str, parts: (&str, &str, Option<&str>)) -> Result<Vec<S
         return Err(ExpandError::ZeroStep);
     }
 
-    let increasing = start_num < end_num;
-    if increasing && step < 0.0 {
-        step = -step;
-    }
-    if !increasing && step > 0.0 {
-        step = -step;
-    }
+    // Before 4.1.4, the sign of the step gave the direction: a step with
+    // the wrong sign gave an empty sequence.
+    let increasing = if crate::switches::BRACE_RANGE_DIRECTION.on() {
+        let increasing = start_num < end_num;
+        if increasing && step < 0.0 {
+            step = -step;
+        }
+        if !increasing && step > 0.0 {
+            step = -step;
+        }
+        increasing
+    } else {
+        step > 0.0
+    };
+
+    // Before 4.1.1, a number had zeros before it, to the length of the
+    // longer of the two limits (the sign is not a part of that length).
+    let pad_length = if crate::switches::BRACE_RANGE_NO_PADDING.on() {
+        0
+    } else {
+        let digits = |text: &str| text.strip_prefix('-').unwrap_or(text).len();
+        digits(start).max(digits(end))
+    };
 
     let mut result = Vec::new();
     let mut i = start_num;
     while if increasing { i <= end_num } else { i >= end_num } {
-        result.push(js_number_to_string(i));
+        let mut number = js_number_to_string(i);
+        if number.len() < pad_length {
+            number.insert_str(0, &"0".repeat(pad_length - number.len()));
+        }
+        result.push(number);
         let next = i + step;
         if next == i {
             return Err(ExpandError::EndlessSequence(seq.to_string()));

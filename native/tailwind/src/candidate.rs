@@ -320,10 +320,14 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
         let (data_type, value) = if parts.len() == 2 { (Some(parts[0]), parts[1]) } else { (None, inner) };
 
         // The value must be a CSS variable.
-        if !value.starts_with("--") {
-            return result;
-        }
-        if !is_valid_arbitrary(value) {
+        if switches::PAREN_VALUE_NEEDS_TWO_DASHES.on() {
+            if !value.starts_with("--") {
+                return result;
+            }
+            if !is_valid_arbitrary(value) {
+                return result;
+            }
+        } else if !has_a_dash_at_the_start(value) {
             return result;
         }
         let value = match data_type {
@@ -409,6 +413,23 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
     result
 }
 
+/// `value[0] !== '-' && value[1] !== '-'` is false: the check of the
+/// short form of a variable before 4.1.6. One `-` in the first two
+/// characters was sufficient: `w-(-x)`, `w-(a-b)`.
+fn has_a_dash_at_the_start(value: &str) -> bool {
+    value.as_bytes().iter().take(2).any(|b| *b == b'-')
+}
+
+/// True when the text in `(…)` can be the short form of a variable: it
+/// starts with `--`. Before 4.1.6: see `has_a_dash_at_the_start`.
+fn is_variable_short_form(value: &str) -> bool {
+    if switches::PAREN_VALUE_NEEDS_TWO_DASHES.on() {
+        value.starts_with("--")
+    } else {
+        has_a_dash_at_the_start(value)
+    }
+}
+
 fn parse_modifier(modifier: &str) -> Option<CandidateModifier> {
     if modifier.starts_with('[') && modifier.ends_with(']') && modifier.len() >= 2 {
         let arbitrary = decode_valid_arbitrary_value(&modifier[1..modifier.len() - 1])?;
@@ -420,8 +441,16 @@ fn parse_modifier(modifier: &str) -> Option<CandidateModifier> {
 
     if modifier.starts_with('(') && modifier.ends_with(')') && modifier.len() >= 2 {
         let inner = &modifier[1..modifier.len() - 1];
+        if !switches::PAREN_MODIFIER_KEEPS_UNDERSCORES.on() {
+            // Before 4.1.6: decode first, then add `var(…)`.
+            let arbitrary = decode_valid_arbitrary_value(inner)?;
+            if blank(&arbitrary) || !is_variable_short_form(&arbitrary) {
+                return None;
+            }
+            return Some(CandidateModifier { kind: ValueKind::Arbitrary, value: format!("var({arbitrary})") });
+        }
         // The value must be a CSS variable.
-        if !inner.starts_with("--") {
+        if !is_variable_short_form(inner) {
             return None;
         }
         if !is_valid_arbitrary(inner) {
@@ -517,7 +546,7 @@ pub fn parse_variant(variant: &str, design_system: &DesignSystem) -> Option<Vari
                     if blank(&arbitrary) {
                         return None;
                     }
-                    if !arbitrary.starts_with("--") {
+                    if !is_variable_short_form(&arbitrary) {
                         return None;
                     }
                     return Some(Variant::Functional {
@@ -609,8 +638,10 @@ fn find_roots(input: &str, exists: &dyn Fn(&str) -> bool) -> Vec<(String, Option
         idx = input[..i].rfind('-');
     }
 
-    // The `@` root has no dash: `@md`, `@[200px]`.
-    if bytes.first() == Some(&b'@') && exists("@") {
+    // The `@` root has no dash: `@md`, `@[200px]`. Before 4.1.4, an input
+    // with a dash did not get the `@` root.
+    let at_root = switches::AT_ROOT_WITH_DASH.on() || !input.contains('-');
+    if at_root && bytes.first() == Some(&b'@') && exists("@") {
         roots.push(("@".to_string(), Some(input[1..].to_string())));
     }
 

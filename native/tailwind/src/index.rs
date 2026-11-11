@@ -715,7 +715,10 @@ impl Collector {
 
             // In a `@reference`, `@tailwind utilities` is not there.
             let node_context = css_context(ancestors);
-            if node_context.get("reference").is_some_and(|v| v.truthy()) {
+            // Before 4.1.6 it was the utilities node, and its rules were
+            // removed with the other rules of the reference.
+            let in_reference = node_context.get("reference").is_some_and(|v| v.truthy());
+            if in_reference && crate::switches::REFERENCE_NO_UTILITIES.on() {
                 return Ok(WalkAction::Replace(Vec::new()));
             }
 

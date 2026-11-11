@@ -174,6 +174,11 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
 /// not empty), each node has its source location, and the message of an
 /// error starts with `file:line:column: `.
 pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>, CssSyntaxError> {
+    // Before 4.1.6 the parser replaced each `\r\n` of the input first.
+    if !crate::switches::CRLF_STAYS.on() && input.contains("\r\n") {
+        return parse_with_source(&input.replace("\r\n", "\n"), from);
+    }
+
     let bytes = input.as_bytes();
     let len = bytes.len();
 

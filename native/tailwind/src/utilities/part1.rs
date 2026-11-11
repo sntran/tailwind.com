@@ -5,6 +5,7 @@ use super::{functional_utility, property, spacing_utility, NamedValue, SpacingOp
 use crate::ast::{at_root, at_rule, decl, AstNode};
 use crate::candidate::{FunctionalCandidate, UtilityValue};
 use crate::design_system::DesignSystem;
+use crate::switches;
 use crate::theme::Theme;
 use crate::utils::compare_breakpoints::{compare_breakpoints, Direction};
 use crate::utils::infer_data_type::{
@@ -108,12 +109,14 @@ fn scale_properties() -> AstNode {
 }
 
 fn transform_properties() -> AstNode {
+    // Before 4.1.4, each property had an initial value.
+    let initial = |value: &'static str| (!switches::TRANSFORM_EMPTY_FALLBACKS.on()).then_some(value);
     at_root(vec![
-        property("--tw-rotate-x", None, None),
-        property("--tw-rotate-y", None, None),
-        property("--tw-rotate-z", None, None),
-        property("--tw-skew-x", None, None),
-        property("--tw-skew-y", None, None),
+        property("--tw-rotate-x", initial("rotateX(0)"), None),
+        property("--tw-rotate-y", initial("rotateY(0)"), None),
+        property("--tw-rotate-z", initial("rotateZ(0)"), None),
+        property("--tw-skew-x", initial("skewX(0)"), None),
+        property("--tw-skew-y", initial("skewY(0)"), None),
     ])
 }
 
@@ -131,6 +134,19 @@ fn snap_properties() -> AstNode {
 
 const TRANSFORM_VALUE: &str =
     "var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, )";
+
+/// The value of `transform` before 4.1.4: no empty fallbacks.
+const TRANSFORM_VALUE_NO_FALLBACKS: &str =
+    "var(--tw-rotate-x) var(--tw-rotate-y) var(--tw-rotate-z) var(--tw-skew-x) var(--tw-skew-y)";
+
+/// The value of `transform`, as the selected version writes it.
+fn transform_value() -> &'static str {
+    if switches::TRANSFORM_EMPTY_FALLBACKS.on() {
+        super::empty_fallbacks(TRANSFORM_VALUE)
+    } else {
+        TRANSFORM_VALUE_NO_FALLBACKS
+    }
+}
 
 const TOUCH_ACTION: &str = "var(--tw-pan-x, ) var(--tw-pan-y, ) var(--tw-pinch-zoom, )";
 
@@ -152,6 +168,7 @@ fn handle_scale(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSystem) 
         }
         let value = match candidate.value.as_ref()? {
             UtilityValue::Arbitrary { value, .. } => {
+                let negative = negative && switches::SCALE_NEGATIVE_ARBITRARY.on();
                 return Some(vec![decl("scale", negate(value.clone(), negative))]);
             }
             UtilityValue::Named { value: named, .. } => {
@@ -187,6 +204,15 @@ fn handle_rotate(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSystem)
                 };
                 if is_vector {
                     return Some(vec![decl("rotate", format!("{value} var(--tw-rotate)"))]);
+                }
+                if !switches::ROTATE_NEGATIVE_ARBITRARY.on() {
+                    let is_angle = match data_type {
+                        Some(data_type) => data_type == "angle",
+                        None => infer_data_type(value, &[DataType::Angle, DataType::Vector]) == Some(DataType::Angle),
+                    };
+                    if !is_angle {
+                        return Some(vec![decl("rotate", value.as_str())]);
+                    }
                 }
                 value.clone()
             }
@@ -581,9 +607,11 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     st(u, "min-w-auto", &[("min-width", "auto")]);
     st(u, "min-h-auto", &[("min-height", "auto")]);
 
-    st(u, "h-lh", &[("height", "1lh")]);
-    st(u, "min-h-lh", &[("min-height", "1lh")]);
-    st(u, "max-h-lh", &[("max-height", "1lh")]);
+    if switches::HEIGHT_LH.on() {
+        st(u, "h-lh", &[("height", "1lh")]);
+        st(u, "min-h-lh", &[("min-height", "1lh")]);
+        st(u, "max-h-lh", &[("max-height", "1lh")]);
+    }
 
     st(u, "w-screen", &[("width", "100vw")]);
     st(u, "min-w-screen", &[("min-width", "100vw")]);
@@ -897,7 +925,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
                 Some(vec![
                     transform_properties(),
                     decl(variable.as_str(), format!("{function}({value})")),
-                    decl("transform", super::empty_fallbacks(TRANSFORM_VALUE)),
+                    decl("transform", transform_value()),
                 ])
             })
             .negative()
@@ -915,7 +943,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
                 transform_properties(),
                 decl("--tw-skew-x", format!("skewX({value})")),
                 decl("--tw-skew-y", format!("skewY({value})")),
-                decl("transform", super::empty_fallbacks(TRANSFORM_VALUE)),
+                decl("transform", transform_value()),
             ])
         })
         .negative()
@@ -929,7 +957,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             Some(vec![
                 transform_properties(),
                 decl("--tw-skew-x", format!("skewX({value})")),
-                decl("transform", super::empty_fallbacks(TRANSFORM_VALUE)),
+                decl("transform", transform_value()),
             ])
         })
         .negative()
@@ -943,7 +971,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             Some(vec![
                 transform_properties(),
                 decl("--tw-skew-y", format!("skewY({value})")),
-                decl("transform", super::empty_fallbacks(TRANSFORM_VALUE)),
+                decl("transform", transform_value()),
             ])
         })
         .negative()
@@ -957,15 +985,15 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             return None;
         }
         let value = match &candidate.value {
-            None => super::empty_fallbacks(TRANSFORM_VALUE),
+            None => transform_value(),
             Some(UtilityValue::Arbitrary { value, .. }) => value.as_str(),
             Some(UtilityValue::Named { .. }) => return None,
         };
         Some(vec![transform_properties(), decl("transform", value)])
     });
 
-    st(u, "transform-cpu", &[("transform", super::empty_fallbacks(TRANSFORM_VALUE))]);
-    st(u, "transform-gpu", &[("transform", &format!("translateZ(0) {}", super::empty_fallbacks(TRANSFORM_VALUE)))]);
+    st(u, "transform-cpu", &[("transform", transform_value())]);
+    st(u, "transform-gpu", &[("transform", &format!("translateZ(0) {}", transform_value()))]);
     st(u, "transform-none", &[("transform", "none")]);
 
     // `zoom`

@@ -29,6 +29,8 @@ fn the_compiler_gives_the_result_of_each_recorded_version() {
     let text = std::fs::read_to_string(path).expect("tests/upstream/switches.jsonl");
     let mut cases = 0;
     let mut with_a_change = 0;
+    // Each case and version with another result than the record.
+    let mut different: Vec<String> = Vec::new();
     for line in text.lines().filter(|line| !line.trim().is_empty()) {
         let case: serde_json::Value = serde_json::from_str(line).expect("a JSON case");
         let name = case["name"].as_str().unwrap_or("?");
@@ -39,7 +41,9 @@ fn the_compiler_gives_the_result_of_each_recorded_version() {
         assert!(results.len() >= 2, "{name}: a case needs the result of two versions");
         for (version, expected) in results {
             let parsed = Version::parse(version).unwrap_or_else(|| panic!("{name}: the version {version}"));
-            assert_eq!(&result(css, &candidates, parsed), expected, "{name}, as Tailwind CSS {version}");
+            if &result(css, &candidates, parsed) != expected {
+                different.push(format!("{name}, as Tailwind CSS {version}"));
+            }
         }
         let mut values = results.values();
         let first = values.next().unwrap();
@@ -49,6 +53,7 @@ fn the_compiler_gives_the_result_of_each_recorded_version() {
         cases += 1;
     }
     assert!(cases > 0);
+    assert!(different.is_empty(), "{} results are not the record:\n{}", different.len(), different.join("\n"));
     // Most cases must show a change: a case with the same result in each
     // version tests no switch.
     assert!(with_a_change * 2 >= cases, "{with_a_change} of {cases} cases have a result that changes");

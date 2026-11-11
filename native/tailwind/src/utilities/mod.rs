@@ -196,7 +196,8 @@ fn alpha_percentage(alpha: &str) -> String {
 /// Apply an opacity to a color with `color-mix`.
 pub fn with_alpha(value: &str, alpha: &str) -> String {
     let alpha = alpha_percentage(alpha);
-    if alpha == "100%" {
+    // Before 4.1.5, an alpha of 100% had a `color-mix(…)` too.
+    if alpha == "100%" && crate::switches::FULL_ALPHA_NO_COLOR_MIX.on() {
         return value.to_string();
     }
     format!("color-mix(in oklab, {value} {alpha}, transparent)")
@@ -234,6 +235,16 @@ pub fn as_color(value: &str, modifier: Option<&CandidateModifier>, theme: &Theme
 
 /// The color of a named candidate value from the theme, with the opacity of
 /// the modifier. `inherit`, `transparent` and `current` need no theme.
+/// The keyword `currentcolor`, as the selected version writes it. Before
+/// 4.1.2: `currentColor`.
+pub(crate) fn current_color() -> &'static str {
+    if crate::switches::CURRENTCOLOR_LOWERCASE.on() {
+        "currentcolor"
+    } else {
+        "currentColor"
+    }
+}
+
 pub fn resolve_theme_color(candidate: &FunctionalCandidate, theme: &Theme, theme_keys: &[&str]) -> Option<String> {
     let name = match &candidate.value {
         Some(UtilityValue::Named { value, .. }) => value.as_str(),
@@ -242,7 +253,7 @@ pub fn resolve_theme_color(candidate: &FunctionalCandidate, theme: &Theme, theme
     let value = match name {
         "inherit" => Some("inherit".to_string()),
         "transparent" => Some("transparent".to_string()),
-        "current" => Some("currentcolor".to_string()),
+        "current" => Some(current_color().to_string()),
         _ => theme.resolve(Some(name), theme_keys),
     };
     match value {

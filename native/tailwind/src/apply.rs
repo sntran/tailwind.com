@@ -87,6 +87,11 @@ fn substitute(
     }
     let sorted = sorter.sorted;
 
+    if !crate::switches::APPLY_NESTED_WALK.on() {
+        substitute_direct_children(tree, sorted, &collected, design_system, on_utility_change)?;
+        return Ok(collected.features);
+    }
+
     // Substitute in the sorted sequence. The substitution of a node also
     // does all its descendants.
     let mut done: Vec<Path> = Vec::new();
@@ -121,6 +126,98 @@ fn substitute(
     }
 
     Ok(collected.features)
+}
+
+/// The substitution before 4.1.6: for each parent in the sorted sequence,
+/// only the `@apply` rules that are children of the parent.
+///
+/// A utility that an `@apply` compiles before the substitution of its
+/// nested rules keeps the nested `@apply` rules, and the cache of the
+/// compiler keeps that result. An `@apply` that stays is not in the
+/// output: the last pass of the compiler drops an at-rule with no
+/// children.
+fn substitute_direct_children(
+    tree: &mut [AstNode],
+    sorted: Vec<Path>,
+    collected: &Collected,
+    design_system: &DesignSystem,
+    on_utility_change: &mut Option<OnUtilityChange>,
+) -> Result<()> {
+    // The `@utility` rule that contains each parent: the length of its
+    // path, and its position in all the `@utility` rules. A substitution
+    // moves the nodes after it, so the paths change, but not the lengths.
+    let utility_paths: HashSet<&Path> = collected.definitions.values().flatten().collect();
+    let utilities: Vec<Option<(usize, usize)>> = sorted
+        .iter()
+        .map(|path| {
+            (1..=path.len()).find(|length| utility_paths.contains(&path[..*length].to_vec())).and_then(|length| {
+                collected.utilities_before.get(&path[..length]).map(|ordinal| (length, *ordinal))
+            })
+        })
+        .collect();
+
+    // A path is `None` when a substitution removed its node.
+    let mut sorted: Vec<Option<Path>> = sorted.into_iter().map(Some).collect();
+    for position in 0..sorted.len() {
+        let Some(path) = sorted[position].clone() else { continue };
+        // Upstream has the rule above a context node as the parent, and
+        // the `@apply` is not a child of that rule: no substitution. An
+        // `@apply` at the top level of a stylesheet is such a rule.
+        let Some(nodes) = node_at_mut(tree, &path)
+            .filter(|node| !matches!(node, AstNode::Context(_)))
+            .and_then(AstNode::children_mut)
+        else {
+            continue;
+        };
+
+        let mut changed = false;
+        let mut index = 0;
+        while index < nodes.len() {
+            let AstNode::AtRule(child) = &nodes[index] else {
+                index += 1;
+                continue;
+            };
+            if child.name != "@apply" {
+                index += 1;
+                continue;
+            }
+            let Some(new_nodes) = apply(child, design_system)? else {
+                index += 1;
+                continue;
+            };
+            let count = new_nodes.len();
+            nodes.splice(index..=index, new_nodes);
+            changed = true;
+
+            // The nodes after the `@apply` rule have a new index.
+            for later in sorted[position + 1..].iter_mut() {
+                let Some(other) = later else { continue };
+                if other.len() <= path.len() || !other.starts_with(&path) {
+                    continue;
+                }
+                let at = &mut other[path.len()];
+                if *at == index {
+                    *later = None;
+                } else if *at > index {
+                    *at = *at + count - 1;
+                }
+            }
+
+            // As the loop of upstream: the next index, also when the new
+            // nodes start there.
+            index += 1;
+        }
+
+        if !changed {
+            continue;
+        }
+        if let (Some((length, ordinal)), Some(callback)) = (utilities[position], on_utility_change.as_mut()) {
+            if let Some(AstNode::AtRule(utility)) = node_at(tree, &path[..length]) {
+                callback(ordinal, utility);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn node_at<'a>(tree: &'a [AstNode], path: &[usize]) -> Option<&'a AstNode> {
@@ -247,7 +344,9 @@ fn collect(nodes: &[AstNode], path: &mut Path, design_system: &DesignSystem, out
 
                 for dependency in resolve_apply_dependencies(at, design_system) {
                     // Each parent in the path depends on that utility.
-                    for length in 1..path.len() {
+                    // Before 4.1.6: only the parent of the `@apply` rule.
+                    let first = if crate::switches::APPLY_NESTED_WALK.on() { 1 } else { path.len() - 1 };
+                    for length in first..path.len() {
                         let ancestor = &path[..length];
                         if !out.parents.contains(ancestor) {
                             continue;
@@ -458,6 +557,9 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
 
     // The keys of a JavaScript object: the array indices first, in the
     // sequence of the numbers.
+    // Before 4.1.6 the candidates were a list, in the sequence of the text.
+    let as_keys = crate::switches::APPLY_CANDIDATES_AS_KEYS.on();
+    let array_index = |key: &str| if as_keys { array_index(key) } else { None };
     let mut numeric: Vec<(u32, &str)> = candidates.iter().filter_map(|c| array_index(c).map(|n| (n, *c))).collect();
     numeric.sort();
     let candidates: Vec<String> = numeric
@@ -532,6 +634,10 @@ fn set_src(nodes: &mut [AstNode], src: Option<&SourceLocation>) {
 
 /// The error for a candidate of `@apply` that gives no rule.
 fn invalid_candidate_error(candidate: &str, design_system: &DesignSystem) -> Error {
+    if !crate::switches::APPLY_ERROR_REASONS.on() {
+        return Error::new(format!("Cannot apply unknown utility class: {candidate}"));
+    }
+
     // With a prefix, the candidate must have the prefix.
     if let Some(prefix) = design_system.theme.prefix.as_deref().filter(|p| !p.is_empty()) {
         if !candidate.starts_with(prefix) {
