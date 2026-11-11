@@ -12,6 +12,12 @@
 //! `tailwindcss` or of `tailwindcss/NAME` gets the file of ASSETS_DIR, as
 //! the npm package gives it. A panic is an output line too
 //! (`{"panic": "..."}`), so one case does not stop the run.
+//!
+//! With `FUZZ_ENGINE=script` in the environment, the script engine builds
+//! each case: the official compiler of the package in ASSETS_DIR
+//! (`dist/lib.js`), in the JavaScript engine of the program. Then the
+//! fuzzer compares the two JavaScript engines on one compiler, for the
+//! version of Tailwind CSS that is in ASSETS_DIR.
 
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -48,6 +54,44 @@ impl ModuleLoader for Quiet {
     }
     fn cwd(&self) -> String {
         self.0.cwd()
+    }
+}
+
+/// The npm package `tailwindcss` in ASSETS_DIR.
+struct NpmPackage {
+    directory: PathBuf,
+    version: String,
+}
+
+impl tailwind::script::Package for NpmPackage {
+    fn version(&self) -> &str {
+        &self.version
+    }
+    fn read(&self, name: &str) -> Option<String> {
+        std::fs::read_to_string(self.directory.join(name)).ok()
+    }
+}
+
+fn one_script(package: &Rc<NpmPackage>, css: &str, candidates: &[String], base: &str) -> serde_json::Value {
+    let assets = package.directory.clone();
+    let loader = |id: &str, base: &str| load(&assets, id, base);
+    let options = tailwind::script::ScriptOptions {
+        base: base.to_string(),
+        from: None,
+        load_stylesheet: Some(&loader),
+        module_loader: Rc::new(Quiet::default()),
+    };
+    match tailwind::script::compile(css, options, package.clone()).and_then(|mut compiler| compiler.try_build(candidates)) {
+        // The compiler of a package always prints the license comment.
+        // The fuzzer compares the CSS with no such line.
+        Ok(css) => {
+            let css = match css.split_once('\n') {
+                Some((first, rest)) if first.starts_with("/*! tailwindcss v") => rest.to_string(),
+                _ => css,
+            };
+            serde_json::json!({ "css": css })
+        }
+        Err(e) => serde_json::json!({ "error": e.message }),
     }
 }
 
@@ -88,6 +132,11 @@ fn one(assets: &Path, css: &str, candidates: &[String], base: &str) -> serde_jso
 
 fn main() {
     let assets = PathBuf::from(std::env::args().nth(1).expect("usage: fuzz_build ASSETS_DIR < cases.jsonl"));
+    let script = std::env::var("FUZZ_ENGINE").is_ok_and(|engine| engine == "script").then(|| {
+        let text = std::fs::read_to_string(assets.join("package.json")).expect("package.json in ASSETS_DIR");
+        let json: serde_json::Value = serde_json::from_str(&text).expect("package.json");
+        Rc::new(NpmPackage { directory: assets.clone(), version: json["version"].as_str().unwrap_or_default().to_string() })
+    });
     // A panic of a case is a result, not a message on stderr.
     std::panic::set_hook(Box::new(|_| {}));
     let stdout = std::io::stdout();
@@ -104,7 +153,11 @@ fn main() {
             .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
             .unwrap_or_default();
         let base = case["base"].as_str().unwrap_or("").to_string();
-        let result = std::panic::catch_unwind(|| one(&assets, &css, &candidates, &base)).unwrap_or_else(|p| {
+        let build = std::panic::AssertUnwindSafe(|| match &script {
+            Some(package) => one_script(package, &css, &candidates, &base),
+            None => one(&assets, &css, &candidates, &base),
+        });
+        let result = std::panic::catch_unwind(build).unwrap_or_else(|p| {
             let text = p
                 .downcast_ref::<String>()
                 .cloned()

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// The sort of the JavaScript runtime (native/tailwind/js/sort.ts) against
-// the sort of V8, in Node.js.
+// The parts of the JavaScript runtime that must do the same as V8,
+// against Node.js: the sort (native/tailwind/js/sort.ts) and
+// `Intl.ListFormat` (native/tailwind/js/intl.ts).
 //
-// Usage: node tests/sort.mjs [CASES]
+// Usage: node tests/v8.mjs [CASES]
 //
 // The runtime has the sort algorithm of V8, because the result of a sort
 // with a compare function that is not consistent depends on the
@@ -11,7 +12,7 @@
 // function (the two values, in sequence) and the result. The compare
 // functions are consistent, not consistent, and without sense.
 //
-// Node.js 22.18 or later reads the TypeScript file directly.
+// Node.js 22.18 or later reads the TypeScript files directly.
 import assert from 'node:assert'
 
 const nativeSort = Array.prototype.sort
@@ -151,4 +152,27 @@ for (let i = 0; i < 300; i++) {
 assert.throws(() => sort.call([2, 1], 1), TypeError)
 assert.deepStrictEqual(sort.call({ length: 3, 0: 'c', 1: 'a', 2: 'b' }), { length: 3, 0: 'a', 1: 'b', 2: 'c' })
 
-console.log(`sort.mjs: ${done} cases, ${callsTotal} calls of the compare function: the same as V8 (Node.js ${process.version})`)
+console.log(`v8.mjs: sort: ${done} cases, ${callsTotal} calls of the compare function: the same as V8 (Node.js ${process.version})`)
+
+// `Intl.ListFormat`, for English.
+const NativeIntl = globalThis.Intl
+const { Intl: OurIntl } = await import('../native/tailwind/js/intl.ts')
+assert.strictEqual(globalThis.Intl, NativeIntl)
+let lists = 0
+for (let type of ['conjunction', 'disjunction', 'unit', undefined]) {
+  for (let style of ['long', 'short', 'narrow', undefined]) {
+    for (let length = 0; length <= 6; length++) {
+      let list = Array.from({ length }, (_, i) => ['`has-group`', 'in-not', 'a b', '', 'é', 'x,y'][i])
+      let expected = new NativeIntl.ListFormat('en', { style, type })
+      let actual = new OurIntl.ListFormat('en', { style, type })
+      assert.strictEqual(actual.format(list), expected.format(list), `Intl.ListFormat ${type} ${style} ${length}`)
+      assert.deepStrictEqual(actual.formatToParts(list), expected.formatToParts(list))
+      assert.deepStrictEqual(actual.resolvedOptions(), expected.resolvedOptions())
+      lists++
+    }
+  }
+}
+assert.strictEqual(new OurIntl.ListFormat().format(new Set(['a', 'b'])), 'a and b')
+assert.throws(() => new OurIntl.ListFormat('en', { type: 'x' }), RangeError)
+assert.throws(() => new OurIntl.ListFormat('en').format([1]), TypeError)
+console.log(`v8.mjs: Intl.ListFormat: ${lists} lists: the same as V8`)
