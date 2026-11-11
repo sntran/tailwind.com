@@ -1,5 +1,5 @@
 os=ubuntu-26.04
-vm=netbsd
+vm=openbsd
 key=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHTj/1tZLzF95wYdklw87CWW1pVhQj46awImd3qpVlKV tailwind.com-ci
 branch=debug/ssh
 minutes=40
