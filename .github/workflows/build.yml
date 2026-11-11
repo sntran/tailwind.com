@@ -8,9 +8,9 @@ on:
     # before there is a pull request.
     branches: [main, "ccr-*", "feat/**", "fix/**", "ci/**"]
     tags: ["v*"]
-    paths-ignore: ["**.md", "docs/**"]
+    paths-ignore: ["**.md", "docs/**", ".github/remote-ssh.request"]
   pull_request:
-    paths-ignore: ["**.md", "docs/**"]
+    paths-ignore: ["**.md", "docs/**", ".github/remote-ssh.request"]
   workflow_dispatch:
 
 permissions:
