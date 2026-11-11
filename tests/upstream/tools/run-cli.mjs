@@ -19,6 +19,18 @@
 //
 // In stderr.txt, the text <project> replaces the absolute path of the project copy.
 //
+// A case with the exit code 0 can print a warning to stderr. Then the script writes
+// stderr-contains.txt: each line of stderr with no color codes, except the header, the empty
+// lines and the line "Done in ...". For an error case, stderr-contains.txt is written by hand
+// (a message that another JavaScript engine cannot repeat), and the script does not change it.
+//
+// A case can have project.txt in place of project/: the name of another case of the directory.
+// The case then runs on a copy of the project of that case (one project for two sets of
+// arguments).
+//
+// A case can have env.txt: the environment variables for the program, one NAME=VALUE for each
+// line. The text <project> in a value is the absolute path of the project copy.
+//
 // The fixtures do not keep node_modules/.bin: its entries are symbolic links, and a copy of a
 // symbolic link fails on Windows. Delete node_modules/.bin from a project after npm install.
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -90,7 +102,11 @@ for (let name of fs.readdirSync(cliDir).sort()) {
   if (only.length > 0 && !only.includes(name)) continue
 
   let project = path.join(work, name, 'project')
-  fs.cpSync(path.join(caseDir, 'project'), project, { recursive: true })
+  let source = path.join(caseDir, 'project')
+  if (fs.existsSync(path.join(caseDir, 'project.txt'))) {
+    source = path.join(cliDir, fs.readFileSync(path.join(caseDir, 'project.txt'), 'utf8').trim(), 'project')
+  }
+  fs.cpSync(source, project, { recursive: true })
   project = fs.realpathSync(project)
   let before = new Set(listFiles(project))
   let stdinFile = path.join(caseDir, 'stdin.txt')
@@ -106,10 +122,18 @@ for (let name of fs.readdirSync(cliDir).sort()) {
   }
 
   let args = fs.readFileSync(path.join(caseDir, 'args.txt'), 'utf8').split('\n').filter((line) => line !== '')
+  let env = {}
+  if (fs.existsSync(path.join(caseDir, 'env.txt'))) {
+    for (let line of fs.readFileSync(path.join(caseDir, 'env.txt'), 'utf8').split('\n')) {
+      let index = line.indexOf('=')
+      if (index > 0) env[line.slice(0, index)] = line.slice(index + 1).replaceAll('<project>', project)
+    }
+  }
   let nodeArgs = fs.existsSync(path.join(caseDir, 'standalone.txt')) ? ['--import', interop] : []
   let result = spawnSync(process.execPath, [...nodeArgs, bin, ...args], {
     cwd: project,
-    env: { ...process.env, NODE_ENV: '', NO_COLOR: '1' },
+    // NODE_NO_WARNINGS: the warnings of Node.js itself are not a part of the record.
+    env: { ...process.env, NODE_ENV: '', NO_COLOR: '1', NODE_NO_WARNINGS: '1', ...env },
     maxBuffer: 256 * 1024 * 1024,
     input: fs.existsSync(stdinFile) ? fs.readFileSync(stdinFile) : undefined,
   })
@@ -121,6 +145,18 @@ for (let name of fs.readdirSync(cliDir).sort()) {
     fs.writeFileSync(path.join(caseDir, 'stderr.txt'), stderr)
   } else {
     fs.rmSync(path.join(caseDir, 'stderr.txt'), { force: true })
+    // The warnings of a build with no error.
+    let warnings = result.stderr
+      .toString('utf8')
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      .split('\n')
+      .filter((line) => line.trim() !== '' && !line.startsWith('≈ tailwindcss') && !/^Done in \d+/.test(line))
+      .map((line) => line.split(project).join('<project>'))
+    if (warnings.length > 0) {
+      fs.writeFileSync(path.join(caseDir, 'stderr-contains.txt'), warnings.join('\n') + '\n')
+    } else {
+      fs.rmSync(path.join(caseDir, 'stderr-contains.txt'), { force: true })
+    }
   }
 
   // The files that the program made.

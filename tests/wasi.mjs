@@ -11,6 +11,8 @@
 //
 // Each case runs in a child process, because a WASI instance runs one
 // time. The project is a copy outside this repository, as in tests/cli.sh.
+// The files stderr-contains.txt and env.txt of a case have the function
+// that tests/cli.sh gives them.
 //
 // The cases of cli-map are for --map: see tests/cli.sh. The project is
 // the root directory of the WASI program, so the path /PROJECT/app.css of
@@ -25,12 +27,12 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 
 if (process.argv[2] === '--child') {
   // The child: run the program with the project as the root directory.
-  const [wasm, project, ...args] = process.argv.slice(3)
+  const [wasm, project, env, ...args] = process.argv.slice(3)
   const { WASI } = await import('node:wasi')
   const wasi = new WASI({
     version: 'preview1',
     args: ['tailwind', ...args],
-    env: { NO_COLOR: '1', PWD: '/' },
+    env: { NO_COLOR: '1', PWD: '/', ...JSON.parse(env) },
     preopens: { '/': project },
     returnOnExit: true,
     stdin: process.stdin.fd,
@@ -71,11 +73,22 @@ for (const name of names) {
   if (!fs.existsSync(path.join(dir, 'args.txt'))) continue
   const stdin = path.join(dir, 'stdin.txt')
   const project = path.join(work, name)
-  fs.cpSync(path.join(dir, 'project'), project, { recursive: true })
+  // project.txt: the case uses the project of another case.
+  const shared = path.join(dir, 'project.txt')
+  const source = fs.existsSync(shared) ? path.join(cases, fs.readFileSync(shared, 'utf8').trim(), 'project') : path.join(dir, 'project')
+  fs.cpSync(source, project, { recursive: true })
   const args = fs.readFileSync(path.join(dir, 'args.txt'), 'utf8').split('\n').filter((line) => line !== '')
+  // The environment of the case (env.txt). The project is the directory `/`.
+  const env = {}
+  if (fs.existsSync(path.join(dir, 'env.txt'))) {
+    for (const line of fs.readFileSync(path.join(dir, 'env.txt'), 'utf8').split('\n')) {
+      const index = line.indexOf('=')
+      if (index > 0) env[line.slice(0, index)] = line.slice(index + 1).trim().replaceAll('<project>/', '/').replaceAll('<project>', '/')
+    }
+  }
   const result = spawnSync(
     process.execPath,
-    ['--no-warnings', fileURLToPath(import.meta.url), '--child', wasm, project, ...args],
+    ['--no-warnings', fileURLToPath(import.meta.url), '--child', wasm, project, JSON.stringify(env), ...args],
     { maxBuffer: 256 * 1024 * 1024, input: fs.existsSync(stdin) ? fs.readFileSync(stdin) : '' },
   )
   const expectedStatus = Number(fs.readFileSync(path.join(dir, 'exit.txt'), 'utf8'))
@@ -88,8 +101,16 @@ for (const name of names) {
   // For an error: each message line of the official program must be in
   // the error output, as in tests/cli.sh. The project is the directory `/`.
   let missing = []
+  const contains = path.join(dir, 'stderr-contains.txt')
+  if (!fs.existsSync(path.join(dir, 'stderr.txt')) && fs.existsSync(contains)) {
+    // The warnings of a build with no error, without the color codes.
+    const stderr = result.stderr.toString().replace(/\x1b\[[0-9;]*m/g, '')
+    for (let line of fs.readFileSync(contains, 'utf8').split('\n')) {
+      line = line.replaceAll('<project>/', '/').replaceAll('<project>', '/')
+      if (line !== '' && !stderr.includes(line)) missing.push(line)
+    }
+  }
   if (fs.existsSync(path.join(dir, 'stderr.txt'))) {
-    const contains = path.join(dir, 'stderr-contains.txt')
     const lines = fs.existsSync(contains)
       ? fs.readFileSync(contains, 'utf8').split('\n')
       : fs

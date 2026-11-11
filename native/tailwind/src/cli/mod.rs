@@ -314,6 +314,10 @@ fn create_build_from(options: &Options, (css, input_stamp): &(String, Stamp), fr
             module_loader: Some(modules.clone()),
         },
     )?;
+    // `console.warn` of the compiler writes to the standard error.
+    for warning in compiler.take_warnings() {
+        eprintln!("{warning}");
+    }
     ensure_source_detection_root_exists(&compiler.root)?;
 
     let mut sources: Vec<PublicSourceEntry> = Vec::new();
@@ -404,6 +408,11 @@ fn write(
                 map.as_ref().map(|map| map.raw.as_str()),
             )
             .map_err(Error::new)?;
+            // The optimizer recovers from an error in the CSS, and gives
+            // a warning: the official program prints it.
+            if let Some(warnings) = &optimized.warnings {
+                eprintln!("{warnings}");
+            }
             previous.optimized_css = optimized.code;
             if let Some(raw) = optimized.map {
                 map = Some(source_maps::raw_source_map(raw));

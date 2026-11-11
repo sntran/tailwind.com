@@ -15,6 +15,11 @@
 //!   (for a larger file from the recorder with `SOURCE_MAPS_STEP=1`).
 //! - `MAPS_DUMP`: print the output and all the mappings of a record that is
 //!   different (expected, then actual).
+//!
+//! The test needs the command line program (the feature `cli`): the JSON
+//! text of a map and the optimizer are parts of it.
+
+#![cfg(feature = "cli")]
 
 use flate2::read::GzDecoder;
 use serde::Deserialize;

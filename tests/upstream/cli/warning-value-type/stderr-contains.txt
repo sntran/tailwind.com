@@ -1,0 +1,18 @@
+Unsupported bare value data type: "size".
+Only valid data types are: "number", "integer", "ratio", "percentage".
+```css
+--value(integer,size,[integer])
+                ^^^^
+```
+Unsupported bare value data type: "float".
+Only valid data types are: "number", "integer", "ratio", "percentage".
+```css
+--value(--spacing-*,float)
+                    ^^^^^
+```
+Unsupported bare value data type: "text".
+Only valid data types are: "number", "integer", "ratio", "percentage".
+```css
+--modifier(number,text)
+                  ^^^^
+```

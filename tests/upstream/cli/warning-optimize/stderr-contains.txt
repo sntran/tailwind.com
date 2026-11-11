@@ -1,0 +1,8 @@
+Found 1 warning while optimizing generated CSS:
+│   }
+│ }
+│ .card:focus-inside {
+┆       ^-- 'focus-inside' is not recognized as a valid pseudo-class. Did you mean '::focus-inside' (pseudo-element) or is this a typo?
+┆
+│   color: red;
+│ }

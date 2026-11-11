@@ -34,6 +34,9 @@ pub struct DesignSystem {
     pub utilities: Utilities,
     pub variants: Variants,
     pub invalid_candidates: RefCell<HashSet<String>>,
+    /// The warnings of the compiler: each text that Tailwind CSS gives to
+    /// `console.warn`. `Compiler::take_warnings` gives them to the caller.
+    pub warnings: RefCell<Vec<String>>,
     /// True: each declaration of a utility is `!important`.
     pub important: bool,
     /// When set, `resolve_theme_value` calls this function.
@@ -62,6 +65,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         utilities,
         variants,
         invalid_candidates: RefCell::new(HashSet::new()),
+        warnings: RefCell::new(Vec::new()),
         important: false,
         resolve_theme_value_hook: None,
         track_sources: std::cell::Cell::new(false),

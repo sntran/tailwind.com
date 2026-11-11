@@ -1,0 +1,23 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./index.html";
+
+/* The optimizer does not know this pseudo-class: one warning. */
+.card:focus-inside {
+  color: red;
+}
+
+/* The pseudo-classes of Vue and Angular give no warning. */
+.card :deep(.title) {
+  color: blue;
+}
+:global(.app) .card:slotted(p) {
+  color: green;
+}
+:host-context(.dark) .card {
+  color: white;
+}
+.card::ng-deep .title {
+  color: gray;
+}
