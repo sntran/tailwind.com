@@ -243,6 +243,10 @@ apply() {
     node $tools/gen-variants.mjs "$clone" native/tailwind/tests/fixtures/variants.json
     node $tools/gen-optimize.mjs "$clone" native/tailwind/tests/fixtures/optimize.json
 
+    log "The official output of the cases of the fuzzer"
+    sh tests/fuzz/install.sh "$work/fuzz-official"
+    node tests/fuzz/refresh.mjs "$work/fuzz-official"
+
     check
     log "The tests: each failure is behavior of Tailwind CSS $new to port"
     cargo update -p tailwindcss-oxide > /dev/null 2>&1 || true

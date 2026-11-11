@@ -236,7 +236,8 @@ failures as the artifact `fuzz`.
 To keep a fixed failure fixed, add its reduced case (`css`,
 `candidates`, and `official`, the official output) as one line to
 `tests/upstream/fuzz-found.jsonl`. `tests/fuzz_found.rs` replays each
-line.
+line. `node tests/fuzz/refresh.mjs DIR` records the official output of
+each line again (the sync does it for a new version).
 
 A fault made on purpose (a builder that changes the value of
 `underline`) shows that the fuzzer finds a difference, and reduces a
