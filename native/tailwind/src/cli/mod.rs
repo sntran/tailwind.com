@@ -4,6 +4,7 @@
 //! so this program can replace it.
 
 pub mod args;
+pub mod engine;
 pub mod events;
 pub mod modules;
 pub mod optimize_css;
@@ -11,9 +12,10 @@ pub mod remapping;
 pub mod resolve;
 pub mod source_maps;
 
-use crate::index::{compile, CompileOptions, Compiler, Root};
+use crate::index::{compile, CompileOptions, Root};
 use crate::{Error, Result};
 use args::{Parsed, Value};
+use engine::{AnyCompiler, Selection};
 use source_maps::SourceMap;
 use std::io::{IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
@@ -70,7 +72,7 @@ impl Style {
 /// The first line of the output: the name and the version of Tailwind CSS.
 /// The Elixir package `tailwind` reads the version from this line.
 fn header(style: &Style) -> String {
-    format!("{} tailwindcss {}", style.blue("\u{2248}"), style.blue(&format!("v{}", crate::index::VERSION)))
+    format!("{} tailwindcss {}", style.blue("\u{2248}"), style.blue(&format!("v{}", engine::requested_version())))
 }
 
 fn help_text(style: &Style) -> String {
@@ -207,6 +209,8 @@ struct Options {
     /// The interval of `--poll`. `None`: use the file events of the system
     /// when it has them.
     poll: Option<Duration>,
+    /// The engine and the version of Tailwind CSS.
+    engine: Selection,
 }
 
 /// The state of the last write.
@@ -231,7 +235,7 @@ pub(crate) fn stamp(path: &Path) -> Stamp {
 /// A compiler with its scanner, and the files that need a full build when
 /// they change: the input and each imported stylesheet.
 struct Build {
-    compiler: Compiler,
+    compiler: AnyCompiler,
     scanner: Scanner,
     full_rebuild_paths: Vec<(PathBuf, Stamp)>,
 }
@@ -282,7 +286,9 @@ fn create_build(options: &Options, input: &(String, Stamp)) -> Result<Build> {
     // thus the message of a syntax error has the position. On an error,
     // compile again with the locations for that message.
     let from = compiler_from(options);
-    if options.map != MapOption::None {
+    // The script engine is the official compiler: it gets the path, as in
+    // the official program.
+    if options.map != MapOption::None || matches!(options.engine, Selection::Script(_)) {
         return create_build_from(options, input, Some(from));
     }
     match create_build_from(options, input, None) {
@@ -310,30 +316,41 @@ fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), fr
     // is from before the read.
     let dependencies = std::cell::RefCell::new(Vec::<(PathBuf, Stamp)>::new());
     let load = |id: &str, base: &str| {
-        resolve::load_stylesheet(id, base, &mut |path| {
+        resolve::load_stylesheet(id, base, options.engine.package(), &mut |path| {
             dependencies.borrow_mut().push((path.to_path_buf(), stamp(path)))
         })
     };
     let modules = Rc::new(modules::FileSystem::with_quiet_console(quiet));
-    let compiler = compile(
-        css,
-        CompileOptions {
-            base: input_base.to_string_lossy().into_owned(),
-            polyfills: crate::POLYFILLS_ALL,
-            load_stylesheet: Some(&load),
-            test_mode: false,
-            from,
-            module_loader: Some(modules.clone()),
-        },
-    )?;
+    let base = input_base.to_string_lossy().into_owned();
+    let compiler = match &options.engine {
+        Selection::Native => AnyCompiler::Native(Box::new(compile(
+            css,
+            CompileOptions {
+                base,
+                polyfills: crate::POLYFILLS_ALL,
+                load_stylesheet: Some(&load),
+                test_mode: false,
+                from,
+                module_loader: Some(modules.clone()),
+            },
+        )?)),
+        #[cfg(tw_js)]
+        Selection::Script(package) => AnyCompiler::Script(crate::script::compile(
+            css,
+            crate::script::ScriptOptions { base, from, load_stylesheet: Some(&load), module_loader: modules.clone() },
+            package.clone(),
+        )?),
+        #[cfg(not(tw_js))]
+        Selection::Script(_) => return Err(Error::new("This build of the program has no JavaScript engine.")),
+    };
     // `console.warn` of the compiler writes to the standard error.
     for warning in compiler.take_warnings() {
         eprintln!("{warning}");
     }
-    ensure_source_detection_root_exists(&compiler.root)?;
+    ensure_source_detection_root_exists(compiler.root())?;
 
     let mut sources: Vec<PublicSourceEntry> = Vec::new();
-    match &compiler.root {
+    match compiler.root() {
         Root::None => {}
         Root::Default => sources.push(PublicSourceEntry {
             base: options.base.to_string_lossy().into_owned(),
@@ -344,7 +361,7 @@ fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), fr
             sources.push(PublicSourceEntry { base: base.clone(), pattern: pattern.clone(), negated: false })
         }
     }
-    for source in &compiler.sources {
+    for source in compiler.sources() {
         sources.push(PublicSourceEntry {
             base: source.base.clone(),
             pattern: source.pattern.clone(),
@@ -403,7 +420,7 @@ fn output_file(file: &Path, contents: &str) -> std::io::Result<()> {
 /// the output changed.
 fn write(
     css: &str,
-    source_map: &dyn Fn() -> SourceMap,
+    source_map: &dyn Fn() -> Result<SourceMap>,
     options: &Options,
     previous: &mut Previous,
 ) -> Result<bool> {
@@ -411,7 +428,7 @@ fn write(
     // The optimizer and the map run only for new CSS: the watch calls
     // this function at each tick.
     if (optimize || options.map != MapOption::None) && previous.css.as_deref() != Some(css) {
-        let mut map = (options.map != MapOption::None).then(source_map);
+        let mut map = (options.map != MapOption::None).then(source_map).transpose()?;
         if optimize {
             let optimized = optimize_css::optimize(
                 css,
@@ -548,6 +565,7 @@ fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options,
         silent: parsed.flag("silent", None),
         watch,
         poll: poll.map(Duration::from_millis),
+        engine: engine::select()?,
     })
 }
 
@@ -556,7 +574,7 @@ fn build_once(build: &mut Build, options: &Options, previous: &mut Previous) -> 
     let candidates = build.scanner.scan();
     let css = build.compiler.try_build(&candidates)?;
     let compiler = &build.compiler;
-    write(&css, &|| source_maps::to_source_map(&compiler.build_source_map()), options, previous)?;
+    write(&css, &|| Ok(source_maps::to_source_map(&compiler.build_source_map()?)), options, previous)?;
     Ok(())
 }
 
@@ -694,6 +712,21 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
     }
 }
 
+/// `--version`: the version of the program, and the version of Tailwind
+/// CSS that the environment selects. With the script engine, the line
+/// names it.
+fn print_version() -> i32 {
+    match engine::select() {
+        Ok(Selection::Native) => println!("tailwind.com v{PROGRAM_VERSION} (tailwindcss v{})", crate::index::VERSION),
+        Ok(selection) => println!("tailwind.com v{PROGRAM_VERSION} (tailwindcss v{}, {} engine)", selection.version(), selection.engine()),
+        Err(message) => {
+            eprintln!("{message}");
+            return 1;
+        }
+    }
+    0
+}
+
 /// Run the program. The result is the exit status.
 pub fn run(mut argv: Vec<String>) -> i32 {
     let style = Style::new();
@@ -705,8 +738,7 @@ pub fn run(mut argv: Vec<String>) -> i32 {
     let parsed = args::parse(&argv);
 
     if parsed.flag("version", Some("v")) {
-        println!("tailwind.com v{PROGRAM_VERSION} (tailwindcss v{})", crate::index::VERSION);
-        return 0;
+        return print_version();
     }
     if parsed.flag("help", Some("h")) {
         print!("{}", help_text(&style));

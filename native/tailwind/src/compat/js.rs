@@ -10,6 +10,8 @@
 #[cfg(tw_js)]
 pub mod engine;
 pub mod json;
+#[cfg(tw_js)]
+pub(crate) mod platform;
 pub mod resolve;
 #[cfg(tw_js)]
 mod runtime;

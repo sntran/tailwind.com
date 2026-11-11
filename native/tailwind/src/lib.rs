@@ -18,6 +18,8 @@ pub mod design_system;
 pub mod index;
 pub mod optimize;
 pub mod property_order;
+#[cfg(tw_js)]
+pub mod script;
 pub mod selector_parser;
 pub mod source_maps;
 pub mod theme;
