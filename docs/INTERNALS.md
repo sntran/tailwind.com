@@ -264,7 +264,8 @@ source map, the JSON text has none of these keys.
 `src/cli/` follows `@tailwindcss/cli` and `@tailwindcss/node`:
 
 - `mod.rs`: the options, the build, the write of the output, the watch.
-- `events.rs`: the file events of `c_src/watch.c` for the watch.
+- `events.rs`: the file events of `c_src/watch.c` for the watch, and
+  the lines of `TAILWIND_WATCH_DEBUG`.
 - `modules.rs`: the files of the JavaScript modules of `@plugin` and
   `@config`, and their record for the watch.
 - `resolve.rs`: the paths of `@import` (relative files, packages in
@@ -309,7 +310,7 @@ watcher of BEAM.com (`c_src/cosmo/beam_com_watch.c`):
 |---|---|---|
 | Linux | inotify on the directories of the files. Cosmopolitan has no wrappers for inotify, so the calls are direct system calls. | 500 ms |
 | macOS, FreeBSD, NetBSD, OpenBSD | kqueue on the directories and, while there are descriptors (half of the open file limit, at most 4096), on the files. `struct kevent` has four layouts, and the code selects one at run time. | 500 ms |
-| Windows | None. | 250 ms |
+| Windows | `ReadDirectoryChangesW` with overlapped I/O, and one I/O completion port for all the directories: a watch of the full tree of each source directory, and a watch of the entries of each other directory of the files. | 500 ms |
 | With `--poll[=ms]`, and in a build that is not `tailwind.com` | None. | `--poll` (default 250 ms) |
 
 After an event, the program waits until no more events come for 20 ms
@@ -317,6 +318,48 @@ After an event, the program waits until no more events come for 20 ms
 step. The interval finds the changes that have no event: a file in a
 directory that has no scanned file yet, and files above the limit of
 kqueue.
+
+On Windows:
+
+- The program gives the base directories of the sources of the scanner
+  first (`get_normalized_sources`, as `watchDirectories` of the official
+  program). Each has one handle with a watch of its full tree
+  (`bWatchSubtree`). A directory of a file that is not in such a tree
+  (the input, an imported stylesheet, a JavaScript module) has one
+  handle with a watch of its entries, as with inotify. A path in a
+  watched tree gets no handle, and a new tree closes the handles below
+  it. One handle for each scanned directory is not correct there:
+  Windows does not let a user rename a directory while a handle is open
+  below it. A tree also has events for a new directory at once.
+- All the handles are on one I/O completion port.
+  `GetQueuedCompletionStatus` waits for all of them with a time limit,
+  and has no limit of 64 handles. After each completion, the code
+  starts the read of that directory again. Windows keeps the changes
+  between the two reads on the handle.
+- The code does not read the names in the buffer: a completion only
+  wakes the watch. So the buffer is small (4 KB), and an overflow of
+  the buffer (a completion with no data, or `ERROR_NOTIFY_ENUM_DIR`) is
+  a change as each other.
+- A completion with another error (the directory is deleted), or a read
+  that does not start, closes the handle and wakes the watch. The
+  program gives the directory again after each tick from an event, when
+  the directory is there.
+- A path of Cosmopolitan (`/c/dir`, UTF-8) becomes a path of Windows
+  (`c:\dir`, UTF-16) with `__mkntpathat` of Cosmopolitan, as its own
+  `open` does.
+- Cosmopolitan has no `ReadDirectoryChangesW`: the address comes from
+  `kernel32.dll` (`GetProcAddress`), and the call has the calling
+  convention of Microsoft.
+- When the start fails (no function, no port), the watch polls. When no
+  directory is watched or the port fails, the wait gives an error, and
+  the watch polls from that time (250 ms).
+
+With `TAILWIND_WATCH_DEBUG=1` in the environment, the watch prints to
+stderr what it uses (`watch: events (inotify)`, `(kqueue)`, `(windows)`,
+or `watch: poll`), each wake from an event (`watch: event`), and what
+started each build (`watch: build (event)` or `watch: build (interval)`).
+`tests/watch.sh` reads these lines: in CI, a system where the events do
+not work fails the test, and the poll does not hide it.
 
 The program records the stamp of a file before it reads the file. The
 model `specs/Watch.tla` shows why: with the other order, an edit between

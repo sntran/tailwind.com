@@ -150,6 +150,12 @@ the known differences, and [`docs/TESTING.md`](docs/TESTING.md) for the
 other tests: unit tests from the test files of Tailwind CSS, property
 tests, and a TLA+ model of the watch.
 
+CI runs `tailwind.com` on Linux (x86_64 and aarch64), macOS (arm64 and
+x86_64), Windows (x86_64), FreeBSD, NetBSD and OpenBSD 7.3 (x86_64, in
+a VM): the projects of the official program, and the watch with the
+file events of each system (inotify, kqueue, `ReadDirectoryChangesW`)
+and with the poll.
+
 The scanner of source files is the Rust crate of Tailwind CSS itself
 (`tailwindcss-oxide`), and `--minify` and `--optimize` use the same
 version of Lightning CSS with the same options.
@@ -193,9 +199,10 @@ What does not work:
   path `/$tailwindcss/NAME.css`. With `node_modules/tailwindcss` in the
   project, the path is the path of the file, as with the official
   program.
-- **The watch on Windows polls**: there, it reads the times of the files
-  at an interval. On the other systems it uses the events of the file
-  system (inotify, kqueue), as the file watcher of BEAM.com.
+- **NetBSD and OpenBSD**: the `sh` of NetBSD cannot read an APE file.
+  Start the file there with the APE loader of cosmocc
+  (`ape-x86_64.elf tailwind.com`). Cosmopolitan supports OpenBSD 7.3 or
+  earlier.
 - `canonicalize`, the second command of the official program, is not
   there.
 
