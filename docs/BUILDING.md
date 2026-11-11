@@ -49,8 +49,10 @@ is Cosmopolitan, so the C compiler of the system is not used here.
 
 After the link, the build downloads the npm package `tailwindcss` of
 each version of the file `PACKAGES` (`scripts/packages.sh`, with a
-SHA-256 check) and adds its files to the ZIP directory `tailwindcss/`
-of `tailwind.com`. `PACKAGES=none make` builds a file with no packages,
+SHA-256 check). The tool `tools/twpatch` (a small Rust program for the
+computer of the build) makes a store from them: the newest package in
+full, and a patch file for each older version. The store goes into the
+ZIP directory `tailwindcss/` of `tailwind.com`. `PACKAGES=none make` builds a file with no packages,
 and `PACKAGES="4.2.4 4.3.0" make` a file with these versions only. See
 [`VERSIONS.md`](VERSIONS.md).
 

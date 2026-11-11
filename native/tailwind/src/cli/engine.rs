@@ -21,11 +21,15 @@
 //!
 //! The program looks for a package in `TAILWIND_COM_PACKAGES`, and then
 //! in its own file: `tailwind.com` is also a ZIP file, and the packages
-//! are in its directory `tailwindcss/`.
+//! are in its directory `tailwindcss/`. The file has the newest package
+//! in full, and each older version as a patch file (`patch.rs`).
 
 use crate::index::{Compiler, Root, Source};
 use crate::source_maps::DecodedSourceMap;
+use super::patch::{self, Entry, Patch};
 use crate::Result;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -38,21 +42,34 @@ pub const PACKAGES_VARIABLE: &str = "TAILWIND_COM_PACKAGES";
 /// The directory of the packages in the ZIP file of `tailwind.com`.
 const ZIP_PACKAGES: &str = "/zip/tailwindcss";
 
-/// An npm package `tailwindcss` in a directory.
+/// An npm package `tailwindcss` of a store. A store is a directory with,
+/// for each version, a directory with the files of the package
+/// (`4.3.5/package.json`, ...) or a patch file (`4.3.4.patch`): the
+/// differences from another version of the store (`patch.rs`).
 pub struct DirectoryPackage {
-    directory: PathBuf,
+    store: PathBuf,
     version: String,
+    /// The patch files that this package read, by their version.
+    patches: RefCell<HashMap<String, Option<Rc<Patch>>>>,
+}
+
+/// True for a text that can be a version: it becomes a part of a path.
+fn is_version(text: &str) -> bool {
+    !text.is_empty() && text.len() <= 64 && text.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+')) && !text.starts_with('.')
 }
 
 impl DirectoryPackage {
-    /// The package of a directory, when it is the package `tailwindcss`
-    /// of this version.
-    fn open(directory: PathBuf, version: &str) -> Option<Self> {
-        let text = std::fs::read_to_string(directory.join("package.json")).ok()?;
-        let json: serde_json::Value = serde_json::from_str(&text).ok()?;
+    /// The package of a version in a store, when the store has the
+    /// package `tailwindcss` of this version.
+    fn open(store: PathBuf, version: &str) -> Option<Self> {
+        if !is_version(version) {
+            return None;
+        }
+        let package = Self { store, version: version.to_string(), patches: RefCell::new(HashMap::new()) };
+        let json: serde_json::Value = serde_json::from_str(&package.read("package.json")?).ok()?;
         let name = json.get("name").and_then(|value| value.as_str())?;
         let found = json.get("version").and_then(|value| value.as_str())?;
-        (name == "tailwindcss" && found == version).then(|| Self { directory, version: version.to_string() })
+        (name == "tailwindcss" && found == version).then_some(package)
     }
 
     /// The version of the package.
@@ -66,7 +83,35 @@ impl DirectoryPackage {
         if name.starts_with('/') || name.split('/').any(|part| part == ".." || part.is_empty()) {
             return None;
         }
-        std::fs::read_to_string(self.directory.join(name)).ok()
+        String::from_utf8(self.bytes(&self.version, name, 0)?).ok()
+    }
+
+    /// The patch file of a version, when the store has one.
+    fn patch(&self, version: &str) -> Option<Rc<Patch>> {
+        if let Some(known) = self.patches.borrow().get(version) {
+            return known.clone();
+        }
+        let patch = std::fs::read(self.store.join(format!("{version}.patch"))).ok().and_then(|bytes| Patch::parse(&bytes)).map(Rc::new);
+        self.patches.borrow_mut().insert(version.to_string(), patch.clone());
+        patch
+    }
+
+    /// The bytes of a file of a version: the file of its directory, or
+    /// the file of the reference version of its patch with the delta.
+    fn bytes(&self, version: &str, name: &str, depth: usize) -> Option<Vec<u8>> {
+        // A chain of patches has an end: no version refers to itself.
+        if depth > 1024 || !is_version(version) {
+            return None;
+        }
+        if let Ok(bytes) = std::fs::read(self.store.join(version).join(name)) {
+            return Some(bytes);
+        }
+        let patch = self.patch(version)?;
+        match patch.entry(name)? {
+            Entry::Same => self.bytes(&patch.reference, name, depth + 1),
+            Entry::Delta(delta) => patch::apply(&self.bytes(&patch.reference, name, depth + 1)?, delta),
+            Entry::Full(bytes) => Some(bytes.clone()),
+        }
     }
 }
 
@@ -81,34 +126,31 @@ impl crate::script::Package for DirectoryPackage {
     }
 }
 
-/// The directories that can have the package of a version.
-fn package_directories(version: &str) -> Vec<PathBuf> {
-    let mut directories = Vec::new();
+/// The stores: the directory of the environment, and the ZIP directory
+/// of the file of the program.
+fn stores() -> Vec<PathBuf> {
+    let mut stores = Vec::new();
     if let Some(packages) = std::env::var_os(PACKAGES_VARIABLE).filter(|value| !value.is_empty()) {
-        directories.push(PathBuf::from(packages).join(version));
+        stores.push(PathBuf::from(packages));
     }
-    directories.push(PathBuf::from(ZIP_PACKAGES).join(version));
-    directories
+    stores.push(PathBuf::from(ZIP_PACKAGES));
+    stores
 }
 
-/// The package of a version, from the store.
+/// The package of a version, from the first store that has it.
 fn find_package(version: &str) -> Option<DirectoryPackage> {
-    package_directories(version).into_iter().find_map(|directory| DirectoryPackage::open(directory, version))
+    stores().into_iter().find_map(|store| DirectoryPackage::open(store, version))
 }
 
-/// The versions that are in the store, sorted.
+/// The versions that are in the stores, sorted.
 pub fn stored_versions() -> Vec<String> {
-    let mut roots = Vec::new();
-    if let Some(packages) = std::env::var_os(PACKAGES_VARIABLE).filter(|value| !value.is_empty()) {
-        roots.push(PathBuf::from(packages));
-    }
-    roots.push(PathBuf::from(ZIP_PACKAGES));
     let mut versions: Vec<String> = Vec::new();
-    for root in roots {
-        let Ok(entries) = std::fs::read_dir(&root) else { continue };
+    for store in stores() {
+        let Ok(entries) = std::fs::read_dir(&store) else { continue };
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if !versions.contains(&name) && DirectoryPackage::open(root.join(&name), &name).is_some() {
+            let name = name.strip_suffix(".patch").unwrap_or(&name).to_string();
+            if !versions.contains(&name) && DirectoryPackage::open(store.clone(), &name).is_some() {
                 versions.push(name);
             }
         }

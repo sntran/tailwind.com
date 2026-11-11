@@ -8,6 +8,7 @@ pub mod engine;
 pub mod events;
 pub mod modules;
 pub mod optimize_css;
+pub mod patch;
 pub mod remapping;
 pub mod resolve;
 pub mod source_maps;

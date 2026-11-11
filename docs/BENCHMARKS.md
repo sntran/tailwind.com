@@ -28,7 +28,7 @@ CSS 4.3.5. The median of 9 runs, and the fastest run in parentheses.
 | watch: an edit to a new output | 26 ms | 28 ms | 206 ms |  | 58 ms | 58 ms |
 | peak memory: Phoenix 1.8.9 with daisyUI | 13 MB | 18 MB | 15 MB | 109 MB | 100 MB | 88 MB |
 | peak memory: large project | 74 MB | 67 MB | 75 MB | 132 MB | 186 MB | 150 MB |
-| size on disk | 22.3 MB | 22.3 MB | 11.0 MB | 8.7 MB | 37.7 MB + Node.js | 103.9 MB |
+| size on disk | 18.8 MB | 18.8 MB | 11.0 MB | 8.7 MB | 37.7 MB + Node.js | 103.9 MB |
 
 The columns:
 

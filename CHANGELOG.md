@@ -51,8 +51,11 @@ and each version from 4.0.0 to 4.3.5 with the script engine.
   the QuickJS of the file. The Rust compiler (the native engine) stays
   the engine of its version, 4.3.5.
 - `tailwind.com` has the package of each stable version of Tailwind
-  CSS 4, from 4.0.0 to 4.3.5 (48 versions, 4.1 MB), in its ZIP
-  directory `tailwindcss/`: an APE file is also a ZIP file.
+  CSS 4, from 4.0.0 to 4.3.5 (48 versions), in its ZIP directory
+  `tailwindcss/`: an APE file is also a ZIP file. The file has the
+  newest package in full, and each older version as a patch file with
+  the differences from the next newer version (`tools/twpatch` makes
+  them). All 48 versions are 0.37 MB of the file.
 - `TAILWINDCSS_VERSION` selects the version, `TAILWIND_COM_ENGINE` the
   engine (`native` or `script`), and `TAILWIND_COM_PACKAGES` a
   directory with more packages. `--version` shows the selection.

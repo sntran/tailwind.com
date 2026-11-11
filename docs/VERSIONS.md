@@ -55,19 +55,43 @@ standalone program. It is the same file in each version 4.
 
 ## Where the packages are
 
-An APE file is also a ZIP file. The build puts the package of each
-version of `PACKAGES` into the ZIP directory `tailwindcss/` of
+An APE file is also a ZIP file. The build puts the packages of the
+versions of `PACKAGES` into the ZIP directory `tailwindcss/` of
 `tailwind.com`, and the program reads them there (`/zip/tailwindcss/`).
-The 48 versions from 4.0.0 to 4.3.5 are 4.1 MB of the file.
 
 ```sh
-unzip -l tailwind.com 'tailwindcss/4.2.4/*'
+unzip -l tailwind.com 'tailwindcss/*'
 ```
 
+The compilers of two versions next to each other are almost the same
+text. So the file does not have each package in full:
+
+- The newest version is a directory with its files
+  (`tailwindcss/4.3.5/dist/lib.js`, ...).
+- Each older version is one patch file (`tailwindcss/4.3.4.patch`): the
+  differences of its files from the next newer version. To read a file
+  of 4.3.3, the program reads the file of 4.3.5, and applies the patch
+  of 4.3.4 and then the patch of 4.3.3.
+
+A patch has, for each file, the bytes that are new and the places of
+the bytes that are a copy from the other version
+(`native/tailwind/src/cli/patch.rs`). A patch file is 0.2 KB to 57 KB
+before deflate, and about 6 KB with deflate. The 48 versions from 4.0.0
+to 4.3.5 are 0.37 MB of the file. As 48 full packages they were 4.1 MB.
+The chain of patches costs no time that a measure shows: the oldest
+version (47 patches) starts as fast from the patches as from a full
+package.
+
+The tool `tools/twpatch` makes the patch files in the build. It reads
+each version back from the patches and compares it with the package,
+so a patch that gives another file stops the build. `twpatch unpack
+STORE VERSION OUT` writes the full files of one version.
+
 The program first looks in the directory of the variable
-`TAILWIND_COM_PACKAGES`, which has one directory for each version
-(`4.2.4/package.json`, `4.2.4/dist/lib.js`, ...). Use it for a version
-that the file does not have, for a program with no ZIP directory
+`TAILWIND_COM_PACKAGES`. That directory has, for each version, a
+directory with the files of the package (`4.2.4/package.json`,
+`4.2.4/dist/lib.js`, ...) or a patch file. Use it for a version that the
+file does not have, for a program with no ZIP directory
 (`tailwind.wasm`, a program of `cargo build`), or to try a changed
 package:
 

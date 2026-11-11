@@ -1,0 +1,15 @@
+[package]
+name = "twpatch"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Make and read the patch files of the packages of Tailwind CSS in tailwind.com"
+publish = false
+
+# This tool builds for the computer of the build, in a few seconds: it has
+# its own workspace and no dependency. The code of the patches is the file
+# of the compiler (native/tailwind/src/cli/patch.rs).
+[workspace]
+
+[profile.release]
+opt-level = 3

@@ -126,12 +126,13 @@ if [ "${PACKAGES:-all}" != none ]; then
     esac
     # shellcheck disable=SC2086
     sh "$root/scripts/packages.sh" "$packages" $versions
-    mkdir -p "$work/zip/tailwindcss"
-    for version in $versions; do
-        mkdir -p "$work/zip/tailwindcss/$version/dist"
-        cp "$packages/$version"/*.* "$packages/$version/LICENSE" "$work/zip/tailwindcss/$version/"
-        cp "$packages/$version"/dist/*.js "$work/zip/tailwindcss/$version/dist/"
-    done
+    # The newest version in full, and each older version as a patch: the
+    # differences from the next newer version (tools/twpatch). The tool
+    # reads each version back and compares it with its package.
+    versions=$(echo $versions | tr ' ' '\n' | sort -t. -k1,1n -k2,2n -k3,3n | tr '\n' ' ')
+    cargo build -q --release --manifest-path "$root/tools/twpatch/Cargo.toml"
+    # shellcheck disable=SC2086
+    "$root/tools/twpatch/target/release/twpatch" pack "$packages" "$work/zip/tailwindcss" $versions
     log "Adding the packages of $(echo $versions | wc -w | tr -d ' ') versions of Tailwind CSS"
     (cd "$work/zip" && zip -q -9 -r -X "$work/tailwind.com" tailwindcss)
 fi

@@ -291,6 +291,12 @@ The script engine runs the official compiler of a package in QuickJS
 | `node tests/v8.mjs [CASES]` | The sort of the runtime makes the same calls of the compare function as V8 (Node.js), also for compare functions that are not consistent, and `Intl.ListFormat` gives the same text. |
 | `FUZZ_ENGINE=script node tests/fuzz/fuzz.mjs ... --projects 0` | The fuzzer with the script engine as the builder: the official compiler of one version in QuickJS against the same compiler in Node.js. `sh tests/fuzz/install.sh DIR VERSION` installs the official packages of a version. The job `script` of `.github/workflows/fuzz.yml` runs it for 4.0.17, 4.1.18, 4.2.4, 4.3.0 and 4.3.5. |
 
+The patch files of the packages have three checks: the unit tests of
+`src/cli/patch.rs` (random texts with random changes must read back
+the same), the tool `tools/twpatch` in each build (each version of the
+store must read back as its package), and `tests/versions.sh` with
+`tailwind.com` on each system.
+
 A program of `cargo build` has no packages in its file. Get them with
 `sh scripts/packages.sh build/packages` and set
 `TAILWIND_COM_PACKAGES=build/packages`.

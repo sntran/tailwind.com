@@ -10,7 +10,7 @@ aarch64.
 [BEAM.com](https://github.com/sntran/BEAM.com). It takes the place of:
 
 - **The official `tailwindcss` program**: the same options, the same
-  output, in one file of about 23 MB for all the systems and both CPUs.
+  output, in one file of about 20 MB for all the systems and both CPUs.
 - **The Hex package `tailwind`** in a Phoenix project: this repository
   is also an Erlang and Elixir project with the application name
   `tailwind`, the module `Tailwind`, and the tasks `mix tailwind` and
@@ -155,8 +155,10 @@ The file has two engines:
   with no change, in the QuickJS of the file. It needs 69 ms for the
   same project, and the official programs need 131 ms to 165 ms. The
   package of each version is in the ZIP directory of the file: an APE
-  file is also a ZIP file. The 48 versions from 4.0.0 to 4.3.5 are
-  4.1 MB of the file.
+  file is also a ZIP file. The file has the newest package in full, and
+  each older version as a small patch: the differences from the next
+  newer version. So the 48 versions from 4.0.0 to 4.3.5 are 0.37 MB of
+  the file.
 
 A new version of Tailwind CSS thus needs one line in the file
 [`PACKAGES`](PACKAGES), and no change of the code. The port to the

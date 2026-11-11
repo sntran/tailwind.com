@@ -511,8 +511,8 @@ the method of BEAM.com for Rust:
 
 ### The size of the file
 
-The file is about 23 MB: two copies of the program, one for x86_64 and
-one for aarch64, of about 9.5 MB each, and 4.1 MB for the packages of
+The file is about 20 MB: two copies of the program, one for x86_64 and
+one for aarch64, of about 9.5 MB each, and 0.37 MB for the packages of
 the versions of Tailwind CSS in its ZIP directory (see "The versions of
 Tailwind CSS" below). In one copy:
 
@@ -575,7 +575,12 @@ console and the process (`src/compat/js/platform.rs`).
 The packages are files: `DirectoryPackage` reads them from a directory.
 In `tailwind.com` that directory is `/zip/tailwindcss/VERSION`:
 Cosmopolitan gives the ZIP directory of the file as the path `/zip`.
-`scripts/build.sh` adds the files with `zip` after the link.
+`scripts/build.sh` adds the files with `zip` after the link. The store
+has the newest package as a directory and each older version as a patch
+file (`src/cli/patch.rs`): `DirectoryPackage` reads a file of a version
+from its directory, or from the reference version of its patch with the
+delta of the patch. The tool `tools/twpatch` makes the patch files: it
+includes `patch.rs`, and it builds for the computer of the build.
 
 The bundle has two parts that make QuickJS do the same as V8 for the
 compiler: `js/sort.ts` (the sort algorithm of V8) and `js/intl.ts`
