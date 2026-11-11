@@ -17,11 +17,16 @@ defmodule Tailwind do
 
   ## Configuration
 
-    * `:version` - the version of Tailwind CSS to download
+    * `:version` - the version of Tailwind CSS. One `tailwind.com` has
+      each version of Tailwind CSS 4: the version of its Rust compiler
+      (`latest_version/0`) is the fastest, and each other version uses
+      the official compiler of that version, in the JavaScript engine
+      of the file
     * `:version_check` - `false` stops the check of the version at the
       start of the application
     * `:path` - the path of `tailwind.com` (default: `_build/tailwind.com`)
-    * `:url` - the URL of the download; `$version` in it is the version
+    * `:url` - the URL of the download; `$program` in it is the version
+      of this package, and `$version` is the version of Tailwind CSS
     * `:sha256` - the SHA-256 that the download must have
 
   One file runs on Linux, macOS, Windows, FreeBSD, NetBSD and OpenBSD, on
@@ -55,7 +60,12 @@ defmodule Tailwind do
           """)
 
         :error ->
-          :ok
+          if File.exists?(bin_path()) do
+            Logger.warning("""
+            The installed tailwind.com has no Tailwind CSS #{configured_version}. \
+            Please run `mix tailwind.install` or update the version in your config files.\
+            """)
+          end
       end
     end
 
@@ -115,9 +125,11 @@ defmodule Tailwind do
   end
 
   @doc """
-  Returns the version of Tailwind CSS of the installed file.
+  Returns the version of Tailwind CSS that the installed file uses for
+  the configured version.
 
-  Returns `{:ok, version}` or `:error`.
+  Returns `{:ok, version}`, or `:error` when the file is not there or
+  does not have that version.
   """
   def bin_version do
     with_path(fn ->
@@ -168,7 +180,8 @@ defmodule Tailwind do
   end
 
   @doc """
-  The default URL of the download. `$version` is the version.
+  The default URL of the download. `$program` is the version of this
+  package.
   """
   def default_base_url, do: to_string(:tailwind.default_base_url())
 

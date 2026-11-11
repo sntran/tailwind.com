@@ -89,6 +89,47 @@ defmodule TailwindTest do
       assert Tailwind.bin_version() == :error
     end
 
+    @tag :packages
+    test "bin_version/0 is the configured version, when the file has that version" do
+      Application.put_env(:tailwind, :version, "4.1.0")
+      assert Tailwind.bin_version() == {:ok, "4.1.0"}
+    end
+
+    test "bin_version/0 is :error for a version that the file does not have" do
+      Application.put_env(:tailwind, :version, "4.999.0")
+      assert Tailwind.bin_version() == :error
+    end
+
+    @tag :packages
+    test "run/2 compiles with the configured version of Tailwind CSS", %{dir: dir} do
+      Application.put_env(:tailwind, :version, "4.1.0")
+      output = capture_io(fn -> assert Tailwind.run(:default, []) == 0 end)
+      assert output =~ "tailwindcss v4.1.0"
+      css = File.read!(Path.join(dir, "priv/app.css"))
+      assert String.starts_with?(css, "/*! tailwindcss v4.1.0 ")
+      assert css =~ ".flex {"
+      assert css =~ ".md\\:p-4 {"
+    end
+
+    test "run/2 keeps the version variable of the profile", %{dir: dir} do
+      Application.put_env(:tailwind, :version, "4.999.0")
+
+      Application.put_env(:tailwind, :default,
+        args: ~w(--input=assets/app.css --output=priv/app.css),
+        cd: dir,
+        env: %{"TAILWINDCSS_VERSION" => @version}
+      )
+
+      output = capture_io(fn -> assert Tailwind.run(:default, []) == 0 end)
+      assert output =~ "tailwindcss v#{@version}"
+    end
+
+    test "run/2 stops for a version that the file does not have" do
+      Application.put_env(:tailwind, :version, "4.999.0")
+      output = capture_io(fn -> assert Tailwind.run(:default, []) == 1 end)
+      assert output =~ "Tailwind CSS v4.999.0 is not in this program"
+    end
+
     test "run/2 builds the CSS of the profile", %{dir: dir} do
       output = capture_io(fn -> assert Tailwind.run(:default, []) == 0 end)
       assert output =~ "tailwindcss v#{@version}"
@@ -192,6 +233,18 @@ defmodule TailwindTest do
       Application.put_env(:tailwind, :path, Path.join(dir, "_build/tailwind.com"))
 
       assert Tailwind.install("file://#{dir}/v$version/tailwind.com") == :ok
+    end
+
+    test "install/1 replaces $program in the URL with the version of the package", %{dir: dir} do
+      source = Application.get_env(:tailwind, :test_program)
+      program = to_string(Application.spec(:tailwind, :vsn))
+      versioned = Path.join(dir, "v#{program}")
+      File.mkdir_p!(versioned)
+      File.cp!(source, Path.join(versioned, "tailwind.com"))
+      Application.put_env(:tailwind, :path, Path.join(dir, "_build/tailwind.com"))
+
+      assert Tailwind.default_base_url() =~ "/v$program/tailwind.com"
+      assert Tailwind.install("file://#{dir}/v$program/tailwind.com") == :ok
     end
 
     test "install/1 raises when the URL has no file", %{dir: dir} do
