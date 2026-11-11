@@ -630,7 +630,8 @@ fn find_roots(input: &str, exists: &dyn Fn(&str) -> bool) -> Vec<(String, Option
                 break;
             }
             // `@-[200px]` is not valid: the `@` root does not take a dash.
-            if maybe_root == "@" && exists("@") && bytes[i] == b'-' {
+            // Before 4.1.13, `@-md` was `@md`.
+            if maybe_root == "@" && exists("@") && bytes[i] == b'-' && switches::AT_DASH_IS_INVALID.on() {
                 break;
             }
             roots.push((maybe_root.to_string(), Some(value.to_string())));

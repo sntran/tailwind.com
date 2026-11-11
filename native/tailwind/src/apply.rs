@@ -578,7 +578,10 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
                 error = Some(invalid_candidate_error(candidate, design_system));
             }
         },
-        false,
+        // Before 4.1.12, `@apply` followed the `important` option. The
+        // rules of a candidate were then in the same cache as the rules
+        // of the build.
+        !crate::switches::APPLY_IGNORES_IMPORTANT_OPTION.on(),
     );
     if let Some(error) = error {
         return Err(error);

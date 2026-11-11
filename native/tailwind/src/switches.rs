@@ -477,6 +477,84 @@ pub const CUSTOM_VARIANT_CYCLE_ERROR: Switch = Switch::since(4, 1, 14, "a circle
 /// at-rule as each other, so no compound variant took the custom variant.
 pub const CUSTOM_VARIANT_AT_VARIANT_COMPOUNDS: Switch = Switch::since(4, 1, 14, "a custom variant with @variant can be in a compound variant");
 
+// --- 4.1.13 ---------------------------------------------------------------
+
+/// A rule keeps only the last of its equal declarations (the same
+/// property, value and `!important`). Before: each declaration stayed.
+/// (From 4.1.13 to 4.3.2, a rule with equal declarations got a new list
+/// of nodes, so it got no `color-mix(…)` fallback: see `NESTING_PASS`.
+/// Before 4.1.13, each child of a rule with the selector `&` had a list
+/// of its own.)
+pub const EQUAL_DECLARATIONS_REMOVED: Switch = Switch::since(4, 1, 13, "a rule keeps only the last of its equal declarations");
+
+/// `@-…` is not a variant and not a utility: `@-md:flex` gives nothing.
+/// Before: the `@` root took the text after the dash, so `@-md:flex` was
+/// `@md:flex`.
+pub const AT_DASH_IS_INVALID: Switch = Switch::since(4, 1, 13, "@-md:flex is not valid");
+
+/// The name of `@custom-variant` starts with a lowercase letter or a
+/// digit, and does not end with `-` or `_`. Before: each sequence of
+/// letters, digits, `-` and `_` was a name (also the empty name), and the
+/// message of the error had no rule about the start.
+pub const VARIANT_NAME_START_AND_END: Switch =
+    Switch::since(4, 1, 13, "the name of @custom-variant has rules for its start and its end");
+
+/// `sr-only` gives `clip-path: inset(50%)`, and `not-sr-only` gives
+/// `clip-path: none`. Before: `clip: rect(0, 0, 0, 0)` and `clip: auto`.
+pub const SR_ONLY_CLIP_PATH: Switch = Switch::since(4, 1, 13, "sr-only has clip-path, not clip");
+
+/// The default of `transition` has no `visibility`. Before (from 4.1.5):
+/// `visibility` was between `display` and `content-visibility`.
+pub const TRANSITION_NO_VISIBILITY: Switch = Switch::since(4, 1, 13, "transition has no visibility");
+
+// --- 4.1.12 ---------------------------------------------------------------
+
+/// `@apply` does not follow the `important` option (`@import "tailwindcss"
+/// important`): only `@apply flex!` gives `!important`. Before: each
+/// declaration of `@apply` was `!important` with that option. `@apply` and
+/// the build also had one cache of the rules of a candidate, so the build
+/// got the rules of a utility as an earlier `@apply` made them.
+pub const APPLY_IGNORES_IMPORTANT_OPTION: Switch = Switch::since(4, 1, 12, "@apply does not follow the important option");
+
+/// A `;` with no declaration before it is ignored: `color: red;;`.
+/// Before: the error "Unexpected semicolon".
+pub const EXTRA_SEMICOLON_IGNORED: Switch = Switch::since(4, 1, 12, "a ; with no declaration before it is ignored");
+
+/// The error of an `@utility` name with a `*` that is not `-*` at the end
+/// gives the reason: "A functional utility must end in `-*`." or "The
+/// dynamic portion marked by `-*` must appear once at the end." Before:
+/// always "Utilities should be alphanumeric and start with a lowercase
+/// letter."
+pub const UTILITY_NAME_ERROR_REASONS: Switch = Switch::since(4, 1, 12, "the error of an @utility name with * gives the reason");
+
+/// `divide-*` reads the theme keys `--divide-color`, `--border-color` and
+/// `--color`. Before: `--divide-color` and `--color`.
+pub const DIVIDE_BORDER_COLOR_KEY: Switch = Switch::since(4, 1, 12, "divide-* reads --border-color");
+
+// --- 4.1.10 ---------------------------------------------------------------
+
+/// In a math function, `%` and an uppercase letter after a number are a
+/// part of the value: `calc(100%-var(--x))` gives `calc(100% - var(--x))`.
+/// Before (only in 4.1.9): only a lowercase letter was, so the `-` after
+/// `100%` or `100PX` and before a name got no spaces.
+pub const MATH_PERCENT_AND_UPPERCASE_UNITS: Switch = Switch::since(4, 1, 10, "% and uppercase units end a value in a math function");
+
+// --- 4.1.9 ----------------------------------------------------------------
+
+/// An operator in a math function gets spaces only next to a value: a
+/// digit, a number with a unit, a bracket or an operator. So a name with a
+/// dash stays (`fit-content`, `calc-size(…)`, `-3.4e-2`). Before: each
+/// operator in a math function got spaces (`fit - content`), but not in
+/// `to-zero` and not in the name `anchor-size(`. The character after
+/// `to-zero` stayed as it was (`round(to-zero,1 + 2)`).
+pub const MATH_OPERATORS_NEED_VALUES: Switch = Switch::since(4, 1, 9, "an operator in a math function gets spaces only next to a value");
+
+/// The value of a custom property can have a string with `;` or `}`:
+/// `--x: 'data:text/plain;base64,…'`. A string with no end is an error.
+/// Before: the `;` in the string ended the value, and the parser read the
+/// other part of the string as new text.
+pub const CUSTOM_PROPERTY_STRINGS: Switch = Switch::since(4, 1, 9, "a string in a custom property can have ; and }");
+
 // --- 4.1.8 ----------------------------------------------------------------
 
 /// The error of `@apply` for a candidate with no result gives the reason:
@@ -709,6 +787,18 @@ pub const ALL: &[&Switch] = &[
     &AT_THEME_IS_A_FEATURE,
     &CUSTOM_VARIANT_CYCLE_ERROR,
     &CUSTOM_VARIANT_AT_VARIANT_COMPOUNDS,
+    &EQUAL_DECLARATIONS_REMOVED,
+    &AT_DASH_IS_INVALID,
+    &VARIANT_NAME_START_AND_END,
+    &SR_ONLY_CLIP_PATH,
+    &TRANSITION_NO_VISIBILITY,
+    &APPLY_IGNORES_IMPORTANT_OPTION,
+    &EXTRA_SEMICOLON_IGNORED,
+    &UTILITY_NAME_ERROR_REASONS,
+    &DIVIDE_BORDER_COLOR_KEY,
+    &MATH_PERCENT_AND_UPPERCASE_UNITS,
+    &MATH_OPERATORS_NEED_VALUES,
+    &CUSTOM_PROPERTY_STRINGS,
     &APPLY_ERROR_REASONS,
     &ROTATE_NEGATIVE_ARBITRARY,
     &CRLF_STAYS,

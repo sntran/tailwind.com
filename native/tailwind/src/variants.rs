@@ -20,9 +20,13 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 /// The test of a variant name: `/^@?[a-z0-9][a-zA-Z0-9_-]*(?<![_-])$/`.
+/// Before 4.1.13: `/^@?[a-zA-Z0-9_-]*$/`.
 pub fn is_valid_variant_name(name: &str) -> bool {
     let bytes = name.as_bytes();
     let bytes = bytes.strip_prefix(b"@").unwrap_or(bytes);
+    if !crate::switches::VARIANT_NAME_START_AND_END.on() {
+        return bytes.iter().all(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-');
+    }
     let Some((first, rest)) = bytes.split_first() else { return false };
     if !(first.is_ascii_lowercase() || first.is_ascii_digit()) {
         return false;

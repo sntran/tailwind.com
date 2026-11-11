@@ -289,6 +289,8 @@ fn register_logical_sizes(u: &mut Utilities) {
 pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     let u = utilities;
 
+    // Before 4.1.13, `sr-only` and `not-sr-only` had the `clip` property.
+    let clip_path = crate::switches::SR_ONLY_CLIP_PATH.on();
     st(
         u,
         "sr-only",
@@ -299,7 +301,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             ("padding", "0"),
             ("margin", "-1px"),
             ("overflow", "hidden"),
-            ("clip-path", "inset(50%)"),
+            if clip_path { ("clip-path", "inset(50%)") } else { ("clip", "rect(0, 0, 0, 0)") },
             ("white-space", "nowrap"),
             ("border-width", "0"),
         ],
@@ -314,7 +316,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             ("padding", "0"),
             ("margin", "0"),
             ("overflow", "visible"),
-            ("clip-path", "none"),
+            if clip_path { ("clip-path", "none") } else { ("clip", "auto") },
             ("white-space", "normal"),
         ],
     );

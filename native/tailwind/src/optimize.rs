@@ -271,11 +271,28 @@ impl Optimizer<'_> {
             }
 
             AstNode::Rule(rule) => {
+                // Before 4.1.13, a rule with the selector `&` gave each
+                // child a list of its own, and the nodes of that list went
+                // to the parent. A later change of that list (the removal
+                // of an unused theme variable, a `color-mix(…)` fallback)
+                // has no effect on the tree.
+                if rule.selector == "&" && !switches::EQUAL_DECLARATIONS_REMOVED.on() {
+                    for child in &rule.nodes {
+                        let list = self.arena.add(Item::List(Vec::new()));
+                        self.transform(child, list, context, depth + 1);
+                        for id in self.arena.children(list).clone() {
+                            self.arena.attach(parent, id);
+                        }
+                    }
+                    return;
+                }
+
                 let copy = self.arena.add(Item::Rule { selector: rule.selector.clone(), nodes: Vec::new(), loc: rule.loc.clone() });
                 for child in &rule.nodes {
                     self.transform(child, copy, context, depth + 1);
                 }
-                if switches::NESTING_PASS.on() {
+                // Before 4.1.13, equal declarations stayed in a rule.
+                if switches::NESTING_PASS.on() || !switches::EQUAL_DECLARATIONS_REMOVED.on() {
                     if !self.arena.children(copy).is_empty() {
                         self.arena.attach(parent, copy);
                     }

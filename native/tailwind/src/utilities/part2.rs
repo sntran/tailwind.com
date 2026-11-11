@@ -587,7 +587,13 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
     static_decls(u, "accent-auto", &[("accent-color", "auto")]);
     color_utility(u, "accent", &["--accent-color", "--color"], |value, _| Some(vec![decl("accent-color", value)]));
     color_utility(u, "caret", &["--caret-color", "--color"], |value, _| Some(vec![decl("caret-color", value)]));
-    color_utility(u, "divide", &["--divide-color", "--border-color", "--color"], |value, _| {
+    // Before 4.1.12, `divide-*` did not read `--border-color`.
+    let divide_keys: &[&'static str] = if crate::switches::DIVIDE_BORDER_COLOR_KEY.on() {
+        &["--divide-color", "--border-color", "--color"]
+    } else {
+        &["--divide-color", "--color"]
+    };
+    color_utility(u, "divide", divide_keys, |value, _| {
         Some(vec![style_rule(CHILDREN, vec![decl("--tw-sort", "divide-color"), decl("border-color", value)])])
     });
 

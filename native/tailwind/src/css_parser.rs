@@ -276,6 +276,9 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
                 let mut value_end = 0;
                 let mut end: Option<usize> = None;
                 let complete_at_eof = crate::switches::CUSTOM_PROPERTY_AT_EOF.on();
+                // Before 4.1.9, a string had no special meaning here: a
+                // `;` in a string ended the value.
+                let strings = crate::switches::CUSTOM_PROPERTY_STRINGS.on();
 
                 let mut j = i + 2;
                 while j < len {
@@ -283,7 +286,7 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
 
                     if peek == BACKSLASH {
                         j += 1;
-                    } else if peek == SINGLE_QUOTE || peek == DOUBLE_QUOTE {
+                    } else if (peek == SINGLE_QUOTE || peek == DOUBLE_QUOTE) && strings {
                         j = parse_string(input, j, peek, source)?;
                     } else if peek == SLASH && at(bytes, j + 1) == Some(ASTERISK) {
                         if let Some(end) = comment_end(bytes, j) {
@@ -355,6 +358,11 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
                     Some(declaration) => attach(&mut stack, &mut ast, track(source, declaration, buffer_start, i)),
                     None => {
                         if buffer.is_empty() {
+                            // Before 4.1.12, a `;` with no declaration
+                            // before it was an error.
+                            if !crate::switches::EXTRA_SEMICOLON_IGNORED.on() {
+                                return Err(CssSyntaxError::new("Unexpected semicolon", None));
+                            }
                             break 'step;
                         }
                         return Err(invalid_declaration(&buffer, location(source, buffer_start, i)));

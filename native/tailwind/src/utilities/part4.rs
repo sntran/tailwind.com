@@ -418,9 +418,12 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
             "transition",
             UtilityDescription::new(move |value, _, _| Some(transition(value)))
                 .default_value(Some(
-                    // Before 4.1.5, the list ended at `backdrop-filter`.
-                    if crate::switches::TRANSITION_DISPLAY.on() {
+                    // Before 4.1.13, the list had `visibility`. Before
+                    // 4.1.5, the list ended at `backdrop-filter`.
+                    if crate::switches::TRANSITION_NO_VISIBILITY.on() {
                         "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+                    } else if crate::switches::TRANSITION_DISPLAY.on() {
+                        "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, visibility, content-visibility, overlay, pointer-events"
                     } else {
                         "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter"
                     },

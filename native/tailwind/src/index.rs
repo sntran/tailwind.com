@@ -780,7 +780,9 @@ impl Collector {
         let shared: SharedAtRule = Rc::new(RefCell::new(at.clone()));
         let Some(utility) = create_css_utility_shared(shared.clone()) else {
             let params = &at.params;
-            if !params.ends_with("-*") {
+            // Before 4.1.12, each name that is not valid had the same
+            // message.
+            if !params.ends_with("-*") && crate::switches::UTILITY_NAME_ERROR_REASONS.on() {
                 if params.ends_with('*') {
                     return Err(Error::new(format!(
                         "`@utility {params}` defines an invalid utility name. A functional utility must end in `-*`."
@@ -875,9 +877,16 @@ impl Collector {
         let selector = parts.get(1).copied().filter(|selector| !selector.is_empty());
 
         if !is_valid_variant_name(&name) {
-            return Err(Error::new(format!(
-                "`@custom-variant {name}` defines an invalid variant name. Variants should only contain alphanumeric, dashes, or underscore characters and start with a lowercase letter or number."
-            )));
+            // Before 4.1.13, the message had no rule about the start.
+            return Err(Error::new(if crate::switches::VARIANT_NAME_START_AND_END.on() {
+                format!(
+                    "`@custom-variant {name}` defines an invalid variant name. Variants should only contain alphanumeric, dashes, or underscore characters and start with a lowercase letter or number."
+                )
+            } else {
+                format!(
+                    "`@custom-variant {name}` defines an invalid variant name. Variants should only contain alphanumeric, dashes or underscore characters."
+                )
+            }));
         }
 
         if !at.nodes.is_empty() && selector.is_some() {

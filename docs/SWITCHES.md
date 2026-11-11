@@ -408,6 +408,67 @@ The scanner of the source files follows no version, in each engine. Its
 changes in these releases: the Markdown and Ruby pre-processors, and the
 `.jsonl` and `.ndjson` files.
 
+### 4.1.13 (5 switches, all there; 2 changes in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `EQUAL_DECLARATIONS_REMOVED` | form | S | common | A rule kept each of its equal declarations: `.a { color: red; color: red; }` stayed as it was, and `@apply` of two utilities with the same declaration gave it two times |
+| `AT_DASH_IS_INVALID` | fix | S | edge | `@-md:flex` was `@md:flex` |
+| `VARIANT_NAME_START_AND_END` | fix | S | edge | `@custom-variant foo-`, `-foo`, `_foo` and `Foo` were valid names, and the message for a name that is not valid had no rule about the start |
+| `SR_ONLY_CLIP_PATH` | data | S | common | `sr-only` gave `clip: rect(0, 0, 0, 0)`, and `not-sr-only` gave `clip: auto` |
+| `TRANSITION_NO_VISIBILITY` | data | S | common | From 4.1.5: the default of `transition` had `visibility` after `display` |
+| variant-name (JS) | fix | S | edge | `addVariant` had the old rule and the old message for a name |
+| match-variant-unknown-value (JS) | fix | S | edge | `matchVariant` gave a rule for a named value that is not in `values`, and for a value that is not a text |
+
+No switch: the suggestions of `matchVariant` and `matchUtilities` are for
+the editor tools. `css-functions.ts` has only a new comment. The scanner
+of the source files ignores `.vercel` directories: it follows no version.
+
+`EQUAL_DECLARATIONS_REMOVED` also changes the `color-mix(…)` fallbacks.
+From 4.1.13 to 4.3.2, the step that removes equal declarations made a
+new list of nodes for a rule with such declarations. The fallback went
+into the old list, so that rule has no fallback (see `NESTING_PASS`).
+Before 4.1.13, the rule keeps its list and gets the fallback. A
+declaration in a rule with the selector `&` gets no fallback from 4.1.4
+to 4.3.2, before and after this change: its list is not in the tree.
+
+### 4.1.12 (4 switches, all there; 1 change in the plugin layer; data changes with no switch)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `APPLY_IGNORES_IMPORTANT_OPTION` | fix | S | rare | With the `important` option, each declaration of `@apply` was `!important`. `@apply` and the build had one cache of the rules of a candidate |
+| `EXTRA_SEMICOLON_IGNORED` | fix | S | rare | `color: red;;` and a `;` after a rule were the error "Unexpected semicolon" |
+| `UTILITY_NAME_ERROR_REASONS` | form | S | edge | `@utility foo*` and `@utility my-*-utility` had the general message for a name that is not valid |
+| `DIVIDE_BORDER_COLOR_KEY` | fix | S | rare | `divide-*` did not read `--border-color-*` |
+| plugin-false-values (JS) | fix | S | edge | A property with the value `false` or `undefined` in a CSS object of a plugin gave a declaration |
+
+No switch: the suggestions of `flex-*` are for the editor tools. The
+source locations of the nodes of `@plugin` and `@config` are for the
+source maps. Data, from the package: the icon of an input with a list
+(`::-webkit-calendar-picker-indicator` in `preflight.css`).
+
+The one cache of `APPLY_IGNORES_IMPORTANT_OPTION` has a visible effect
+before 4.1.6 (`APPLY_NESTED_WALK`). There, an `@apply` can compile a
+utility before the `@apply` rules of that utility are done. The utility
+keeps that form when it is also a candidate of the build.
+
+### 4.1.11 (no change of the compiler)
+
+### 4.1.10 (1 switch, there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `MATH_PERCENT_AND_UPPERCASE_UNITS` | fix | S | common | Only in 4.1.9: `w-[calc(100%-var(--x))]` gave `calc(100%-var(--x))`. The `-` after `%` or an uppercase unit, and before a name, got no spaces |
+
+### 4.1.9 (2 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `MATH_OPERATORS_NEED_VALUES` | fix | M | rare | Each `+`, `-`, `*` and `/` in a math function got spaces: `min(fit-content,1px)` gave `min(fit - content, 1px)`. `round(to-zero,1+2)` gave `round(to-zero,1 + 2)` |
+| `CUSTOM_PROPERTY_STRINGS` | fix | S | rare | A `;` in a string of a custom property ended the value: `--x: 'data:text/plain;base64,…'` was the error "Unterminated string" |
+
+No switch: `compat/container.ts` has only a new comment.
+
 ### 4.1.8 (1 switch, there)
 
 | Switch | Kind | Effort | How often | What was before |
@@ -445,7 +506,7 @@ No switch: the source maps (`ast.ts`, `css-parser.ts`, `at-import.ts`,
 
 `APPLY_NESTED_WALK` needs the one cache of the compiler of before 4.1.12
 for a utility that is also a candidate: `@apply` and the build shared
-the compiled rules.
+the compiled rules (`APPLY_IGNORES_IMPORTANT_OPTION`).
 
 ### 4.1.5 (3 switches, all there)
 
@@ -535,6 +596,6 @@ before 4.1.2, a `color-mix(…)` with less than three parts
   Tailwind CSS.
 - **A behavior that is a fault of an old version is kept**, when its
   result is CSS: a custom property at the end of the input loses its
-  last character as 4.3.3, as in the official 4.3.3. And before 4.3.3, a
-  rule with two equal declarations gets no `color-mix(…)` fallback, as in
-  the official compiler of those versions.
+  last character as 4.3.3, as in the official 4.3.3. And from 4.1.13 to
+  4.3.2, a rule with two equal declarations gets no `color-mix(…)`
+  fallback, as in the official compiler of those versions.
