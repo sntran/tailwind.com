@@ -127,6 +127,14 @@ pub const DEAD_PSEUDO_ELEMENT_RULES: Switch = Switch::since(4, 3, 4, "a rule aft
 /// `&` in them is replaced. Before: they were plain text.
 pub const MOZ_ANY_NESTING: Switch = Switch::since(4, 3, 4, ":-moz-any() and :-webkit-any() have selectors as arguments");
 
+/// `theme(…)` with only a namespace of Tailwind CSS v3 (`theme(spacing)`)
+/// reads the namespace as an object, and gives its `DEFAULT`: the bare
+/// variable (`--spacing`). Before: a namespace with only the bare variable
+/// gave that value alone. Then a value of `@theme default` lost against
+/// the object of the default configuration, which is no value ("Could
+/// not resolve value for theme function").
+pub const THEME_FN_NAMESPACE_ROOT: Switch = Switch::since(4, 3, 4, "theme(spacing) reads the namespace as an object");
+
 // --- 4.3.3 ----------------------------------------------------------------
 
 /// The last step of the compiler flattens the rules: a nested rule gets
@@ -154,6 +162,13 @@ pub const ARIA_DATA_ATTRIBUTE_CHECK: Switch = Switch::since(4, 3, 3, "aria-* and
 /// system-ui, …`. (The same values of `theme.css` and `preflight.css`
 /// come from the package.)
 pub const DEFAULT_THEME_SYSTEM_FONTS: Switch = Switch::since(4, 3, 3, "theme(fontFamily.sans) starts with the system fonts");
+
+/// In `theme(…)` with a path of Tailwind CSS v3, an object of CSS values
+/// with `DEFAULT` gives that value before the opacity modifier:
+/// `theme(colors.foo / 50%)` with `--color-foo` and `--color-foo-bar` has
+/// the opacity. Before: the object got no opacity, and its `DEFAULT` was
+/// the result.
+pub const THEME_FN_PREFERS_DEFAULT: Switch = Switch::since(4, 3, 3, "theme(colors.foo / 50%) of an object with DEFAULT has the opacity");
 
 // --- 4.3.2 ----------------------------------------------------------------
 
@@ -411,11 +426,13 @@ pub const ALL: &[&Switch] = &[
     &SCOPE_HOISTING,
     &DEAD_PSEUDO_ELEMENT_RULES,
     &MOZ_ANY_NESTING,
+    &THEME_FN_NAMESPACE_ROOT,
     &NESTING_PASS,
     &SPACING_ZERO_PX,
     &SHADOW_FRACTIONAL_ALPHA,
     &ARIA_DATA_ATTRIBUTE_CHECK,
     &DEFAULT_THEME_SYSTEM_FONTS,
+    &THEME_FN_PREFERS_DEFAULT,
     &AUTO_TRACKS_BARE_SPACING,
     &SPACING_FN_IS_LENGTH,
     &ALPHA_FN_IS_COLOR,

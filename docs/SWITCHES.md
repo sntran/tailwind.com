@@ -170,7 +170,7 @@ project. `JS` marks a change in the plugin layer.
 | `HTML_COMMENT_MARKS` | fix | S | edge | `-->` started a custom property; `<!--` was a part of the next rule |
 | `ONE_CANDIDATE_NO_VARIANT_ORDER` | (no visible change found) | S | edge | The variant order was computed also for one candidate |
 
-### 4.3.4 (18 switches, all there; 1 change in the plugin layer)
+### 4.3.4 (19 switches, all there)
 
 | Switch | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
@@ -192,9 +192,9 @@ project. `JS` marks a change in the plugin layer.
 | `MORE_LENGTH_UNITS` | data | S | rare | `dvmin`, `svb`, `cap`, … were not lengths: `text-[10dvmin]` was a color |
 | `MOZ_ANY_NESTING` | fix | S | edge | `&` in `:-moz-any(…)` was not replaced |
 | `DEFAULT_FN_WHITESPACE` | fix | S | rare | White space in `--default(…)` of `@utility` was removed |
-| theme-root-namespace-lookup (JS) | fix | M | rare | Plugin `theme('shadow')` gave the DEFAULT text, not the object |
+| `THEME_FN_NAMESPACE_ROOT` (also in the plugin layer) | fix | S | rare | `theme(spacing)` with `--spacing` of `@theme default` was an error, and `theme(blur)` gave the value of the default configuration. Plugin `theme('shadow')` gave the DEFAULT text, not the object |
 
-### 4.3.3 (5 switches, all there; 2 changes in the plugin layer; data changes with no switch)
+### 4.3.3 (6 switches, all there; 1 change in the plugin layer; data changes with no switch)
 
 | Switch | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
@@ -204,7 +204,7 @@ project. `JS` marks a change in the plugin layer.
 | `ARIA_DATA_ATTRIBUTE_CHECK` | fix | S | edge | `data-[foo bar]:flex` gave a rule with a selector that is not valid |
 | `DEFAULT_THEME_SYSTEM_FONTS` | data | S | edge | `theme(fontFamily.sans)` with no `--font-sans` gave `ui-sans-serif, system-ui, …` |
 | selector-nth-child-of (JS) | form | M | edge | Classes after `of` in `:nth-child(…)` got no prefix in `addUtilities` |
-| plugin-theme-default (JS) | fix | S | rare | Plugin `theme('colors.foo')` gave an object when `--color-foo-bar` was there too |
+| `THEME_FN_PREFERS_DEFAULT` (also in the plugin layer) | fix | S | edge | `theme(colors.foo / 50%)` had no opacity when `--color-foo-bar` was there too. Plugin `theme('colors.foo')` gave an object |
 
 Data, from the package: the new `--font-sans` stack (`theme.css`,
 `preflight.css`), `:-moz-focusring:where(:not(iframe))` in

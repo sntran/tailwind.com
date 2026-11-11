@@ -10,6 +10,7 @@
 //! are data (`Lazy`).
 
 use crate::design_system::DesignSystem;
+use crate::switches;
 use crate::theme;
 use crate::utilities::with_alpha;
 use crate::utils::escape::unescape;
@@ -175,7 +176,7 @@ impl CompatTheme {
 
         // Before 4.3.3, the sans-serif fonts of the default theme started
         // with `ui-sans-serif, system-ui`.
-        if !crate::switches::DEFAULT_THEME_SYSTEM_FONTS.on() {
+        if !switches::DEFAULT_THEME_SYSTEM_FONTS.on() {
             if let Some(Val::Obj(fonts)) = theme.get("fontFamily") {
                 let mut fonts: Object = (**fonts).clone();
                 let old = ["ui-sans-serif", "system-ui", "sans-serif", "\"Apple Color Emoji\"", "\"Segoe UI Emoji\"", "\"Segoe UI Symbol\"", "\"Noto Color Emoji\""];
@@ -453,8 +454,11 @@ fn theme_fn(design_system: &DesignSystem, config_theme: &Object, resolve_value: 
         }
 
         // `--color-foo` and `--color-foo-bar` together give an object for
-        // `colors.foo`. Then the result is the value of `DEFAULT`.
-        if keypath.len() > 1 {
+        // `colors.foo`. Then the result is the value of `DEFAULT`. A
+        // namespace root (`theme('shadow')`) stays an object.
+        // (Before 4.3.3, the result was the object. In 4.3.3, a namespace
+        // root also gave its `DEFAULT`.)
+        if switches::THEME_FN_PREFERS_DEFAULT.on() && (keypath.len() > 1 || !switches::THEME_FN_NAMESPACE_ROOT.on()) {
             if let Val::Obj(map) = &css_value {
                 if let Some(default) = map.get("DEFAULT") {
                     break 'value default.clone();
@@ -555,8 +559,10 @@ fn read_from_css(design_system: &DesignSystem, path: &[String]) -> (Val, Val) {
     }
 
     // `theme('animation.spin')` reads `--animation-spin-*`, and there is
-    // only the value itself.
-    if path.len() > 1 && object.len() == 1 {
+    // only the value itself. A namespace root keeps the object.
+    // (Before 4.3.4, a namespace root with only a bare value also gave
+    // the value itself.)
+    if (path.len() > 1 || !switches::THEME_FN_NAMESPACE_ROOT.on()) && object.len() == 1 {
         if let Some(default) = object.get("DEFAULT") {
             return (default.clone(), options_object.get("DEFAULT").cloned().unwrap_or_else(none));
         }
@@ -638,7 +644,7 @@ pub(super) fn key_path_to_css_property(path: &[String]) -> Option<String> {
         _ => None,
     };
     // (Before 4.1.18, it was in the namespace of the key.)
-    if let Some(special_default) = special_default.filter(|_| crate::switches::THEME_FN_DEFAULT_NAMESPACE.on()) {
+    if let Some(special_default) = special_default.filter(|_| switches::THEME_FN_DEFAULT_NAMESPACE.on()) {
         if path.get(1).is_some_and(|key| key == "DEFAULT") {
             return Some(format!("default-{special_default}"));
         }
@@ -684,7 +690,7 @@ pub(super) fn key_path_to_css_property(path: &[String]) -> Option<String> {
         // The namespace, a nested key of a tuple, and `lineHeight` are in
         // kebab case.
         // (Before 4.1.18, each part was in kebab case.)
-        if index == 0 || part.starts_with('-') || part == "lineHeight" || !crate::switches::THEME_FN_KEEPS_KEY_CASE.on() {
+        if index == 0 || part.starts_with('-') || part == "lineHeight" || !switches::THEME_FN_KEEPS_KEY_CASE.on() {
             part = kebab_case(&part);
         }
 
