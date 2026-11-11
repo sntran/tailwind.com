@@ -3,11 +3,21 @@
 #
 # Usage: sh tests/watch.sh PROGRAM [OPTION...]     (for example --poll=100)
 #
+# Environment:
+#   WATCH_EXPECT  "events": the watch must use the file events of the
+#                 system, and at least 3 builds must start at an event.
+#                 "poll": the watch must poll. Not set: no such check.
+#   TAILWIND_RUN  A program that starts PROGRAM, with an absolute path:
+#                 the APE loader, where the shell cannot start an APE file
+#                 (NetBSD).
+#
 # It checks that an edit of a source file, a new file in a new directory,
 # an edit of the input, an input with an error and its repair, and an
 # edit of a JavaScript plugin each give the correct output, and that the
 # end of stdin stops the program. The watch runs with --map out.css.map:
-# the test also checks that the source map follows the input.
+# the test also checks that the source map follows the input. The watch
+# runs with TAILWIND_WATCH_DEBUG=1: its log then shows what the watch
+# uses (the events or the poll) and what starts each build.
 set -eu
 program=$1
 shift
@@ -23,6 +33,10 @@ CSS
 echo '<p class="flex"></p>' > src/a.html
 
 run() {
+    if [ -n "${TAILWIND_RUN:-}" ]; then
+        $TAILWIND_RUN "$program" "$@"
+        return
+    fi
     case "$(uname -s):$program" in
         MINGW*|MSYS*|CYGWIN*) "$program" "$@" ;;
         *.com) sh "$program" "$@" ;;
@@ -48,6 +62,7 @@ wait_for() {
 # The program reads stdin from a FIFO: when the writer closes it, the
 # watch must stop. Where the shell has no FIFO that works (Windows), the
 # watch runs with --watch=always, and the last check does not run.
+export TAILWIND_WATCH_DEBUG=1
 fifo=1
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) fifo=0 ;;
@@ -113,6 +128,36 @@ module.exports = ({ addUtilities }) => addUtilities({ '.from-plugin': { color: '
 JS
 wait_for 'color: green'
 echo "watch.sh: an edit of a JavaScript plugin: pass"
+
+# What the watch used. With "events", a watch that polls is an error:
+# the poll must not hide events that do not work.
+grep '^watch: ' log.txt | sort | uniq -c | sed 's/^/watch.sh: log: /'
+case "${WATCH_EXPECT:-}" in
+    events)
+        if ! grep -q '^watch: events (' log.txt || grep -q '^watch: poll' log.txt; then
+            echo "watch.sh: the watch did not use the file events of the system" >&2
+            exit 1
+        fi
+        builds=$(grep -c '^watch: build (event)' log.txt || true)
+        if [ "$builds" -lt 3 ]; then
+            echo "watch.sh: only $builds builds started at an event" >&2
+            exit 1
+        fi
+        echo "watch.sh: the file events ($builds builds started at an event): pass"
+        ;;
+    poll)
+        if ! grep -q '^watch: poll' log.txt; then
+            echo "watch.sh: the watch did not poll" >&2
+            exit 1
+        fi
+        echo "watch.sh: the poll: pass"
+        ;;
+    "") ;;
+    *)
+        echo "watch.sh: WATCH_EXPECT must be events or poll" >&2
+        exit 1
+        ;;
+esac
 
 # The end of stdin stops the program.
 if [ $fifo = 0 ]; then

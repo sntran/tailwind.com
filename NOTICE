@@ -55,7 +55,10 @@ The other Rust crates of Cargo.lock
   BSD or Unlicense). "cargo tree" lists them.
 
 c_src/cosmo_rust.c, c_src/eh_frame_pad.ld and scripts/rust_link.sh come
-from BEAM.com (Apache License 2.0), by the same author.
+from BEAM.com (Apache License 2.0), by the same author. The parts of
+c_src/watch.c for inotify and kqueue, and the job bsd of
+.github/workflows/build.yml, follow the file watcher and the job
+test-bsd of BEAM.com.
 https://github.com/sntran/BEAM.com
 
 The test projects in tests/upstream/cli-js contain files of other

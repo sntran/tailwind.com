@@ -60,8 +60,9 @@ finds in the source files are the same by construction.
   the path with the link.
 - **Source maps on Windows**: no test compares them with the official
   program there.
-- **The watch** uses inotify or kqueue, and polls on Windows. The
-  official program uses `@parcel/watcher`. `--poll` is the same.
+- **The watch** uses inotify, kqueue, or `ReadDirectoryChangesW` on
+  Windows. The official program uses `@parcel/watcher`. `--poll` is the
+  same.
 - **`canonicalize`**, the class list, and the sort of classes for
   editors are not there.
 - **An invalid `@variant` in a custom variant**: Tailwind CSS throws

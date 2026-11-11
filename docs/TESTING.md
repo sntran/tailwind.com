@@ -78,7 +78,14 @@ program (`tests/upstream/cli`): automatic source detection with
 `@source inline()`, imports, `@theme`, `@utility`, `@variant`, `@apply`,
 `@reference`, the functions, a prefix, `--minify`, `--optimize`, `--cwd`,
 a Phoenix project, and two errors. CI runs it with `tailwind.com` on
-Linux, macOS and Windows, on x86_64 and aarch64.
+Linux and macOS (x86_64 and aarch64), on Windows, and in a VM on
+FreeBSD, NetBSD and OpenBSD 7.3 (x86_64).
+
+`TAILWIND_RUN` in the environment is a program that starts `PROGRAM`,
+with an absolute path, for `tests/cli.sh` and `tests/watch.sh`: the APE
+loader of cosmocc (`ape-x86_64.elf`) on NetBSD, where `sh` cannot start
+an APE file. With no `TAILWIND_RUN`, `sh` starts a file with the name
+`*.com` (on Windows, the file is a program).
 
 `CASES=tests/upstream/cli-map sh tests/cli.sh PROGRAM` runs the 29
 projects of `tests/upstream/cli-map` for `--map`:
@@ -92,7 +99,8 @@ cases it compares the output file and the map file too. A map has the
 path of the project, so the records have `/PROJECT` at its place, and
 the test puts the same text into the output of the program (also into
 a map that is in a comment as Base64 text; this needs the command
-`base64`). These cases do not run on Windows.
+`base64`, or `openssl` where there is no such command). These cases do
+not run on Windows.
 
 `CASES=tests/upstream/cli-js sh tests/cli.sh PROGRAM` runs the 88
 projects with JavaScript plugins and configs: each function of the
@@ -110,8 +118,18 @@ the file).
 source file, a new file in a new directory, a file replaced by a
 rename, an edit of the input (also in the source map: the watch runs
 with `--map`), an error and its repair, an edit of a JavaScript plugin,
-and the end of stdin. CI runs it with the file events of each system
-and with the poll.
+and the end of stdin (not on Windows: the shell there has no FIFO that
+works). CI runs it with the file events of each system and with the
+poll.
+
+The test runs the watch with `TAILWIND_WATCH_DEBUG=1` (see "The watch"
+in [`INTERNALS.md`](INTERNALS.md)), and prints the count of each line
+of the watch. With `WATCH_EXPECT=events`, the watch must use the file
+events of the system, must not go to the poll, and at least 3 builds
+must start at an event. With `WATCH_EXPECT=poll`, the watch must poll.
+CI sets `WATCH_EXPECT=events` on each system (Linux, macOS, Windows,
+FreeBSD, NetBSD, OpenBSD), so events that do not work there fail the
+job.
 
 `node tests/wasi.mjs build/tailwind.wasm` runs the same cases with the
 WASI program in Node.js. `CASES` selects the directory of the cases, as

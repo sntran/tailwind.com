@@ -532,12 +532,17 @@ fn build_once(build: &mut Build, options: &Options, previous: &mut Previous) -> 
     Ok(())
 }
 
-/// Give the paths of a build to the events: the input and the imported
-/// stylesheets, the scanned files, and their directories. The directories
-/// come first: see `tw_watch_add` in `c_src/watch.c`.
+/// Give the paths of a build to the events: the directories of the
+/// sources (as `watchDirectories` of the official program; only Windows
+/// watches a full tree), the input and the imported stylesheets, the
+/// scanned files, and their directories. The directories come first: see
+/// `tw_watch_add` in `c_src/watch.c`.
 fn watch_paths(build: &mut Build, events: &events::Events) {
     if !events.active() {
         return;
+    }
+    for source in build.scanner.get_normalized_sources() {
+        events.add_tree(Path::new(&source.base));
     }
     let mut files: Vec<PathBuf> = build.full_rebuild_paths.iter().map(|(path, _)| path.clone()).collect();
     files.extend(build.scanner.get_files().into_iter().map(PathBuf::from));
@@ -623,6 +628,9 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
             watch_paths(&mut build, &events);
         }
 
+        if matches!(result, Ok(true)) {
+            events.debug(if woke { "build (event)" } else { "build (interval)" });
+        }
         match result {
             Ok(true) if !options.silent => eprintln!("Done in {}", format_duration(start.elapsed())),
             Ok(_) => {}
