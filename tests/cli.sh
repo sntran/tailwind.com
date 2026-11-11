@@ -28,6 +28,10 @@
 # into the output of the program before the comparison, also in a source
 # map that is in a comment as Base64 text. The cases of cli-map do not run
 # on Windows: the paths have another form there.
+#
+# TAILWIND_RUN in the environment is a program that starts PROGRAM, with
+# an absolute path: the APE loader, where the shell cannot start an APE
+# file (NetBSD).
 set -eu
 program=$1
 shift
@@ -47,6 +51,19 @@ case "$(uname -s):$(basename "$cases")" in
         ;;
 esac
 
+# Base64: the command base64 of the system, or openssl where there is no
+# such command (OpenBSD).
+if [ "$(printf 'YQ==' | base64 --decode 2> /dev/null)" = a ]; then
+    b64_decode() { base64 --decode; }
+    b64_encode() { base64; }
+elif [ "$(printf 'YQ==' | base64 -d 2> /dev/null)" = a ]; then
+    b64_decode() { base64 -d; }
+    b64_encode() { base64; }
+else
+    b64_decode() { openssl base64 -d -A; }
+    b64_encode() { openssl base64 -A; }
+fi
+
 # Put /PROJECT at the place of the path of the project ($project) in a
 # file: normalize FROM TO.
 normalize() {
@@ -56,9 +73,9 @@ normalize() {
         line=$(grep '^/\*# sourceMappingURL=data:application/json;base64,' "$2")
         data=${line#*base64,}
         data=${data% \*/}
-        printf "%s" "$data" | base64 --decode > "$2.map"
+        printf "%s" "$data" | b64_decode > "$2.map"
         sed -e "s|$project|/PROJECT|g" -e "s|${project#/}|PROJECT|g" "$2.map" > "$2.map.new"
-        data=$(base64 < "$2.map.new" | tr -d '\n\r')
+        data=$(b64_encode < "$2.map.new" | tr -d '\n\r')
         grep -v '^/\*# sourceMappingURL=data:application/json;base64,' "$2" > "$2.rest" || true
         # The comment is the last line with text of the output.
         {
@@ -74,6 +91,10 @@ normalize() {
 # An APE file needs the shell to start it, except on Windows, where it is
 # a program.
 run() {
+    if [ -n "${TAILWIND_RUN:-}" ]; then
+        $TAILWIND_RUN "$program" "$@"
+        return
+    fi
     case "$(uname -s):$program" in
         MINGW*|MSYS*|CYGWIN*) "$program" "$@" ;;
         *.com) sh "$program" "$@" ;;
@@ -97,7 +118,7 @@ for name in "$@"; do
     status=0
     stdin=/dev/null
     [ -f "$cases/$name/stdin.txt" ] && stdin=$cases/$name/stdin.txt
-    (cd "$work/$name/project" && NO_COLOR=1 run "$@" > "$work/$name/stdout.raw" 2> "$work/$name/stderr.txt" < "$stdin") || status=$?
+    (cd "$work/$name/project" && export NO_COLOR=1 && run "$@" > "$work/$name/stdout.raw" 2> "$work/$name/stderr.txt" < "$stdin") || status=$?
     project=$(cd "$work/$name/project" && pwd -P)
     normalize "$work/$name/stdout.raw" "$work/$name/stdout.css"
     expected=$(cat "$cases/$name/exit.txt")
