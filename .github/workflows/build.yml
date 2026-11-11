@@ -245,14 +245,22 @@ jobs:
       # The packages of QEMU for the VM actions, with time limits: when the
       # Ubuntu archives do not answer, the job stops before its own limit,
       # with this step in the log. The VM action then finds the packages.
+      # The runner has a list of mirrors, and the first one (the Azure
+      # mirror) sometimes does not answer for hours: after a failure, the
+      # step removes it from the list, so that apt uses the next mirror.
       - name: Install QEMU
         run: |
-          for try in 1 2; do
+          mirrors=/etc/apt/apt-mirrors.txt
+          for try in 1 2 3; do
             sudo timeout 120 apt-get update -q &&
               sudo timeout 600 apt-get install -y -q -o Acquire::Retries=3 --no-install-recommends \
                 qemu-utils qemu-system-x86 ovmf &&
               exit 0
             echo "Try $try to install QEMU failed."
+            if [ -f "$mirrors" ] && [ "$(grep -c . "$mirrors")" -gt 1 ]; then
+              echo "The mirrors were:"; cat "$mirrors"
+              sudo sed -i 1d "$mirrors"
+            fi
             sleep 10
           done
           exit 1
