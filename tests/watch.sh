@@ -55,6 +55,15 @@ wait_for() {
         i=$((i + 1))
     done
     echo "watch.sh: out.css did not get: $1" >&2
+    # For the cause: does the program run, and what does the input have.
+    if kill -0 "${pid:-0}" 2>/dev/null; then
+        echo "watch.sh: the program runs" >&2
+    else
+        echo "watch.sh: the program does not run" >&2
+    fi
+    echo "watch.sh: app.css has:" >&2
+    cat app.css >&2 || true
+    echo "watch.sh: the log of the program:" >&2
     cat log.txt >&2 || true
     return 1
 }

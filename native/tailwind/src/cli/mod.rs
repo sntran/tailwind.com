@@ -578,8 +578,12 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
             let mut stdin = std::io::stdin();
             loop {
                 match stdin.read(&mut buffer) {
-                    Ok(0) | Err(_) => break,
+                    Ok(0) => break,
                     Ok(_) => {}
+                    // A signal can interrupt the read: this is not the end
+                    // of the input.
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(_) => break,
                 }
             }
             flag.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -591,6 +595,7 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
 
     loop {
         if stdin_closed.load(std::sync::atomic::Ordering::SeqCst) {
+            events.debug("stop (the end of stdin)");
             return 0;
         }
         let interval = match options.poll {
@@ -600,6 +605,7 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
         };
         let woke = events.wait(interval);
         if stdin_closed.load(std::sync::atomic::Ordering::SeqCst) {
+            events.debug("stop (the end of stdin)");
             return 0;
         }
 
