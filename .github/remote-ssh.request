@@ -2,4 +2,4 @@ os=windows-2025
 vm=none
 key=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHTj/1tZLzF95wYdklw87CWW1pVhQj46awImd3qpVlKV tailwind.com-ci
 branch=debug/ssh
-minutes=30
+minutes=31

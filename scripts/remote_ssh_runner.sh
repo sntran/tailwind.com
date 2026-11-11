@@ -20,6 +20,15 @@ set -u
 [ "$MINUTES" -gt 120 ] && MINUTES=120
 TMP=${RUNNER_TEMP:-/tmp}
 WORK=${WORK:-$(pwd)}
+# Windows: the shell and the sshd of Git (MSYS2) use paths such as /d/a.
+windows=0
+case "$(uname -s)" in
+    MINGW*|MSYS*)
+        windows=1
+        TMP=$(cygpath -u "$TMP")
+        WORK=$(cygpath -u "$WORK")
+        KEYS=$(cygpath -u "$KEYS") ;;
+esac
 PORT=${REMOTE_SSH_PORT:-8022}
 dir=$TMP/remote-ssh
 mkdir -p "$dir"
@@ -85,18 +94,24 @@ wait_for() {
     return 1
 }
 
-# The server program. sshd needs its full path. On Windows, Git has an
-# sshd (MSYS2) that runs as the user of the job.
-sshd=$(command -v sshd 2>/dev/null || true)
-for candidate in /usr/sbin/sshd /usr/bin/sshd "/c/Program Files/Git/usr/bin/sshd.exe"; do
-    [ -n "$sshd" ] && break
-    [ -x "$candidate" ] && sshd=$candidate
-done
-if [ -z "$sshd" ]; then
+# The server program. sshd needs its full path. On Windows, the sshd of
+# Git (MSYS2) runs as the user of the job, and does not check the access
+# lists of Windows for its key files, as the sshd of the system does.
+if [ $windows = 1 ]; then
+    sshd=/usr/bin/sshd
+    keygen=/usr/bin/ssh-keygen
+else
+    sshd=$(command -v sshd 2>/dev/null || true)
+    for candidate in /usr/sbin/sshd /usr/bin/sshd; do
+        [ -n "$sshd" ] && break
+        [ -x "$candidate" ] && sshd=$candidate
+    done
+    keygen=$(command -v ssh-keygen 2>/dev/null || echo "$(dirname "${sshd:-/usr/bin/sshd}")/ssh-keygen")
+fi
+if [ -z "$sshd" ] || [ ! -x "$sshd" ]; then
     echo "remote ssh: no sshd on this runner" >&2
     exit 1
 fi
-keygen=$(command -v ssh-keygen 2>/dev/null || echo "$(dirname "$sshd")/ssh-keygen")
 
 # The directory for privilege separation, where sshd of Linux needs it.
 if [ "$(uname -s)" = Linux ] && [ ! -d /run/sshd ]; then
