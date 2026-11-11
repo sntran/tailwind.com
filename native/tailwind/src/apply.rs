@@ -437,7 +437,7 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
         }
     }
 
-    if !dashed_idents.is_empty() {
+    if !dashed_idents.is_empty() && crate::switches::APPLY_CSS_MIXINS.on() {
         // Only dashed identifiers: this is a CSS mixin, and it stays.
         // https://drafts.csswg.org/css-mixins-1/#apply-rule
         if normal_idents.is_empty() {
@@ -451,7 +451,7 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
         )));
     }
 
-    if !child.nodes.is_empty() && !normal_idents.is_empty() {
+    if !child.nodes.is_empty() && !normal_idents.is_empty() && crate::switches::APPLY_BODY_ERROR.on() {
         let list = normal_idents.join(" ");
         return Err(Error::new(format!("The rule `@apply {list}` must not have a body.")));
     }

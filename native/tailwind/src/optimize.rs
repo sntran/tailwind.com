@@ -249,8 +249,12 @@ impl Optimizer<'_> {
                 for child in &rule.nodes {
                     self.transform(child, copy, context, depth + 1);
                 }
-                if !self.arena.children(copy).is_empty() {
-                    self.arena.attach(parent, copy);
+                if switches::NESTING_PASS.on() {
+                    if !self.arena.children(copy).is_empty() {
+                        self.arena.attach(parent, copy);
+                    }
+                } else {
+                    self.finish_rule_without_nesting_pass(parent, copy);
                 }
             }
 
@@ -305,7 +309,8 @@ impl Optimizer<'_> {
                 }
 
                 if !self.arena.children(copy).is_empty()
-                    || matches!(rule.name.as_str(), "@layer" | "@charset" | "@custom-media" | "@namespace" | "@import" | "@apply")
+                    || matches!(rule.name.as_str(), "@layer" | "@charset" | "@custom-media" | "@namespace" | "@import")
+                    || (rule.name == "@apply" && switches::APPLY_CSS_MIXINS.on())
                 {
                     self.arena.attach(parent, copy);
                 }
@@ -348,6 +353,70 @@ impl Optimizer<'_> {
                 let id = self.arena.add(Item::Node(node.clone()));
                 self.arena.attach(parent, id);
             }
+        }
+    }
+
+    /// The end of a style rule as before the nesting pass
+    /// (`switches::NESTING_PASS`): remove the declarations that are equal
+    /// to a later declaration of the rule, and replace a rule with the
+    /// selector `&` by its children.
+    ///
+    /// Upstream made a new list for these two changes, but the lists of
+    /// the theme variables and of the `color-mix(…)` declarations kept the
+    /// first list. So the later steps (the removal of unused theme
+    /// variables, the fallbacks of `color-mix(…)`) changed a list that was
+    /// not in the tree. Here `copy` stays as that first list, with no
+    /// parent, and the tree gets a new rule.
+    fn finish_rule_without_nesting_pass(&mut self, parent: Id, copy: Id) {
+        let children = self.arena.children(copy).clone();
+        if children.is_empty() {
+            return;
+        }
+
+        // Keep the last declaration of each group of equal declarations.
+        // The key is one text, as upstream.
+        let key = |decl: &Declaration| format!("{}:{}:{}", decl.property, decl.value.as_deref().unwrap_or("undefined"), decl.important);
+        let mut last: HashMap<String, Id> = HashMap::new();
+        let mut declarations = 0;
+        for id in &children {
+            if let Item::Node(AstNode::Declaration(decl)) = &self.arena.entries[*id].item {
+                declarations += 1;
+                last.insert(key(decl), *id);
+            }
+        }
+        let has_duplicates = last.len() < declarations;
+        let is_nesting_selector =
+            matches!(&self.arena.entries[copy].item, Item::Rule { selector, .. } if selector == "&");
+
+        if !has_duplicates && !is_nesting_selector {
+            self.arena.attach(parent, copy);
+            return;
+        }
+
+        let kept: Vec<Id> = if has_duplicates {
+            children
+                .into_iter()
+                .filter(|id| match &self.arena.entries[*id].item {
+                    Item::Node(AstNode::Declaration(decl)) => last.get(&key(decl)) == Some(id),
+                    _ => true,
+                })
+                .collect()
+        } else {
+            children
+        };
+
+        if is_nesting_selector {
+            for id in kept {
+                self.arena.attach(parent, id);
+            }
+        } else {
+            let Item::Rule { selector, loc, .. } = &self.arena.entries[copy].item else { unreachable!("the copy is a rule") };
+            let rule = Item::Rule { selector: selector.clone(), nodes: Vec::new(), loc: loc.clone() };
+            let rule = self.arena.add(rule);
+            for id in kept {
+                self.arena.attach(rule, id);
+            }
+            self.arena.attach(parent, rule);
         }
     }
 
@@ -573,7 +642,11 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
         }
     }
 
-    handle_nesting(new_ast)
+    if switches::NESTING_PASS.on() {
+        handle_nesting(new_ast)
+    } else {
+        new_ast
+    }
 }
 
 /// True when the variable is in use, or a variable that uses it is in use.

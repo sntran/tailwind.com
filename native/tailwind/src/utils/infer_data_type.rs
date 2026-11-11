@@ -292,7 +292,10 @@ fn is_number_with_unit(value: &str, units: &[&str]) -> bool {
 /// `/^(--spacing)\(/i`
 fn is_length_fn(value: &str) -> bool {
     let bytes = value.as_bytes();
-    bytes.len() >= 10 && bytes[..9].eq_ignore_ascii_case(b"--spacing") && bytes[9] == b'('
+    crate::switches::SPACING_FN_IS_LENGTH.on()
+        && bytes.len() >= 10
+        && bytes[..9].eq_ignore_ascii_case(b"--spacing")
+        && bytes[9] == b'('
 }
 
 /// The units of 4.3.4.

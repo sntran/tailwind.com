@@ -460,7 +460,22 @@ fn negate_conditions(rule_name: &str, conditions: &[&str]) -> Vec<String> {
     conditions
         .iter()
         .map(|condition| {
-            if rule_name == "@container" {
+            if !crate::switches::NOT_CONTAINER_VALUE_PARSER.on() {
+                // The condition in parts, at each space.
+                let condition = js_trim(condition);
+                let parts = segment(condition, b' ');
+                if parts[0] == "not" {
+                    parts[1..].join(" ")
+                } else if rule_name != "@container" || parts[0].starts_with('(') {
+                    format!("not {condition}")
+                } else if parts.get(1) == Some(&"not") {
+                    // `{name} not {query}`
+                    format!("{} {}", parts[0], parts[2..].join(" "))
+                } else {
+                    // `{name} {query}`
+                    format!("{} not {}", parts[0], parts[1..].join(" "))
+                }
+            } else if rule_name == "@container" {
                 let mut ast = value_parser::parse(js_trim(condition));
                 let is_word = |node: &ValueAstNode| node.is_word();
                 let is_not = |node: &ValueAstNode| node.is_word() && node.value() == "not";
@@ -997,7 +1012,9 @@ pub fn create_variants(theme: &Theme) -> Variants {
                 ValueKind::Arbitrary => format!("[aria-{}]", quote_attribute_value(&value.value)),
                 ValueKind::Named => format!("[aria-{}=\"true\"]", value.value),
             };
-            crate::attribute_selector_parser::parse(&selector)?;
+            if crate::switches::ARIA_DATA_ATTRIBUTE_CHECK.on() {
+                crate::attribute_selector_parser::parse(&selector)?;
+            }
             wrap_in(rule_node, |nodes| style_rule(format!("&{selector}"), nodes))
         },
         VariantOptions::default(),
@@ -1011,7 +1028,9 @@ pub fn create_variants(theme: &Theme) -> Variants {
                 return None;
             }
             let selector = format!("[data-{}]", quote_attribute_value(&value.value));
-            crate::attribute_selector_parser::parse(&selector)?;
+            if crate::switches::ARIA_DATA_ATTRIBUTE_CHECK.on() {
+                crate::attribute_selector_parser::parse(&selector)?;
+            }
             wrap_in(rule_node, |nodes| style_rule(format!("&{selector}"), nodes))
         },
         VariantOptions::default(),
@@ -1221,7 +1240,13 @@ pub fn substitute_at_variant(ast: &mut Vec<AstNode>, design_system: &DesignSyste
             }
 
             match node {
-                AstNode::Rule(StyleRule { selector, nodes: children, .. }) if selector == "&" => nodes.extend(children),
+                // Before the nesting pass, the `&` rule stayed until the
+                // last step of the compiler.
+                AstNode::Rule(StyleRule { selector, nodes: children, .. })
+                    if selector == "&" && crate::switches::NESTING_PASS.on() =>
+                {
+                    nodes.extend(children)
+                }
                 other => nodes.push(other),
             }
         }

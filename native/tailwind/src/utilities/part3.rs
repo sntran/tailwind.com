@@ -146,9 +146,10 @@ fn mask_angle(v: &NamedValue, negative: bool) -> Option<String> {
     }
     let number = js_number(v.value);
     let sign = if negative { "-" } else { "" };
-    Some(if number == 0.0 {
+    let fold = crate::switches::MASK_ANGLE_FOLD.on();
+    Some(if fold && number == 0.0 {
         "0deg".to_string()
-    } else if number == 1.0 {
+    } else if fold && number == 1.0 {
         format!("{sign}1deg")
     } else {
         format!("calc(1deg * {sign}{})", v.value)
@@ -827,7 +828,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         if let Some(modifier) = &candidate.modifier {
             if modifier.kind == ValueKind::Arbitrary {
                 alpha = Some(modifier.value.clone());
-            } else if is_valid_opacity_value(&modifier.value) {
+            } else if super::is_shadow_alpha(&modifier.value) {
                 alpha = Some(format!("{}%", modifier.value));
             }
         }

@@ -23,7 +23,7 @@ impl Version {
     /// later change of Tailwind CSS it has a switch, and the fuzzer finds
     /// no difference from the official compiler of that version
     /// (docs/VERSIONS.md). An older version uses the script engine.
-    pub const OLDEST: Version = Version(4, 3, 3);
+    pub const OLDEST: Version = Version(4, 3, 0);
 
     /// The oldest version whose plugin layer (`compat/` of Tailwind CSS)
     /// is the same as the plugin layer of the port. The plugin layer is

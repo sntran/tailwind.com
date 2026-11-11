@@ -127,6 +127,81 @@ pub const DEAD_PSEUDO_ELEMENT_RULES: Switch = Switch::since(4, 3, 4, "a rule aft
 /// `&` in them is replaced. Before: they were plain text.
 pub const MOZ_ANY_NESTING: Switch = Switch::since(4, 3, 4, ":-moz-any() and :-webkit-any() have selectors as arguments");
 
+// --- 4.3.3 ----------------------------------------------------------------
+
+/// The last step of the compiler flattens the rules: a nested rule gets
+/// the selector of its parent, and an at-rule goes out of the rules.
+/// Before: the rules stayed nested (`.a { &:hover { @media … { … } } }`).
+/// The step before it removed equal declarations in each rule (it kept
+/// the last), and replaced a rule with the selector `&` by its children.
+/// A fallback of `color-mix(…)` or an unused theme variable in a rule
+/// that this old step changed stayed as it was.
+pub const NESTING_PASS: Switch = Switch::since(4, 3, 3, "the output has no nested rules");
+
+/// `--spacing(0)` is `0px`: a length. Before: `0`.
+pub const SPACING_ZERO_PX: Switch = Switch::since(4, 3, 3, "--spacing(0) gives 0px");
+
+/// A bare modifier of a shadow can be each opacity value: `shadow-sm/12.5`.
+/// Before: only a positive integer.
+pub const SHADOW_FRACTIONAL_ALPHA: Switch = Switch::since(4, 3, 3, "the alpha of a shadow can have a fraction");
+
+/// The attribute selector of `aria-*` and `data-*` must be valid. Before:
+/// there was no check: `data-[foo bar]:flex` gave a rule.
+pub const ARIA_DATA_ATTRIBUTE_CHECK: Switch = Switch::since(4, 3, 3, "aria-* and data-* need a valid attribute selector");
+
+// --- 4.3.2 ----------------------------------------------------------------
+
+/// `auto-rows-*` and `auto-cols-*` have bare values of the spacing scale:
+/// `auto-rows-12`. Before: no bare values.
+pub const AUTO_TRACKS_BARE_SPACING: Switch = Switch::since(4, 3, 2, "auto-rows-* and auto-cols-* have spacing values");
+
+/// A value that starts with `--spacing(` is a length for the type of an
+/// arbitrary value. Before: it was not, so `text-[--spacing(2)]` was a
+/// color.
+pub const SPACING_FN_IS_LENGTH: Switch = Switch::since(4, 3, 2, "--spacing(…) is a length");
+
+/// A value that starts with `--alpha(` is a color for the type of an
+/// arbitrary value. Before: it was not.
+pub const ALPHA_FN_IS_COLOR: Switch = Switch::since(4, 3, 2, "--alpha(…) is a color");
+
+// --- 4.3.1 ----------------------------------------------------------------
+
+/// `--spacing(0)` is zero and `--spacing(1)` is the value of `--spacing`.
+/// Before: always `calc(var(--spacing) * N)`, so `m-0` gave
+/// `calc(var(--spacing) * 0)`.
+pub const SPACING_FN_FOLD: Switch = Switch::since(4, 3, 1, "--spacing(0) and --spacing(1) have no calc()");
+
+/// `space-x-0` and `space-y-0` give the margin `0`. Before: two `calc(…)`
+/// values, as each other value.
+pub const SPACE_ZERO: Switch = Switch::since(4, 3, 1, "space-x-0 and space-y-0 give 0");
+
+/// The angles `0` and `1` of a mask are `0deg` and `1deg`:
+/// `mask-linear-1`. Before: `calc(1deg * 1)`.
+pub const MASK_ANGLE_FOLD: Switch = Switch::since(4, 3, 1, "the mask angles 0 and 1 have no calc()");
+
+/// `inset-shadow-none` gives `inset 0 0 #0000`. Before: `0 0 #0000`.
+pub const INSET_SHADOW_NONE_INSET: Switch = Switch::since(4, 3, 1, "inset-shadow-none has the keyword inset");
+
+/// `@apply` with only dashed identifiers (`@apply --my-mixin`) is a CSS
+/// mixin and stays, and mixins with utilities are an error. Before: a
+/// dashed identifier was a utility as each other, and one with no
+/// utility was an error.
+pub const APPLY_CSS_MIXINS: Switch = Switch::since(4, 3, 1, "@apply with dashed identifiers is a CSS mixin");
+
+/// `@apply` of utilities with a body is an error. Before: the body was
+/// dropped with no error.
+pub const APPLY_BODY_ERROR: Switch = Switch::since(4, 3, 1, "@apply of utilities must not have a body");
+
+/// The color of a shadow is the part that is a color: a hexadecimal
+/// color, a named color or a color function, in each sequence and in each
+/// case. Before: the first part that was not a keyword or a length.
+pub const SHADOW_COLOR_DETECTION: Switch = Switch::since(4, 3, 1, "the color of a shadow is the part that is a color");
+
+/// `not-*` reads the condition of `@container` with the value parser, so
+/// `style(…)` and a name before the query are correct. Before: it split
+/// the condition at the spaces.
+pub const NOT_CONTAINER_VALUE_PARSER: Switch = Switch::since(4, 3, 1, "not-* reads @container conditions with the value parser");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -150,4 +225,19 @@ pub const ALL: &[&Switch] = &[
     &SCOPE_HOISTING,
     &DEAD_PSEUDO_ELEMENT_RULES,
     &MOZ_ANY_NESTING,
+    &NESTING_PASS,
+    &SPACING_ZERO_PX,
+    &SHADOW_FRACTIONAL_ALPHA,
+    &ARIA_DATA_ATTRIBUTE_CHECK,
+    &AUTO_TRACKS_BARE_SPACING,
+    &SPACING_FN_IS_LENGTH,
+    &ALPHA_FN_IS_COLOR,
+    &SPACING_FN_FOLD,
+    &SPACE_ZERO,
+    &MASK_ANGLE_FOLD,
+    &INSET_SHADOW_NONE_INSET,
+    &APPLY_CSS_MIXINS,
+    &APPLY_BODY_ERROR,
+    &SHADOW_COLOR_DETECTION,
+    &NOT_CONTAINER_VALUE_PARSER,
 ];

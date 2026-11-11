@@ -38,6 +38,9 @@ fn is_positive_integer_without_last(value: &str) -> bool {
 
 /// `true` when a space value is zero.
 fn is_zero_space(value: &str) -> bool {
+    if !crate::switches::SPACE_ZERO.on() {
+        return false;
+    }
     if value == "--spacing(0)" || value == "--spacing(-0)" {
         return true;
     }

@@ -21,6 +21,15 @@ use crate::utils::segment::segment;
 use indexmap::IndexMap;
 use std::rc::Rc;
 
+/// True for a bare modifier that is the opacity of a shadow.
+pub(crate) fn is_shadow_alpha(value: &str) -> bool {
+    if crate::switches::SHADOW_FRACTIONAL_ALPHA.on() {
+        is_valid_opacity_value(value)
+    } else {
+        is_positive_integer(value)
+    }
+}
+
 /// A value with empty `var()` fallbacks, as the selected version writes
 /// them: `var(--tw-blur, )`, and before 4.3.4 `var(--tw-blur,)`.
 pub(crate) fn empty_fallbacks(text: &'static str) -> &'static str {

@@ -56,9 +56,9 @@ fn spacing(design_system: &DesignSystem, args: &[&str]) -> Result<String> {
         }
     };
 
-    if let Some((number, _)) = dimensions(value) {
+    if let Some((number, _)) = dimensions(value).filter(|_| crate::switches::SPACING_FN_FOLD.on()) {
         if number == 0.0 {
-            return Ok("0px".to_string());
+            return Ok(if crate::switches::SPACING_ZERO_PX.on() { "0px" } else { "0" }.to_string());
         }
         if number == 1.0 {
             return Ok(multiplier);

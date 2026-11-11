@@ -49,7 +49,7 @@ fn shadow_alpha(modifier: Option<&CandidateModifier>) -> Option<String> {
     let modifier = modifier?;
     if modifier.kind == ValueKind::Arbitrary {
         Some(modifier.value.clone())
-    } else if is_valid_opacity_value(&modifier.value) {
+    } else if super::is_shadow_alpha(&modifier.value) {
         Some(format!("{}%", modifier.value))
     } else {
         None
@@ -212,7 +212,13 @@ impl ShadowUtility {
                 if candidate.modifier.is_some() {
                     return None;
                 }
-                let mut nodes = vec![(self.properties)(), decl(self.property, self.none_value)];
+                // Before 4.3.1, `inset-shadow-none` had no `inset`.
+                let none_value = if self.arbitrary_prefix == "inset" && !crate::switches::INSET_SHADOW_NONE_INSET.on() {
+                    NULL_SHADOW
+                } else {
+                    self.none_value
+                };
+                let mut nodes = vec![(self.properties)(), decl(self.property, none_value)];
                 if self.box_shadow {
                     nodes.push(decl("box-shadow", CSS_BOX_SHADOW_VALUE));
                 }

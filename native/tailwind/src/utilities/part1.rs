@@ -49,6 +49,14 @@ fn spacing_multiplier(value: &NamedValue, ds: &DesignSystem) -> Option<String> {
     Some(format!("--spacing({})", value.value))
 }
 
+/// A bare value of `auto-rows-*` and `auto-cols-*`.
+fn auto_track_spacing(value: &NamedValue, ds: &DesignSystem) -> Option<String> {
+    if !crate::switches::AUTO_TRACKS_BARE_SPACING.on() {
+        return None;
+    }
+    spacing_multiplier(value, ds)
+}
+
 /// A bare value for `grid-cols-*` and `grid-rows-*`.
 fn grid_repeat(value: &NamedValue, _: &DesignSystem) -> Option<String> {
     is_strict_positive_integer(value.value).then(|| format!("repeat({}, minmax(0, 1fr))", value.value))
@@ -1154,7 +1162,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         "auto-cols",
         one_property("grid-auto-columns")
             .theme_keys(&["--grid-auto-columns"])
-            .bare(spacing_multiplier)
+            .bare(auto_track_spacing)
             .static_values(values("grid-auto-columns", &AUTO_TRACKS)),
     );
     functional_utility(
@@ -1162,7 +1170,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         "auto-rows",
         one_property("grid-auto-rows")
             .theme_keys(&["--grid-auto-rows"])
-            .bare(spacing_multiplier)
+            .bare(auto_track_spacing)
             .static_values(values("grid-auto-rows", &AUTO_TRACKS)),
     );
 

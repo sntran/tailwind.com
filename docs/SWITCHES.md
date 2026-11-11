@@ -28,12 +28,14 @@ nothing wrong: that version is only slower.
 | Version | Engine | Switches |
 |---|---|---|
 | 4.3.5 | Rust compiler | the port |
-| 4.3.4 | Rust compiler | 3, all there |
-| 4.3.3 | Rust compiler; script engine for a stylesheet with plugins | 18 more, all there |
-| 4.3.2 | script engine | 4 more to write |
-| 4.3.1 | script engine | 3 more to write |
-| 4.3.0 | script engine | 8 more to write |
+| 4.3.4 | Rust compiler | 3 |
+| 4.3.3 | Rust compiler; script engine for a stylesheet with plugins | 18 more |
+| 4.3.2 | Rust compiler; script engine for a stylesheet with plugins | 4 more |
+| 4.3.1 | Rust compiler; script engine for a stylesheet with plugins | 3 more |
+| 4.3.0 | Rust compiler; script engine for a stylesheet with plugins | 8 more |
 | 4.0.0 to 4.2.4 | script engine | not counted |
+
+All the 36 switches of Tailwind CSS 4.3 are there.
 
 ## How to write a switch
 
@@ -157,14 +159,14 @@ project. `JS` marks a change in the plugin layer.
 | `DEFAULT_FN_WHITESPACE` | fix | S | rare | White space in `--default(…)` of `@utility` was removed |
 | theme-root-namespace-lookup (JS: no switch) | fix | M | rare | Plugin `theme('shadow')` gave the DEFAULT text, not the object |
 
-### 4.3.3 (4 switches, to write; 2 changes in the plugin layer; 6 data changes with no switch)
+### 4.3.3 (4 switches, all there; 2 changes in the plugin layer; 6 data changes with no switch)
 
-| Change | Kind | Effort | How often | What was before |
+| Switch | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
-| nesting-pass | form | M | each build | No pass that flattens rules: `.hover\:x { &:hover { @media (hover: hover) { … } } }`. The old code also removed equal declarations in each rule, and replaced a `&` rule by its children |
-| spacing-zero-px | form | S | common | `--spacing(0)` gave `0`, not `0px` |
-| shadow-fractional-alpha | fix | S | rare | `shadow-sm/12.5` gave the class with no alpha |
-| aria-data-attr-validate | fix | S | edge | `data-[foo bar]:flex` gave a rule with a selector that is not valid |
+| `NESTING_PASS` | form | M | each build | No pass that flattens rules: `.hover\:x { &:hover { @media (hover: hover) { … } } }`. The old code also removed equal declarations in each rule, and replaced a `&` rule by its children |
+| `SPACING_ZERO_PX` | form | S | common | `--spacing(0)` gave `0`, not `0px` |
+| `SHADOW_FRACTIONAL_ALPHA` | fix | S | rare | `shadow-sm/12.5` gave the class with no alpha |
+| `ARIA_DATA_ATTRIBUTE_CHECK` | fix | S | edge | `data-[foo bar]:flex` gave a rule with a selector that is not valid |
 | selector-nth-child-of (JS: no switch) | form | M | edge | Classes after `of` in `:nth-child(…)` got no prefix in `addUtilities` |
 | plugin-theme-default (JS: no switch) | fix | S | rare | Plugin `theme('colors.foo')` gave an object when `--color-foo-bar` was there too |
 
@@ -174,48 +176,57 @@ Data, from the package: the new `--font-sans` stack (`theme.css`,
 values are also in `tailwindcss/colors` and `tailwindcss/defaultTheme` of
 the plugin layer: there they must come from the package too.
 
-### 4.3.2 (3 switches, to write)
+### 4.3.2 (3 switches, all there)
 
-| Change | Kind | Effort | How often | What was before |
+| Switch | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
-| auto-rows-cols-bare-spacing | feature | S | rare | `auto-rows-12` gave nothing |
-| infer-length-spacing-fn (also in the plugin layer) | fix | S | edge | `text-[--spacing(2)]` was a color |
-| infer-color-alpha-fn (also in the plugin layer) | fix | S | edge | `--alpha(…)` was not a color for the type of a value |
+| `AUTO_TRACKS_BARE_SPACING` | feature | S | rare | `auto-rows-12` gave nothing |
+| `SPACING_FN_IS_LENGTH` (also in the plugin layer) | fix | S | edge | `text-[--spacing(2)]` was a color |
+| `ALPHA_FN_IS_COLOR` (also in the plugin layer) | fix | S | edge | `--alpha(…)` was not a color for the type of a value |
 
-### 4.3.1 (8 switches, to write; 2 changes in the plugin layer)
+### 4.3.1 (8 switches, all there; 2 changes in the plugin layer)
 
-| Change | Kind | Effort | How often | What was before |
+| Switch | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
-| spacing-fn-fold-0-1 | form | S | each build | `m-1` gave `calc(var(--spacing) * 1)`, and `m-0` gave `calc(var(--spacing) * 0)` |
-| space-zero | form | S | common | `space-x-0` gave two `calc(…)` values, not `0` |
-| mask-angle-0-1 | form | S | rare | `mask-linear-1` gave `calc(1deg * 1)` |
-| inset-shadow-none-inset | fix | S | rare | `inset-shadow-none` had no `inset` |
-| apply-css-mixins | feature | S | edge | `@apply --my-mixin` was an error |
-| apply-body-error | fix | S | edge | `@apply underline { … }` dropped the body with no error |
-| shadow-color-detection | fix | M | rare | The color of a shadow was the first part that is not a length |
-| not-container-negation | fix | M | rare | `not-*` on `@container style(…)` gave a condition that is not valid |
+| `SPACING_FN_FOLD` | form | S | each build | `m-1` gave `calc(var(--spacing) * 1)`, and `m-0` gave `calc(var(--spacing) * 0)` |
+| `SPACE_ZERO` | form | S | common | `space-x-0` gave two `calc(…)` values, not `0` |
+| `MASK_ANGLE_FOLD` | form | S | rare | `mask-linear-1` gave `calc(1deg * 1)` |
+| `INSET_SHADOW_NONE_INSET` | fix | S | rare | `inset-shadow-none` had no `inset` |
+| `APPLY_CSS_MIXINS` | feature | S | edge | `@apply --my-mixin` was an error |
+| `APPLY_BODY_ERROR` | fix | S | edge | `@apply underline { … }` dropped the body with no error |
+| `SHADOW_COLOR_DETECTION` | fix | M | rare | The color of a shadow was the first part that is not a length |
+| `NOT_CONTAINER_VALUE_PARSER` | fix | M | rare | `not-*` on `@container style(…)` gave a condition that is not valid |
 | addbase-variant-eager (JS: no switch) | fix | M | rare | Only in 4.3.1: `@variant` in `addBase` was replaced when the plugin loaded |
 | plugin-selector-whitespace (JS: no switch) | form | L | rare | Selectors of plugins kept their text: `&>*`, not `& > *` |
 
 ## What the list shows
 
 - **41 changes** in the six releases of 4.3. 5 of them are only in the
-  plugin layer and need no switch. So there are **36 switches**: 21 are
-  there (4.3.5 and 4.3.4), and 15 are to write.
+  plugin layer and need no switch. So there are **36 switches**, and all
+  are there: the Rust compiler serves each version of 4.3.
 - **27 of the changes are fixes** of faults in rare inputs, 8 change the
   form of valid output, 2 are new features, 3 are constants, and 1 has no
   visible change.
 - **7 change the output of a normal project** (the rows with "each
   build" or "common"). Each other one needs an input that few projects
   have.
-- **Most are one condition or one constant.** Of the 21 switches that
-  are there, 17 are one condition, one constant or one small helper, and
-  4 keep a function in two forms (the declaration with `!important`, the
-  custom property at the end of the input, the brackets of an arbitrary
-  value, the words of `supports-[…]`). The two largest changes of
-  Tailwind CSS in these releases (the pass that flattens rules, and
-  `@scope`) are new passes: the old behavior is "do not run the pass",
-  and no old algorithm must come back.
+- **Most are one condition or one constant.** Of the 36 switches, 29
+  are one condition, one constant or one small helper, and 7 keep a
+  function in two forms (the declaration with `!important`, the custom
+  property at the end of the input, the brackets of an arbitrary value,
+  the words of `supports-[…]`, the color of a shadow, the negation of a
+  `@container` condition, and the end of a style rule before the pass
+  that flattens rules). The two largest changes of Tailwind CSS in these
+  releases (the pass that flattens rules, and `@scope`) are new passes:
+  the old behavior is "do not run the pass", and only a small step of
+  the old code must come back (about 50 lines for the pass that flattens
+  rules).
+- **The work for one release was small.** The 15 switches of 4.3.1,
+  4.3.2 and 4.3.3 are about 320 lines of Rust, with their comments. The fuzzer found no
+  difference after them: the list from the source of Tailwind CSS was
+  complete.
 - **A behavior that is a fault of an old version is kept**, when its
   result is CSS: a custom property at the end of the input loses its
-  last character as 4.3.3, as in the official 4.3.3.
+  last character as 4.3.3, as in the official 4.3.3. And before 4.3.3, a
+  rule with two equal declarations gets no `color-mix(…)` fallback, as in
+  the official compiler of those versions.

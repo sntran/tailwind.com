@@ -149,8 +149,8 @@ TAILWINDCSS_VERSION=4.1.18 sh ./tailwind.com -i app.css -o dist/app.css
 The file has two engines:
 
 - **The native engine** is the Rust compiler. It follows version 4.3.5,
-  and it has a switch for each behavior that changed since 4.3.3, so it
-  serves 4.3.4 and 4.3.3 too ([`docs/SWITCHES.md`](docs/SWITCHES.md)). It is the
+  and it has a switch for each behavior that changed since 4.3.0, so it
+  serves each version of 4.3 ([`docs/SWITCHES.md`](docs/SWITCHES.md)). It is the
   fast one: 10 ms for a Phoenix project.
 - **The script engine** is the official compiler of the npm package
   `tailwindcss` of a version (one JavaScript file with no dependency),
