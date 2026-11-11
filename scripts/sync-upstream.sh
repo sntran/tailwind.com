@@ -217,6 +217,12 @@ apply() {
         sed -i.bak "s|\"@tailwindcss/$name\": \"[^\"]*\"|\"@tailwindcss/$name\": \"$version\"|" $tools/package.json
         rm -f UPSTREAM.bak $tools/package.json.bak
     done
+    # The checksum of the standalone program, for tests/standalone.sh.
+    sum=$(curl -fsSL "https://github.com/tailwindlabs/tailwindcss/releases/download/v$new/sha256sums.txt" |
+        sed -n 's|^\([0-9a-f]\{64\}\)  \./tailwindcss-linux-x64$|\1|p')
+    [ -n "$sum" ] || die "the release v$new has no checksum for tailwindcss-linux-x64"
+    sed -i.bak "s|^STANDALONE_LINUX_X64_SHA256=.*|STANDALONE_LINUX_X64_SHA256=$sum|" UPSTREAM
+    rm -f UPSTREAM.bak
     (cd $tools && npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts > "$work/npm-tools.log" 2>&1) ||
         die "npm install in $tools failed: see $work/npm-tools.log"
 

@@ -56,6 +56,21 @@ jobs:
       - name: The watch, with the poll
         run: sh tests/watch.sh target/release/tailwind
 
+  # The records of the cases with standalone.txt come from the npm
+  # program with a copy of the module rules of the standalone program.
+  # This job runs the real standalone program of the release on these
+  # cases: a difference fails the job with a diff.
+  standalone:
+    name: The official standalone program, against the record
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Download tailwindcss-linux-x64 of the release of UPSTREAM (with its SHA-256)
+        run: sh tests/standalone.sh --download "$RUNNER_TEMP/standalone"
+      - name: The standalone program on the cases with standalone.txt
+        run: sh tests/standalone.sh "$RUNNER_TEMP/standalone/tailwindcss-linux-x64"
+
   wasm:
     name: The program for WASI
     runs-on: ubuntu-26.04
