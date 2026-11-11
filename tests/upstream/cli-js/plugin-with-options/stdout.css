@@ -1,0 +1,31 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .fancy-size-1 {
+    width: 4px;
+  }
+  .fancy-size-3 {
+    width: 12px;
+  }
+  .bg-second {
+    background-color: black;
+  }
+  .fancy {
+    color: rebeccapurple;
+    --debug: true;
+    --options: {"class-name":"fancy","color":"rebeccapurple","sizes":[1,2,3],"debug":true};
+  }
+  .second {
+    color: black;
+    --debug: undefined;
+    --options: {"class-name":"second"};
+  }
+  .text-fancy {
+    color: rebeccapurple;
+  }
+  .no-options {
+    --type: undefined;
+    --json: null;
+  }
+}
+

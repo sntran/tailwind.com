@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@source not "./src/legacy";
+@source not "./src/**/*.skip.html";
+@source "./extra/*.txt";

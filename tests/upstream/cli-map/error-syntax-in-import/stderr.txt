@@ -1,0 +1,6 @@
+≈ tailwindcss v4.3.5
+
+[31mError:[39m
+[2m┌[22m
+[2m│[22m CssSyntaxError: <project>/a.css:2:12: Unterminated string: "x"
+[2m└[22m

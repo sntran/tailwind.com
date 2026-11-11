@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant theme-midnight (&:where([data-theme="midnight"] *));
+@custom-variant pointer-hover {
+  @media (hover: hover) and (pointer: fine) {
+    @slot;
+  }
+}
+@custom-variant any-hover {
+  @media (any-hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+}
+@custom-variant hocus (&:hover, &:focus);
+@custom-variant supports-grid (@supports (display: grid));
+
+.card {
+  padding: 1rem;
+  @variant dark {
+    background: black;
+  }
+  @variant hover {
+    @variant md {
+      padding: 2rem;
+    }
+  }
+  @variant theme-midnight {
+    color: white;
+  }
+}
+
+.link {
+  @variant hocus {
+    text-decoration: underline;
+  }
+  @variant pointer-hover, focus-visible {
+    color: blue;
+  }
+}

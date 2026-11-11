@@ -1,0 +1,486 @@
+name: Build
+
+# The tests of the compiler, the build of tailwind.com (one file for all
+# the systems), and the tests of that file on each system.
+on:
+  push:
+    # main, and the work branches: a push tests them on all the systems
+    # before there is a pull request.
+    branches: [main, "feat/**", "fix/**", "ci/**"]
+    tags: ["v*"]
+    paths-ignore: ["**.md", "docs/**", ".github/remote-ssh.request"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**", ".github/remote-ssh.request"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COSMOCC_VERSION: "4.0.2"
+  # The C compiler for the JavaScript engine of the WASI program.
+  WASI_SDK_VERSION: "27"
+  WASI_SDK_SHA256: b7d4d944c88503e4f21d84af07ac293e3440b1b6210bfd7fe78e0afd92c23bc2
+  RUST_NIGHTLY: nightly-2026-11-01
+  # The newest Erlang/OTP and Elixir.
+  OTP_VERSION: "29.1.2"
+  ELIXIR_VERSION: "1.20.5"
+
+jobs:
+  test:
+    name: Tests of the compiler
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - name: The versions of UPSTREAM
+        run: sh scripts/sync-upstream.sh check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: The tests, against the record of Tailwind CSS
+        run: cargo test --release
+      - name: The program, against the record of the official program
+        run: |
+          cargo build --release
+          sh tests/cli.sh target/release/tailwind
+      - name: The program with JavaScript plugins and configs, against the record
+        run: CASES=tests/upstream/cli-js sh tests/cli.sh target/release/tailwind
+      - name: The program with --map, against the record
+        run: CASES=tests/upstream/cli-map sh tests/cli.sh target/release/tailwind
+      - name: The watch, with the poll
+        run: sh tests/watch.sh target/release/tailwind
+
+  # The records of the cases with standalone.txt come from the npm
+  # program with a copy of the module rules of the standalone program.
+  # This job runs the real standalone program of the release on these
+  # cases: a difference fails the job with a diff.
+  standalone:
+    name: The official standalone program, against the record
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Download tailwindcss-linux-x64 of the release of UPSTREAM (with its SHA-256)
+        run: sh tests/standalone.sh --download "$RUNNER_TEMP/standalone"
+      - name: The standalone program on the cases with standalone.txt
+        run: sh tests/standalone.sh "$RUNNER_TEMP/standalone/tailwindcss-linux-x64"
+
+  wasm:
+    name: The program for WASI
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - name: Cache wasi-sdk
+        id: wasi-sdk
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: build/wasi-sdk
+          key: wasi-sdk-${{ env.WASI_SDK_VERSION }}-x86_64-linux
+      # The clang of wasi-sdk compiles QuickJS for wasm32-wasip1.
+      - name: Download wasi-sdk
+        if: steps.wasi-sdk.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/wasi-sdk.tar.gz" "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
+          echo "$WASI_SDK_SHA256  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum -c -
+          mkdir -p build/wasi-sdk
+          tar xzf "$RUNNER_TEMP/wasi-sdk.tar.gz" -C build/wasi-sdk --strip-components=1
+      - run: WASI_SDK_PATH=$PWD/build/wasi-sdk make wasm
+      - name: The program in Node.js, against the record
+        run: node tests/wasi.mjs build/tailwind.wasm
+      - name: The program with JavaScript plugins and configs
+        run: CASES=tests/upstream/cli-js node tests/wasi.mjs build/tailwind.wasm
+      - name: The program with --map
+        run: CASES=tests/upstream/cli-map node tests/wasi.mjs build/tailwind.wasm
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: tailwind.wasm
+          path: build/tailwind.wasm
+          if-no-files-found: error
+
+  tlc:
+    name: The TLA+ models
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - run: sh scripts/tlc.sh
+
+  build:
+    name: Build tailwind.com
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - name: Cache cosmocc
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: build/cosmocc
+          key: cosmocc-${{ env.COSMOCC_VERSION }}
+      # x86_64: the std of stable Rust. aarch64: a std built again with x18
+      # and x28 reserved, with a nightly Rust (scripts/build.sh).
+      - name: The Rust toolchains
+        run: rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component rust-src
+      - run: make
+      - run: ls -l build/tailwind.com
+      - run: sh tests/cli.sh build/tailwind.com
+      - run: CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com
+      - run: CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: tailwind.com
+          path: build/tailwind.com
+          if-no-files-found: error
+
+  systems:
+    name: tailwind.com on ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-26, macos-15-intel, windows-2025]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: tailwind.com
+          path: build
+      - name: The program, against the record of the official program
+        run: |
+          chmod +x build/tailwind.com
+          # On Windows the file is a program. On the other systems the
+          # shell starts it.
+          if [ "$RUNNER_OS" = Windows ]; then ./build/tailwind.com --version; else sh build/tailwind.com --version; fi
+          sh tests/cli.sh build/tailwind.com
+      - name: The program with JavaScript plugins and configs, against the record
+        run: CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com
+      # The script does not run these cases on Windows: the paths in a
+      # source map have another form there.
+      - name: The program with --map, against the record
+        run: CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com
+      # WATCH_EXPECT=events: the watch must use the events of the system
+      # (inotify, kqueue, ReadDirectoryChangesW), and builds must start at
+      # an event. A watch that polls in their place is an error.
+      - name: The watch, with the file events of the system
+        run: WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com
+      - name: The watch, with the poll
+        run: WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100
+
+  # FreeBSD, NetBSD and OpenBSD in a VM of QEMU, as the job test-bsd of
+  # BEAM.com. The VM has the work directory of the job. The file is for
+  # x86_64 and aarch64, and the VMs are x86_64.
+  bsd:
+    name: tailwind.com on ${{ matrix.name }}
+    needs: build
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: FreeBSD, vm: freebsd }
+          - { name: NetBSD, vm: netbsd }
+          # Cosmopolitan supports OpenBSD 7.3 or earlier.
+          - { name: OpenBSD 7.3, vm: openbsd }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: tailwind.com
+          path: build
+      # The APE loader of cosmocc starts the file where the shell cannot
+      # (NetBSD). The job on OpenBSD uses the loader and the shell.
+      - name: The APE loader
+        if: matrix.vm != 'freebsd'
+        run: |
+          sha=$(sed -n 's/^COSMOCC_SHA256=${COSMOCC_SHA256:-\(.*\)}$/\1/p' scripts/build.sh)
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/cosmocc.zip" \
+            "https://github.com/jart/cosmopolitan/releases/download/$COSMOCC_VERSION/cosmocc-$COSMOCC_VERSION.zip"
+          echo "$sha  $RUNNER_TEMP/cosmocc.zip" | sha256sum -c -
+          unzip -q -j "$RUNNER_TEMP/cosmocc.zip" bin/ape-x86_64.elf -d build
+          chmod +x build/ape-x86_64.elf
+
+      # The packages of QEMU for the VM actions, with time limits: when the
+      # Ubuntu archives do not answer, the job stops before its own limit,
+      # with this step in the log. The VM action then finds the packages.
+      - name: Install QEMU
+        run: |
+          for try in 1 2; do
+            sudo timeout 120 apt-get update -q &&
+              sudo timeout 600 apt-get install -y -q -o Acquire::Retries=3 --no-install-recommends \
+                qemu-utils qemu-system-x86 ovmf &&
+              exit 0
+            echo "Try $try to install QEMU failed."
+            sleep 10
+          done
+          exit 1
+
+      # On FreeBSD the shell starts the file.
+      - name: Run on FreeBSD
+        if: matrix.vm == 'freebsd'
+        uses: vmactions/freebsd-vm@a2f9a41fa97f6848b8c3b791087dfcdaa5b473ff # v1
+        with:
+          run: |
+            chmod +x build/tailwind.com
+            sh build/tailwind.com --version || exit 1
+            sh tests/cli.sh build/tailwind.com || exit 1
+            CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com || exit 1
+            CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com || exit 1
+            WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com || exit 1
+            WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100 || exit 1
+            # The action copies the work directory back from the VM: the
+            # job needs nothing from it.
+            rm -rf build
+
+      # The sh of NetBSD stops at the NUL bytes of the APE header (C13 in
+      # docs/UPSTREAM.md of BEAM.com): one start through sh shows it in
+      # the log, not checked. The tests use the APE loader.
+      - name: Run on NetBSD
+        if: matrix.vm == 'netbsd'
+        uses: vmactions/netbsd-vm@c8a0d7ddb84619a7a8cc4e652efa7950b3fd9f92 # v1
+        with:
+          run: |
+            chmod +x build/tailwind.com build/ape-x86_64.elf
+            echo "== Through sh (not checked: NUL bytes in the APE header)"
+            sh build/tailwind.com --version 2>&1 | head -n 5 || true
+            echo "== Through the APE loader"
+            TAILWIND_RUN=$PWD/build/ape-x86_64.elf
+            export TAILWIND_RUN
+            "$TAILWIND_RUN" build/tailwind.com --version || exit 1
+            sh tests/cli.sh build/tailwind.com || exit 1
+            CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com || exit 1
+            CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com || exit 1
+            WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com || exit 1
+            WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100 || exit 1
+            rm -rf build
+
+      # The ksh of OpenBSD 7.3 starts an APE file, and the APE loader
+      # starts it too: all the tests with the loader, then the first
+      # cases and the watch through the shell.
+      - name: Run on OpenBSD
+        if: matrix.vm == 'openbsd'
+        uses: vmactions/openbsd-vm@5f7b2c933b8846a138361d6843c52af4bef5d945 # v1
+        with:
+          release: "7.3"
+          run: |
+            chmod +x build/tailwind.com build/ape-x86_64.elf
+            echo "== Through the APE loader"
+            TAILWIND_RUN=$PWD/build/ape-x86_64.elf
+            export TAILWIND_RUN
+            "$TAILWIND_RUN" build/tailwind.com --version || exit 1
+            sh tests/cli.sh build/tailwind.com || exit 1
+            CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com || exit 1
+            CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com || exit 1
+            WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com || exit 1
+            WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100 || exit 1
+            echo "== Through sh"
+            unset TAILWIND_RUN
+            sh build/tailwind.com --version || exit 1
+            sh tests/cli.sh build/tailwind.com || exit 1
+            WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com || exit 1
+            rm -rf build
+
+  mix:
+    name: The Erlang and Elixir modules
+    needs: build
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: tailwind.com
+          path: build
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+      - run: chmod +x build/tailwind.com
+      - run: mix format --check-formatted
+      - run: TAILWIND_COM=$PWD/build/tailwind.com mix test
+
+  # The benchmarks against the official programs (tests/bench/run.mjs,
+  # docs/BENCHMARKS.md). The table goes to the summary of the run. CI
+  # machines are shared: a difference of less than about 10% does not
+  # tell much. No gate: the numbers are for a person to read.
+  bench:
+    name: Benchmarks on ${{ matrix.os }}
+    needs: [build, wasm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, macos-26]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: build
+          merge-multiple: true
+      # Node.js 22 can stop with SIGSEGV when tailwind.wasm minifies a
+      # large output (docs/BENCHMARKS.md).
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: The official programs
+        run: |
+          chmod +x build/tailwind.com
+          sh tests/fuzz/install.sh "$RUNNER_TEMP/official"
+          if [ "$RUNNER_OS" = Linux ]; then
+            sh tests/standalone.sh --download "$RUNNER_TEMP/standalone"
+          fi
+      - name: The benchmarks
+        run: |
+          standalone=
+          if [ -f "$RUNNER_TEMP/standalone/tailwindcss-linux-x64" ]; then
+            standalone="--standalone $RUNNER_TEMP/standalone/tailwindcss-linux-x64"
+          fi
+          # shellcheck disable=SC2086
+          node tests/bench/run.mjs --official "$RUNNER_TEMP/official" \
+            --program build/tailwind.com --wasm build/tailwind.wasm $standalone | tee bench.md
+          { echo "### Benchmarks: ${{ matrix.os }}"; echo; cat bench.md; } >> "$GITHUB_STEP_SUMMARY"
+
+  npm:
+    name: The npm package
+    needs: [build, wasm]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: build
+          merge-multiple: true
+      - name: The generated part and the package
+        run: |
+          chmod +x build/tailwind.com
+          version=$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' package.json)
+          sh scripts/npm.sh build/tailwind.com build/tailwind.wasm "v$version"
+          npm pack
+      - name: The tests of the package
+        run: TAILWIND=build/tailwind.com TAILWIND_WASM=build/tailwind.wasm node --test tests/npm.mjs
+      # The package as a user installs it: npx tailwind.com with a download
+      # from a local server, in place of the GitHub release.
+      - name: npx tailwind.com from the package file
+        run: |
+          mkdir -p "$RUNNER_TEMP/serve" "$RUNNER_TEMP/app"
+          cp build/tailwind.com "$RUNNER_TEMP/serve/tailwind.com"
+          (cd "$RUNNER_TEMP/serve" && python3 -m http.server 8377 > /dev/null 2>&1 &)
+          cd "$RUNNER_TEMP/app"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$GITHUB_WORKSPACE"/tailwind.com-*.tgz
+          export TAILWIND_COM_DOWNLOAD=http://127.0.0.1:8377 TAILWIND_COM_CACHE="$RUNNER_TEMP/cache"
+          npx tailwind.com --version
+          echo '<p class="flex"></p>' > index.html
+          npx tailwind.com | grep -q '^  \.flex {'
+          node --input-type=module -e "import { runWasm } from 'tailwind.com'; const r = await runWasm([]); if (r.status !== 0 || !r.stdout.includes('.flex {')) process.exit(1);"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: npm
+          path: tailwind.com-*.tgz
+          if-no-files-found: error
+
+  # A tag vX.Y.Z with the version of the packages (package.json, mix.exs,
+  # the crate) makes the release vX.Y.Z. The job also makes the release
+  # with the version of Tailwind CSS (for example v4.3.5) again, with the
+  # same files: the Erlang and Elixir modules download from it, by the
+  # `version` of the configuration of a project.
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, wasm, tlc, systems, mix, npm]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - name: The tag is the version of the packages
+        run: |
+          sh scripts/sync-upstream.sh check
+          version=$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' package.json)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "The tag $GITHUB_REF_NAME is not v$version, the version of package.json." >&2
+            exit 1
+          fi
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum tailwind.com tailwind.wasm tailwind.com-*.tgz > SHA256SUMS
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/tailwind.com
+            dist/tailwind.wasm
+            dist/tailwind.com-*.tgz
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          . ./UPSTREAM
+          cd dist
+          gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --generate-notes \
+            --title "$GITHUB_REF_NAME (Tailwind CSS $TAILWINDCSS_VERSION)"
+          # The release with the version of Tailwind CSS: the newest files
+          # for that version.
+          moving="v$TAILWINDCSS_VERSION"
+          gh release delete "$moving" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2> /dev/null || true
+          gh release create "$moving" tailwind.com tailwind.wasm SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
+            --title "Tailwind CSS $TAILWINDCSS_VERSION" \
+            --notes "The files of the release $GITHUB_REF_NAME, for Tailwind CSS $TAILWINDCSS_VERSION. A newer release for the same version of Tailwind CSS replaces these files."
+      # npm: with the secret NPM_TOKEN. With no secret, the step does
+      # nothing: the package file is in the release.
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "No NPM_TOKEN secret: the package is not published to npm."
+            exit 0
+          fi
+          echo "//registry.npmjs.org/:_authToken=$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/npmrc"
+          npm publish dist/tailwind.com-*.tgz --access public --provenance --userconfig "$RUNNER_TEMP/npmrc"
+      # GitHub Packages accepts only a name with the scope of the owner:
+      # the same package, with the name @OWNER/tailwind.com.
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          mkdir "$RUNNER_TEMP/ghp" && tar xzf dist/tailwind.com-*.tgz -C "$RUNNER_TEMP/ghp"
+          cd "$RUNNER_TEMP/ghp/package"
+          sed -i "s|^  \"name\": \"tailwind.com\",|  \"name\": \"@$owner/tailwind.com\",|" package.json
+          grep -q "\"name\": \"@$owner/tailwind.com\"" package.json
+          printf '@%s:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$owner" "$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/ghp/npmrc"
+          npm publish --userconfig "$RUNNER_TEMP/ghp/npmrc" --registry https://npm.pkg.github.com

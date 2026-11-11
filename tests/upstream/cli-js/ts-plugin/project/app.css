@@ -1,0 +1,11 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./index.html";
+@plugin "./plugin.ts";
+@plugin "./options.ts" {
+  prefix: note;
+  width: 3px;
+}
+@plugin "./commonjs.cts";
+@plugin "./module.mts";

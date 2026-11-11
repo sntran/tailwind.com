@@ -1,0 +1,48 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .options {
+    --opt-string: "hello world";
+    --opt-string-type: string;
+    --opt-quoted: "double quoted";
+    --opt-quoted-type: string;
+    --opt-single: "single quoted";
+    --opt-single-type: string;
+    --opt-number: 42;
+    --opt-number-type: number;
+    --opt-float: 1.5;
+    --opt-float-type: number;
+    --opt-negative: -3;
+    --opt-negative-type: number;
+    --opt-yes: true;
+    --opt-yes-type: boolean;
+    --opt-no: false;
+    --opt-no-type: boolean;
+    --opt-nothing: null;
+    --opt-nothing-type: null;
+    --opt-undef: "undefined";
+    --opt-undef-type: string;
+    --opt-list: ["a","b","c"];
+    --opt-list-type: array;
+    --opt-mixed-list: [1,"two",true,"four, five",null];
+    --opt-mixed-list-type: array;
+    --opt-url: "url(https://example.com/a,b.png)";
+    --opt-url-type: string;
+    --opt-color: "#ff0000";
+    --opt-color-type: string;
+    --opt-size: "10px";
+    --opt-size-type: string;
+    --opt-camelCase: "kept";
+    --opt-camelCase-type: string;
+    --opt--custom-prop: "oklch(50% 0.1 20)";
+    --opt--custom-prop-type: string;
+    --opt-spaced: "lots of space";
+    --opt-spaced-type: string;
+    --opt-fn: ["calc(1px + 2px)","var(--x, 1)"];
+    --opt-fn-type: array;
+    --opt-dup: "second";
+    --opt-dup-type: string;
+    --keys: string quoted single number float negative yes no nothing undef list mixed-list url color size camelCase --custom-prop spaced fn dup;
+  }
+}
+

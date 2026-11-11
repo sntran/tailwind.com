@@ -1,0 +1,15 @@
+const plugin = require('tailwindcss/plugin')
+
+module.exports = plugin(function ({ addVariant }) {
+  addVariant('hocus', ['&:hover', '&:focus'])
+  addVariant('optional', '&:optional')
+  addVariant('child-p', '& > p')
+  addVariant('in-sidebar', '.sidebar &')
+  addVariant('third', '&:nth-child(3)')
+  addVariant('both', '&:hover, &:focus-visible')
+  addVariant('where-open', ':where([open]) &')
+  addVariant('print-wide', '@media print and (min-width: 1000px)')
+  addVariant('can-grid', '@supports (display: grid)')
+  addVariant('mixed', ['@media (hover: hover)', '&:active'])
+  addVariant('at-nested', '@media (min-width: 100px) { &:hover }')
+})

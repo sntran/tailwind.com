@@ -1,0 +1,19 @@
+@layer theme, base, components, utilities;
+
+@theme {
+  --color-red-500: oklch(63.7% 0.237 25.331);
+  --spacing: 0.25rem;
+  --breakpoint-md: 48rem;
+}
+
+@source "./index.html";
+@plugin "./plugin.js";
+
+@layer utilities {
+  @tailwind utilities;
+}
+
+.own {
+  @apply flex;
+  color: theme(colors.red.500);
+}

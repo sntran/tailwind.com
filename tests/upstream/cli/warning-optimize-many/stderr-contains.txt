@@ -1,0 +1,25 @@
+Found 3 warnings while optimizing generated CSS:
+Issue #1:
+│   }
+│ }
+│ .first:not-a-class {
+┆        ^-- 'not-a-class' is not recognized as a valid pseudo-class. Did you mean '::not-a-class' (pseudo-element) or is this a typo?
+┆
+│   color: red;
+│ }
+Issue #2:
+│ }
+│ @layer components {
+│   .second::not-an-element(x) {
+┆                           ^-- 'not-an-element' is not recognized as a valid pseudo-element. Did you mean ':not-an-element' (pseudo-class) or is this a typo?
+┆
+│     color: green;
+│   }
+Issue #3:
+│     color: green;
+│   }
+│   .third:another-one .é {
+┆          ^-- 'another-one' is not recognized as a valid pseudo-class. Did you mean '::another-one' (pseudo-element) or is this a typo?
+┆
+│     color: teal;
+│   }

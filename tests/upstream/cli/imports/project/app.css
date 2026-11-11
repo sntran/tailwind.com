@@ -1,0 +1,13 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "./base.css" layer(base);
+@import "./components/buttons.css" layer(components);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "./print.css" print;
+@import "./wide.css" (min-width: 800px);
+@import "./grid.css" supports(display: grid);
+@import "./mixed.css" layer(extra) supports(display: flex) screen and (min-width: 400px);
+
+.after-imports {
+  color: var(--color-red-500);
+}

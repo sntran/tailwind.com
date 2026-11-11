@@ -1,0 +1,6 @@
+@import "tailwindcss" source(none);
+@source "./index.html";
+@plugin "./vendor/daisyui.js";
+.btn-custom {
+  @apply btn does-not-exist;
+}

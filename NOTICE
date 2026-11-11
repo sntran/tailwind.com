@@ -1,0 +1,97 @@
+tailwind.com
+Copyright 2026 Sơn Trần-Nguyễn
+
+This product is licensed under the Apache License, Version 2.0 (see
+LICENSE).
+
+The compiler in native/tailwind is a port to Rust of the compiler of
+Tailwind CSS, and the file tailwind.com contains the software below. The
+source of this repository keeps the license texts in licenses/.
+
+Tailwind CSS 4.3.5 (the compiler that native/tailwind follows file by
+file, the stylesheets in native/tailwind/assets, the plugin layer in
+native/tailwind/assets/compat.js, the scanner crate tailwindcss-oxide,
+and the recorded test data in tests/upstream)
+  Copyright (c) Tailwind Labs, Inc.
+  MIT License (licenses/tailwindcss.txt).
+  https://github.com/tailwindlabs/tailwindcss
+
+Lightning CSS 1.0.0-alpha.72 (the optimizer of --minify and --optimize)
+  Copyright Devon Govett and the contributors of Lightning CSS.
+  Mozilla Public License 2.0 (licenses/mpl-2.0.txt). The source is at
+  https://github.com/parcel-bundler/lightningcss
+
+source-map-js 1.2, magic-string 1, and @jridgewell/remapping 2.3 with
+@jridgewell/trace-mapping, @jridgewell/gen-mapping, @jridgewell/resolve-uri
+and @jridgewell/sourcemap-codec (native/tailwind/src/cli/source_maps.rs
+and native/tailwind/src/cli/remapping.rs follow the parts of these
+packages that Tailwind CSS uses for its source maps)
+  Copyright (c) 2009-2011, Mozilla Foundation and contributors.
+  BSD 3-Clause License (licenses/source-map-js.txt).
+  Copyright 2018 Rich Harris. MIT License (licenses/magic-string.txt).
+  Copyright 2019-2024 Justin Ridgewell. MIT License
+  (licenses/jridgewell.txt).
+
+QuickJS 2026-06-04 (the JavaScript engine for @plugin and @config, in
+c_src/quickjs)
+  Copyright (c) 2017-2021 Fabrice Bellard; Copyright (c) 2017-2021
+  Charlie Gordon.
+  MIT License (licenses/quickjs.txt).
+  https://github.com/bellard/quickjs (commit e585640)
+
+@tailwindcss/forms 0.5.11 with mini-svg-data-uri 1.4.4,
+@tailwindcss/typography 0.5.20 with postcss-selector-parser 6.0.10,
+cssesc 3.0.0 and util-deprecate 1.0.2, and @tailwindcss/aspect-ratio 0.4.2
+(the plugins that the standalone program of Tailwind CSS has in its file,
+in native/tailwind/assets/plugins)
+  Copyright (c) Tailwind Labs, Inc.; Copyright (c) 2018 Taylor Hunt;
+  Copyright (c) Ben Briggs; Copyright Mathias Bynens; Copyright (c) 2014
+  Nathan Rajlich.
+  MIT License (licenses/tailwindcss-plugins.txt).
+  https://github.com/tailwindlabs/tailwindcss-forms
+  https://github.com/tailwindlabs/tailwindcss-typography
+  https://github.com/tailwindlabs/tailwindcss-aspect-ratio
+
+Sucrase 3.35.1 with lines-and-columns 1.2.4, ts-interface-checker 0.1.13,
+@jridgewell/gen-mapping and @jridgewell/sourcemap-codec (the TypeScript
+transform for TypeScript configs and plugins, in
+native/tailwind/assets/typescript.js)
+  Copyright (c) 2012-2018 various contributors (the authors of Sucrase
+  and of Babel); Copyright (c) 2015 Brian Donovan. MIT License
+  (licenses/sucrase.txt).
+  ts-interface-checker: Copyright Grist Labs. Apache License 2.0
+  (licenses/sucrase.txt).
+  Copyright 2019-2024 Justin Ridgewell. MIT License
+  (licenses/jridgewell.txt).
+  https://github.com/alangpierce/sucrase
+
+Cosmopolitan Libc 4.0.2 (the C runtime of the APE file)
+  Copyright 2020 Justine Alexandra Roberts Tunney.
+  ISC License (licenses/cosmopolitan.txt). Cosmopolitan also links code
+  of other projects under the licenses that its source names.
+  https://github.com/jart/cosmopolitan
+
+The Rust standard library and musl (in the Rust library of the file)
+  Copyright The Rust Project Developers; Copyright 2005-2020 Rich Felker
+  and the contributors of musl.
+  MIT License or Apache License 2.0 (Rust), MIT License
+  (licenses/musl.txt).
+
+The other Rust crates of Cargo.lock
+  Each crate has its license in its source (MIT, Apache-2.0, MPL-2.0,
+  BSD or Unlicense). "cargo tree" lists them.
+
+c_src/cosmo_rust.c, c_src/eh_frame_pad.ld and scripts/rust_link.sh come
+from BEAM.com (Apache License 2.0), by the same author. The parts of
+c_src/watch.c for inotify and kqueue, and the job bsd of
+.github/workflows/build.yml, follow the file watcher and the job
+test-bsd of BEAM.com.
+https://github.com/sntran/BEAM.com
+
+scripts/remote_ssh_runner.sh and .github/workflows/remote-ssh.yml follow
+the remote SSH workflow of BEAM.com.
+
+The test projects in tests/upstream/cli-js contain files of other
+projects (daisyUI, Phoenix, heroicons, topbar and npm packages).
+tests/upstream/cli-js/NOTICE.md names them. They are not in the file
+tailwind.com.

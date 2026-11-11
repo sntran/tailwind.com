@@ -1,0 +1,20 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .bg-objectbrand {
+    background-color: #abcdef;
+  }
+  .arrow-fn {
+    color: orange;
+  }
+  .object-form {
+    color: #abcdef;
+  }
+  .plain-fn {
+    color: red;
+  }
+  .plain-hover\:plain-w-a:hover {
+    width: 1px;
+  }
+}
+

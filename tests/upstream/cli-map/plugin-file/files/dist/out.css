@@ -1,0 +1,71 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .btn {
+    padding: 1rem;
+    @media print {
+      display: none;
+    }
+  }
+  .flex {
+    display: flex;
+  }
+  .card {
+    border-radius: 4px;
+    &:hover {
+      color: red;
+    }
+  }
+  .tab-4 {
+    tab-size: 4;
+  }
+  .tab-\[13\] {
+    tab-size: 13;
+  }
+  .underline {
+    text-decoration-line: underline;
+  }
+  @supports (grid: var(--tw)) {
+    .supports-grid\:grid {
+      display: grid;
+    }
+  }
+  @media (width >= 48rem) {
+    .md\:flex {
+      display: flex;
+    }
+  }
+  .hocus\:underline:hover {
+    text-decoration-line: underline;
+  }
+  .hocus\:underline:focus {
+    text-decoration-line: underline;
+  }
+}
+.own {
+  display: flex;
+  color: oklch(63.7% 0.237 25.331);
+}
+@layer base {
+  h1 {
+    font-size: 2rem;
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+  @media (min-width: 640px) {
+    body {
+      margin: 0 auto;
+    }
+  }
+}
+@keyframes wiggle {
+  from {
+    rotate: -3deg;
+  }
+  to {
+    rotate: 3deg;
+  }
+}
+
+/*# sourceMappingURL=out.css.map */

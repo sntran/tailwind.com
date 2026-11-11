@@ -1,0 +1,11 @@
+<div class="mx-auto max-w-2xl px-4 py-20 sm:px-6 lg:px-8">
+  <.button class="phx-click-loading:animate-pulse mt-4" phx-click="go">Go</.button>
+  <ul class={["divide-y divide-zinc-100", @compact && "text-xs", !@compact && "text-base"]}>
+    <li :for={item <- @items} class={if item.done, do: "line-through text-zinc-400", else: "text-zinc-900"}>
+      {item.title}
+    </li>
+  </ul>
+  <form phx-change="validate" class="phx-change-loading:opacity-50 space-y-8 group">
+    <input class="block w-full rounded-lg border-zinc-300 focus:border-zinc-400 group-[.phx-submit-loading]:cursor-wait" />
+  </form>
+</div>

@@ -1,0 +1,14 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./index.html";
+@theme {
+  --color-brand: #ff0000;
+  --color-css-only: #00ff00;
+  --spacing-gutter: 10px;
+}
+@config "./tailwind.config.js";
+@plugin "./plugin.js";
+@theme {
+  --color-late: #0000ff;
+}

@@ -1,0 +1,141 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+/*! A license comment */
+@layer properties {
+  @supports (((-webkit-hyphens: none)) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {
+    *, :before, :after, ::backdrop {
+      --tw-translate-x: 0;
+      --tw-translate-y: 0;
+      --tw-translate-z: 0;
+    }
+  }
+}
+
+:root, :host {
+  --color-red-500: oklch(63.7% .237 25.331);
+  --color-brand: #3b82f6;
+  --spacing: .25rem;
+}
+
+.flex {
+  display: flex;
+}
+
+.w-1\/2 {
+  width: 50%;
+}
+
+.translate-x-4 {
+  --tw-translate-x: calc(var(--spacing) * 4);
+  translate: var(--tw-translate-x) var(--tw-translate-y);
+}
+
+.bg-red-500\/50 {
+  background-color: #fb2c3680;
+}
+
+@supports (color: color-mix(in lab, red, red)) {
+  .bg-red-500\/50 {
+    background-color: color-mix(in oklab, var(--color-red-500) 50%, transparent);
+  }
+}
+
+.card {
+  padding: calc(var(--spacing) * 4);
+}
+
+.card:hover, .\[color\:red\] {
+  color: red;
+}
+
+.text-brand {
+  color: var(--color-brand);
+}
+
+@media not all and (min-width: 48rem) {
+  .not-md\:hidden {
+    display: none;
+  }
+}
+
+@media (hover: hover) {
+  :is(:where(.group):hover .group-hover\:text-red-500) {
+    color: var(--color-red-500);
+  }
+
+  .hover\:card:hover {
+    padding: calc(var(--spacing) * 4);
+  }
+
+  .hover\:card:hover:hover {
+    color: red;
+  }
+}
+
+@media (min-width: 48rem) {
+  .md\:p-4 {
+    padding: calc(var(--spacing) * 4);
+  }
+}
+
+@media (pointer: fine) {
+  .pointer\:underline {
+    text-decoration-line: underline;
+  }
+}
+
+.btn {
+  padding-inline: calc(var(--spacing) * 4);
+  padding-block: calc(var(--spacing) * 2);
+  color: var(--color-brand);
+}
+
+@media (hover: hover) {
+  .btn:hover {
+    text-decoration-line: underline;
+  }
+}
+
+.btn {
+  border-radius: 4px;
+}
+
+.nested {
+  color: red;
+}
+
+.dark .nested {
+  color: #3b82f680;
+}
+
+@supports (color: color-mix(in lab, red, red)) {
+  .dark .nested {
+    color: color-mix(in oklab, var(--color-brand) 50%, transparent);
+  }
+}
+
+@media (min-width: 48rem) {
+  .nested {
+    color: #00f;
+  }
+}
+
+@property --tw-translate-x {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --tw-translate-y {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --tw-translate-z {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+
+/*# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJtYXBwaW5ncyI6Ijs7QUFTQTtFQUFBO0lBQUE7Ozs7Ozs7O0FBVEE7Ozs7OztBQVNBOzs7O0FBQUE7Ozs7QUFBQTs7Ozs7QUFBQTs7OztBQUFBO0VBQUE7Ozs7O0FBQUE7Ozs7QUFVRTs7OztBQVZGOzs7O0FBQUE7RUFBQTs7Ozs7QUFBQTtFQUFBOzs7O0VBQUE7Ozs7RUFVRTs7Ozs7QUFWRjtFQUFBOzs7OztBQUFBO0VBQUE7Ozs7O0FBR0E7Ozs7OztBQUM4QjtFQUFBOzs7OztBQUM1Qjs7OztBQVlGOzs7O0FBRUU7Ozs7QUFDRTtFQUFBOzs7OztBQUVGO0VBQUE7Ozs7O0FBdEJGOzs7Ozs7QUFBQTs7Ozs7O0FBQUEiLCJuYW1lcyI6W10sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbInN0ZGluLmNzcyJdLCJzb3VyY2VzQ29udGVudCI6WyJAdGhlbWUge1xuICAtLWNvbG9yLXJlZC01MDA6IG9rbGNoKDYzLjclIDAuMjM3IDI1LjMzMSk7XG4gIC0tY29sb3ItYnJhbmQ6ICMzYjgyZjY7XG4gIC0tc3BhY2luZzogMC4yNXJlbTtcbiAgLS1icmVha3BvaW50LW1kOiA0OHJlbTtcbiAgLS1mb250LXNhbnM6IHVpLXNhbnMtc2VyaWYsIHN5c3RlbS11aSxcbiAgICBzYW5zLXNlcmlmO1xufVxuXG5AdGFpbHdpbmQgdXRpbGl0aWVzO1xuXG4vKiEgQSBsaWNlbnNlIGNvbW1lbnQgKi9cbi5idG4ge1xuICBAYXBwbHkgcHgtNCBweS0yIHRleHQtYnJhbmQgaG92ZXI6dW5kZXJsaW5lO1xuICBib3JkZXItcmFkaXVzOiA0cHg7XG59XG5cbkB1dGlsaXR5IGNhcmQge1xuICBwYWRkaW5nOiAtLXNwYWNpbmcoNCk7XG4gICY6aG92ZXIge1xuICAgIGNvbG9yOiByZWQ7XG4gIH1cbn1cblxuQGN1c3RvbS12YXJpYW50IHBvaW50ZXIgKEBtZWRpYSAocG9pbnRlcjogZmluZSkpO1xuXG4ubmVzdGVkIHtcbiAgY29sb3I6IHJlZDtcbiAgLmRhcmsgJiB7XG4gICAgY29sb3I6IGNvbG9yLW1peChpbiBva2xhYiwgdmFyKC0tY29sb3ItYnJhbmQpIDUwJSwgdHJhbnNwYXJlbnQpO1xuICB9XG4gIEBtZWRpYSAod2lkdGggPj0gNDhyZW0pIHtcbiAgICBjb2xvcjogYmx1ZTtcbiAgfVxufVxuIl19 */
+

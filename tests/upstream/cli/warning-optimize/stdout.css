@@ -1,0 +1,2 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme{:root,:host{--spacing:.25rem}}@layer base,components;@layer utilities{.p-4{padding:calc(var(--spacing) * 4)}}.card:focus-inside{color:red}.card :deep(.title){color:#00f}:global(.app) .card:slotted(p){color:green}:host-context(.dark) .card{color:#fff}.card::ng-deep .title{color:gray}

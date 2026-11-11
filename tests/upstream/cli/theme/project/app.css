@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --color-*: initial;
+  --color-brand: #ff5500;
+  --color-brand-dark: oklch(0.4 0.2 40);
+  --color-white: #fff;
+  --breakpoint-3xl: 120rem;
+  --breakpoint-sm: initial;
+  --font-display: "Satoshi", sans-serif;
+  --spacing: 4px;
+  --radius-pill: 9999px;
+  --ease-snappy: cubic-bezier(0.2, 0, 0, 1);
+  --animate-wiggle: wiggle 1s ease-in-out infinite;
+  --text-tiny: 0.625rem;
+  --text-tiny--line-height: 1rem;
+
+  @keyframes wiggle {
+    0%, 100% { transform: rotate(-3deg); }
+    50% { transform: rotate(3deg); }
+  }
+}
+
+@theme inline {
+  --color-primary: var(--brand-color);
+  --font-body: var(--font-display);
+}
+
+@theme static {
+  --color-always: #00ff88;
+  --shadow-always: 0 0 0 1px black;
+}

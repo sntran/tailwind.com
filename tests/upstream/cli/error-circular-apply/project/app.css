@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@utility btn {
+  @apply inline-flex px-3;
+}
+
+@utility btn-* {
+  @apply btn;
+  background-color: --value(--color-*);
+}

@@ -1,0 +1,77 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --spacing: 0.25rem;
+  }
+}
+@layer utilities {
+  .nth\:flex:nth-child(n) {
+    display: flex;
+  }
+  .nth-1\:flex:nth-child(1) {
+    display: flex;
+  }
+  @media (hover: hover) {
+    .hover\:nth-2\:underline:hover:nth-child(2) {
+      text-decoration-line: underline;
+    }
+  }
+  .nth-odd\:flex:nth-child(odd) {
+    display: flex;
+  }
+  .nth-\[3n\+1\]\:flex:nth-child(3n+1) {
+    display: flex;
+  }
+  .tooltip-top\:block[data-tip="top"] {
+    display: block;
+  }
+  .tooltip-top\:block[data-tooltip="top"] {
+    display: block;
+  }
+  .tooltip-\[left\]\:block[data-tip="left"] {
+    display: block;
+  }
+  .tooltip-\[left\]\:block[data-tooltip="left"] {
+    display: block;
+  }
+  @media (min-height: 400px) {
+    .minh-sm\:p-1 {
+      padding: var(--spacing);
+    }
+  }
+  @media (min-height: 500px) {
+    .minh-\[500px\]\:p-4 {
+      padding: calc(var(--spacing) * 4);
+    }
+  }
+  @media (min-height: 600px) {
+    .minh-md\:p-2 {
+      padding: calc(var(--spacing) * 2);
+    }
+  }
+  @media (min-height: 800px) {
+    .minh-lg\:p-3 {
+      padding: calc(var(--spacing) * 3);
+    }
+  }
+  .theme-dark .theme-\[dark\]\:flex {
+    display: flex;
+  }
+  @container (min-width: 320px) {
+    .pane-sm\:flex {
+      display: flex;
+    }
+  }
+  @container sidebar (min-width: 640px) {
+    .pane-lg\/sidebar\:flex {
+      display: flex;
+    }
+  }
+  @container main (min-width: 500px) {
+    .pane-\[500px\]\/main\:flex {
+      display: flex;
+    }
+  }
+}
+

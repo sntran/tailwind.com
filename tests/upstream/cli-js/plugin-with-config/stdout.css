@@ -1,0 +1,29 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .uses-config {
+    color: #00ff88;
+    gap: 1.25rem;
+  }
+  .bg-plug-900\/50 {
+    background-color: color-mix(in oklab, #003311 50%, transparent);
+  }
+  .p-gutter {
+    padding: 1.25rem;
+  }
+  .text-plug-500 {
+    color: #00ff88;
+  }
+  .depth-1 {
+    --depth: 10px;
+  }
+  .depth-2 {
+    --depth: 20px;
+  }
+  @media (width >= 1500px) {
+    .wide\:flex {
+      display: flex;
+    }
+  }
+}
+

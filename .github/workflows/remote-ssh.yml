@@ -1,0 +1,165 @@
+# SSH to a runner of CI, for tests and debugging on a system that a person
+# does not have: Windows, macOS, Linux on arm64, or a BSD in a VM on a
+# Linux runner. This is the method of the workflow of BEAM.com, with the
+# OpenSSH server of the runner (scripts/remote_ssh_runner.sh) behind a
+# quick tunnel of Cloudflare. The job puts the URL, the user and the host
+# key on the branch BRANCH, and deletes the branch at its end. Then:
+#
+#   scripts/remote_ssh_client.sh BRANCH KEY exec 'uname -a'
+#
+# Only the private key of the public key of the request can log in. The
+# job gets no secret. Its token can write to the repository (for the
+# branch) and read the artifacts of other runs (gh run download), and the
+# sessions get it as GH_TOKEN.
+#
+# Start it by hand (workflow_dispatch), or with a push that changes the
+# file .github/remote-ssh.request on a work branch. The file has one
+# NAME=VALUE for each line: os, vm (none, freebsd, netbsd, openbsd), key,
+# branch, minutes. Remove the file after the session. See CONTRIBUTING.md.
+name: Remote SSH
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: The runner
+        type: choice
+        options: [windows-2025, macos-26, macos-15-intel, ubuntu-26.04, ubuntu-26.04-arm]
+        default: windows-2025
+      vm:
+        description: A BSD in a VM (the runner must be ubuntu-26.04)
+        type: choice
+        options: [none, freebsd, netbsd, openbsd]
+        default: none
+      key:
+        description: The public key that can log in (one line, ssh-ed25519 ...)
+        type: string
+        required: true
+      branch:
+        description: The branch for the URL of the server (debug/...)
+        type: string
+        default: debug/ssh
+      minutes:
+        description: How long the server runs (120 or fewer)
+        type: number
+        default: 60
+  push:
+    branches: ["feat/**", "fix/**", "ci/**"]
+    paths: [.github/remote-ssh.request]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  request:
+    name: Read the request
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      os: ${{ steps.read.outputs.os }}
+      vm: ${{ steps.read.outputs.vm }}
+      key: ${{ steps.read.outputs.key }}
+      branch: ${{ steps.read.outputs.branch }}
+      minutes: ${{ steps.read.outputs.minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: The values of the inputs, or of the file
+        id: read
+        env:
+          EVENT: ${{ github.event_name }}
+          IN_OS: ${{ inputs.os }}
+          IN_VM: ${{ inputs.vm }}
+          IN_KEY: ${{ inputs.key }}
+          IN_BRANCH: ${{ inputs.branch }}
+          IN_MINUTES: ${{ inputs.minutes }}
+        run: |
+          # A push that removes the file ends a request: no session.
+          if [ "$EVENT" != workflow_dispatch ] && [ ! -f .github/remote-ssh.request ]; then
+            echo "No request file: no session."
+            exit 0
+          fi
+          value() { sed -n "s/^$1=//p" .github/remote-ssh.request | head -n 1; }
+          if [ "$EVENT" = workflow_dispatch ]; then
+            os=$IN_OS vm=$IN_VM key=$IN_KEY branch=$IN_BRANCH minutes=$IN_MINUTES
+          else
+            os=$(value os) vm=$(value vm) key=$(value key) branch=$(value branch) minutes=$(value minutes)
+          fi
+          vm=${vm:-none} branch=${branch:-debug/ssh} minutes=${minutes:-60}
+          case $os in
+            windows-2025|macos-26|macos-15-intel|ubuntu-26.04|ubuntu-26.04-arm) ;;
+            *) echo "The runner is not in the list: $os" >&2; exit 1 ;;
+          esac
+          case $vm in
+            none) ;;
+            freebsd|netbsd|openbsd)
+              [ "$os" = ubuntu-26.04 ] || { echo "A VM needs the runner ubuntu-26.04." >&2; exit 1; } ;;
+            *) echo "The VM is not in the list: $vm" >&2; exit 1 ;;
+          esac
+          case $branch in
+            debug/*) ;;
+            *) echo "The branch must start with debug/: $branch" >&2; exit 1 ;;
+          esac
+          case $key in
+            "ssh-ed25519 "*) ;;
+            *) echo "The key must be one line ssh-ed25519 ..." >&2; exit 1 ;;
+          esac
+          case $minutes in
+            ''|*[!0-9]*) echo "The minutes must be a number: $minutes" >&2; exit 1 ;;
+          esac
+          {
+            echo "os=$os"; echo "vm=$vm"; echo "key=$key"; echo "branch=$branch"; echo "minutes=$minutes"
+          } >> "$GITHUB_OUTPUT"
+
+  ssh:
+    name: SSH on ${{ needs.request.outputs.os }} (${{ needs.request.outputs.vm }})
+    needs: request
+    if: needs.request.outputs.os != ''
+    runs-on: ${{ needs.request.outputs.os }}
+    timeout-minutes: 125
+    concurrency:
+      group: remote-ssh-${{ needs.request.outputs.branch }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - name: The key
+        shell: bash
+        env:
+          KEY: ${{ needs.request.outputs.key }}
+        run: printf '%s\n' "$KEY" > "$RUNNER_TEMP/authorized_keys"
+      # A BSD in a VM. The VM stays after its step: a command of the SSH
+      # session reaches it with "ssh freebsd CMD" (or netbsd, openbsd),
+      # and the work directory of the job is in the VM too.
+      - name: The QEMU of the VM actions
+        if: needs.request.outputs.vm != 'none'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q qemu-system-x86 qemu-utils ovmf
+      - name: Start FreeBSD
+        if: needs.request.outputs.vm == 'freebsd'
+        uses: vmactions/freebsd-vm@a2f9a41fa97f6848b8c3b791087dfcdaa5b473ff # v1
+        with:
+          run: uname -a
+      - name: Start NetBSD
+        if: needs.request.outputs.vm == 'netbsd'
+        uses: vmactions/netbsd-vm@c8a0d7ddb84619a7a8cc4e652efa7950b3fd9f92 # v1
+        with:
+          run: uname -a
+      - name: Start OpenBSD 7.3
+        if: needs.request.outputs.vm == 'openbsd'
+        uses: vmactions/openbsd-vm@5f7b2c933b8846a138361d6843c52af4bef5d945 # v1
+        with:
+          release: "7.3"
+          run: uname -a
+
+      - name: Run the SSH server
+        shell: bash
+        env:
+          BRANCH: ${{ needs.request.outputs.branch }}
+          MINUTES: ${{ needs.request.outputs.minutes }}
+          KEYS: ${{ runner.temp }}/authorized_keys
+          WORK: ${{ github.workspace }}
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/remote_ssh_runner.sh

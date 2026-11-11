@@ -1,0 +1,44 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --tw-color-red-500: oklch(63.7% 0.237 25.331);
+    --tw-spacing: 0.25rem;
+  }
+}
+@layer utilities {
+  .tw\:-m-2 {
+    margin: calc(var(--tw-spacing) * -2);
+  }
+  .tw\:flex {
+    display: flex;
+  }
+  .tw\:plug-comp {
+    display: flex;
+  }
+  .tw\:plug-w-1 {
+    width: 1px;
+  }
+  .tw\:bg-brand {
+    background-color: #00f;
+  }
+  .tw\:bg-brand\/50\! {
+    background-color: color-mix(in oklab, #00f 50%, transparent) !important;
+  }
+  .tw\:plug-util {
+    color: red;
+    --prefix: "tw";
+    --fn: x;
+  }
+  @media (hover: hover) {
+    .tw\:hover\:bg-red-500:hover {
+      background-color: var(--tw-color-red-500);
+    }
+  }
+  @media (width >= 48rem) {
+    .tw\:md\:p-4 {
+      padding: calc(var(--tw-spacing) * 4);
+    }
+  }
+}
+

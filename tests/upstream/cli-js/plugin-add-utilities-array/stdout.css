@@ -1,0 +1,70 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer properties;
+@layer theme, base, components, utilities;
+@layer utilities {
+  .skew-10 {
+    transform-origin: top left;
+  }
+  .rotate-y-180 {
+    --tw-rotate-y: rotateY(180deg);
+    transform: var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, );
+  }
+  .skew-10 {
+    --tw-skew-x: skewX(10deg);
+    --tw-skew-y: skewY(10deg);
+    transform: var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, );
+  }
+  .skew-15 {
+    --tw-skew-x: skewX(15deg);
+    --tw-skew-y: skewY(15deg);
+    transform: var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, );
+  }
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+    backface-visibility: hidden;
+  }
+  .skew-10 {
+    transform: skewY(-10deg);
+  }
+  .skew-15 {
+    transform: skewY(-15deg);
+  }
+  .focus\:skew-15:focus {
+    --tw-skew-x: skewX(15deg);
+    --tw-skew-y: skewY(15deg);
+    transform: var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, );
+    transform: skewY(-15deg);
+  }
+}
+@property --tw-rotate-x {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-rotate-y {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-rotate-z {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-skew-x {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-skew-y {
+  syntax: "*";
+  inherits: false;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --tw-rotate-x: initial;
+      --tw-rotate-y: initial;
+      --tw-rotate-z: initial;
+      --tw-skew-x: initial;
+      --tw-skew-y: initial;
+    }
+  }
+}
+

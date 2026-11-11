@@ -1,0 +1,149 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer properties;
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --font-weight-bold: 700;
+  }
+}
+@layer utilities {
+  .max-w-card {
+    max-width: 22rem;
+  }
+  .not-data-active\:hidden:not([data-active]) {
+    display: none;
+  }
+  @supports not (display: grid) {
+    .not-supports-grid\:flex {
+      display: flex;
+    }
+  }
+  :is(:where(.group)[data-state="open"] .group-data-open2\:flex) {
+    display: flex;
+  }
+  :is(:where(.peer)[aria-sort="ascending"] ~ .peer-aria-asc\:flex) {
+    display: flex;
+  }
+  .has-data-open2\:flex:has([data-state="open"]) {
+    display: flex;
+  }
+  .aria-asc\:rotate-180[aria-sort="ascending"] {
+    rotate: 180deg;
+  }
+  .aria-checked\:underline[aria-checked="true"] {
+    text-decoration-line: underline;
+  }
+  .aria-current2\:font-bold[aria-current="page"] {
+    --tw-font-weight: var(--font-weight-bold);
+    font-weight: var(--font-weight-bold);
+  }
+  .aria-\[busy\=true\]\:opacity-50[aria-busy="true"] {
+    opacity: 50%;
+  }
+  .data-active\:flex[data-active] {
+    display: flex;
+  }
+  .data-checked2\:underline[data-ui~="checked"] {
+    text-decoration-line: underline;
+  }
+  .data-open2\:block[data-state="open"] {
+    display: block;
+  }
+  .data-\[x\=y\]\:flex[data-x="y"] {
+    display: flex;
+  }
+  @supports (backdrop-filter: blur(1px)) {
+    .supports-blur2\:backdrop-blur {
+      --tw-backdrop-blur: blur(8px);
+      -webkit-backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
+      backdrop-filter: var(--tw-backdrop-blur, ) var(--tw-backdrop-brightness, ) var(--tw-backdrop-contrast, ) var(--tw-backdrop-grayscale, ) var(--tw-backdrop-hue-rotate, ) var(--tw-backdrop-invert, ) var(--tw-backdrop-opacity, ) var(--tw-backdrop-saturate, ) var(--tw-backdrop-sepia, );
+    }
+  }
+  @supports (display: grid) {
+    .supports-grid\:grid {
+      display: grid;
+    }
+  }
+  @supports not (display: grid) {
+    .supports-not-ok\:block {
+      display: block;
+    }
+  }
+  @supports (display:flex) {
+    .supports-\[display\:flex\]\:flex {
+      display: flex;
+    }
+  }
+  @container (width < 22rem) {
+    .\@max-card\:hidden {
+      display: none;
+    }
+  }
+  @container (width >= 22rem) {
+    .\@card\:flex {
+      display: flex;
+    }
+  }
+  @container (width >= 28rem) {
+    .\@md\:flex {
+      display: flex;
+    }
+  }
+}
+@property --tw-font-weight {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-blur {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-brightness {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-contrast {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-grayscale {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-hue-rotate {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-invert {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-opacity {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-saturate {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-backdrop-sepia {
+  syntax: "*";
+  inherits: false;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --tw-font-weight: initial;
+      --tw-backdrop-blur: initial;
+      --tw-backdrop-brightness: initial;
+      --tw-backdrop-contrast: initial;
+      --tw-backdrop-grayscale: initial;
+      --tw-backdrop-hue-rotate: initial;
+      --tw-backdrop-invert: initial;
+      --tw-backdrop-opacity: initial;
+      --tw-backdrop-saturate: initial;
+      --tw-backdrop-sepia: initial;
+    }
+  }
+}
+

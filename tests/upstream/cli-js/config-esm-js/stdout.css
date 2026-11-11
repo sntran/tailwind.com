@@ -1,0 +1,11 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .bg-esm {
+    background-color: #bada55;
+  }
+  .text-esm\/50 {
+    color: color-mix(in oklab, #bada55 50%, transparent);
+  }
+}
+

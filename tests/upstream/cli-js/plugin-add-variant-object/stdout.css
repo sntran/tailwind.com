@@ -1,0 +1,47 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer theme {
+  :root, :host {
+    --spacing: 0.25rem;
+  }
+}
+@layer utilities {
+  .not-rtl2\:flex:not([dir="rtl"] *) {
+    display: flex;
+  }
+  @media (hover: hover) {
+    :is(:where(.group):hover .group-hover-device\:flex) {
+      display: flex;
+    }
+    .hover-device\:underline:hover {
+      text-decoration-line: underline;
+    }
+  }
+  @media (width >= 48rem) {
+    @media (hover: hover) {
+      .md\:hover-device\:p-4:hover {
+        padding: calc(var(--spacing) * 4);
+      }
+    }
+  }
+  .fancy\:flex:hover {
+    display: flex;
+  }
+  .fancy\:flex:focus-within {
+    display: flex;
+  }
+  @supports (display: grid) {
+    @media (min-width: 640px) {
+      .fancy-parent .fancy\:flex {
+        display: flex;
+      }
+    }
+  }
+  .slot-only\:block {
+    display: block;
+  }
+  [dir="rtl"] .rtl2\:text-right {
+    text-align: right;
+  }
+}
+

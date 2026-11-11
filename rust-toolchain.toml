@@ -1,0 +1,6 @@
+# One version of Rust for all the builds, so a new lint of a new Rust does
+# not fail CI. scripts/build.sh names its nightly Rust for aarch64 itself.
+[toolchain]
+channel = "1.97.0"
+components = ["clippy", "rustfmt"]
+targets = ["x86_64-unknown-linux-musl", "wasm32-wasip1"]

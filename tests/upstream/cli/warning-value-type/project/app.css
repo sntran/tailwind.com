@@ -1,0 +1,14 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./index.html";
+
+/* `size` and `float` are not data types of a bare value. */
+@utility tab-* {
+  tab-size: --value(integer, size, [integer]);
+}
+
+@utility gap-x-* {
+  column-gap: --value(--spacing-*, float);
+  row-gap: --modifier(number, text);
+}

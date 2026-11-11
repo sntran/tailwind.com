@@ -1,0 +1,66 @@
+name: Fuzz
+
+# The live differential fuzzer (tests/fuzz/fuzz.mjs): random stylesheets,
+# candidates and projects go to the official Tailwind CSS (the npm
+# packages of the version of UPSTREAM) and to this compiler. Each run has
+# a new seed, so each run tries new inputs. A difference fails the job,
+# and the artifact "fuzz" has the case and its reduced form. See
+# docs/TESTING.md.
+on:
+  push:
+    branches: [main, "feat/**", "fix/**", "ci/**"]
+    paths-ignore: ["**.md", "docs/**", ".github/remote-ssh.request"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**"]
+  schedule:
+    # Each night, with a longer time.
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: The seed (empty for a new one)
+        type: string
+        default: ""
+      minutes:
+        description: The time for new cases
+        type: number
+        default: 15
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: Differential fuzz against the official Tailwind CSS
+    runs-on: ubuntu-26.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - name: Build the program and the builder
+        run: cargo build --release --bin tailwind --example fuzz_build
+      - name: The official packages
+        run: sh tests/fuzz/install.sh "$RUNNER_TEMP/official"
+      - name: Fuzz
+        env:
+          SEED: ${{ inputs.seed }}
+          MINUTES: ${{ inputs.minutes || (github.event_name == 'schedule' && 45) || 10 }}
+        run: |
+          seed=${SEED:-$GITHUB_RUN_ID}
+          echo "The seed is $seed. A run with the same seed tries the same cases."
+          node tests/fuzz/fuzz.mjs \
+            --official "$RUNNER_TEMP/official" \
+            --builder target/release/examples/fuzz_build \
+            --program target/release/tailwind \
+            --seed "$seed" --cases 1000000 --projects 1000000 \
+            --seconds $((MINUTES * 60)) --out build/fuzz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: failure()
+        with:
+          name: fuzz
+          path: build/fuzz

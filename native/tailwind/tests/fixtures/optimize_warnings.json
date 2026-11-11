@@ -1,0 +1,202 @@
+[
+ {
+  "input": ".a {\n  color: red;\n}\n",
+  "minify": false,
+  "code": ".a {\n  color: red;\n}\n",
+  "warnings": []
+ },
+ {
+  "input": ".a {\n  color: red;\n}\n",
+  "minify": true,
+  "code": ".a{color:red}",
+  "warnings": []
+ },
+ {
+  "input": ".a {\n  color: red;\n}\n.b:not-a-class {\n  color: blue;\n}\n.c {\n  color: green;\n}\n",
+  "minify": false,
+  "code": ".a {\n  color: red;\n}\n\n.b:not-a-class {\n  color: #00f;\n}\n\n.c {\n  color: green;\n}\n",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│   color: red;\u001b[22m\n\u001b[2m│ }\u001b[22m\n\u001b[2m│\u001b[22m .b:not-a-class {\n\u001b[2m┆\u001b[22m    \u001b[33m\u001b[2m^--\u001b[22m 'not-a-class' is not recognized as a valid pseudo-class. Did you mean '::not-a-class' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│   color: blue;\u001b[22m\n\u001b[2m│ }\u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a {\n  color: red;\n}\n.b:not-a-class {\n  color: blue;\n}\n.c {\n  color: green;\n}\n",
+  "minify": true,
+  "code": ".a{color:red}.b:not-a-class{color:#00f}.c{color:green}",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│   color: red;\u001b[22m\n\u001b[2m│ }\u001b[22m\n\u001b[2m│\u001b[22m .b:not-a-class {\n\u001b[2m┆\u001b[22m    \u001b[33m\u001b[2m^--\u001b[22m 'not-a-class' is not recognized as a valid pseudo-class. Did you mean '::not-a-class' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│   color: blue;\u001b[22m\n\u001b[2m│ }\u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a:first-warning { color: red }",
+  "minify": false,
+  "code": ".a:first-warning {\n  color: red;\n}\n",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│\u001b[22m .a:first-warning { color: red }\n\u001b[2m┆\u001b[22m    \u001b[33m\u001b[2m^--\u001b[22m 'first-warning' is not recognized as a valid pseudo-class. Did you mean '::first-warning' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a:first-warning { color: red }",
+  "minify": true,
+  "code": ".a:first-warning{color:red}",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│\u001b[22m .a:first-warning { color: red }\n\u001b[2m┆\u001b[22m    \u001b[33m\u001b[2m^--\u001b[22m 'first-warning' is not recognized as a valid pseudo-class. Did you mean '::first-warning' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a { color: red }\n.b { color: blue }\n.c::last-warning(x) { color: green }",
+  "minify": false,
+  "code": ".a {\n  color: red;\n}\n\n.b {\n  color: #00f;\n}\n\n.c::last-warning(x) {\n  color: green;\n}\n",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .a { color: red }\u001b[22m\n\u001b[2m│ .b { color: blue }\u001b[22m\n\u001b[2m│\u001b[22m .c::last-warning(x) { color: green }\n\u001b[2m┆\u001b[22m                  \u001b[33m\u001b[2m^--\u001b[22m 'last-warning' is not recognized as a valid pseudo-element. Did you mean ':last-warning' (pseudo-class) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a { color: red }\n.b { color: blue }\n.c::last-warning(x) { color: green }",
+  "minify": true,
+  "code": ".a{color:red}.b{color:#00f}.c::last-warning(x){color:green}",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .a { color: red }\u001b[22m\n\u001b[2m│ .b { color: blue }\u001b[22m\n\u001b[2m│\u001b[22m .c::last-warning(x) { color: green }\n\u001b[2m┆\u001b[22m                  \u001b[33m\u001b[2m^--\u001b[22m 'last-warning' is not recognized as a valid pseudo-element. Did you mean ':last-warning' (pseudo-class) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a:one {\n  color: red;\n}\n\n\n.b::two(x) {\n  color: blue;\n}\n@media (width >= 40rem) {\n  .c:three .d {\n    color: green;\n  }\n}\n",
+  "minify": false,
+  "code": ".a:one {\n  color: red;\n}\n\n.b::two(x) {\n  color: #00f;\n}\n\n@media (min-width: 40rem) {\n  .c:three .d {\n    color: green;\n  }\n}\n",
+  "warnings": [
+   "Found 3 warnings while optimizing generated CSS:\n\nIssue #1:\n\u001b[2m│\u001b[22m .a:one {\n\u001b[2m┆\u001b[22m    \u001b[33m\u001b[2m^--\u001b[22m 'one' is not recognized as a valid pseudo-class. Did you mean '::one' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│   color: red;\u001b[22m\n\u001b[2m│ }\u001b[22m\n\nIssue #2:\n\u001b[2m│ \u001b[22m\n\u001b[2m│ \u001b[22m\n\u001b[2m│\u001b[22m .b::two(x) {\n\u001b[2m┆\u001b[22m         \u001b[33m\u001b[2m^--\u001b[22m 'two' is not recognized as a valid pseudo-element. Did you mean ':two' (pseudo-class) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│   color: blue;\u001b[22m\n\u001b[2m│ }\u001b[22m\n\nIssue #3:\n\u001b[2m│ }\u001b[22m\n\u001b[2m│ @media (width >= 40rem) {\u001b[22m\n\u001b[2m│\u001b[22m   .c:three .d {\n\u001b[2m┆\u001b[22m      \u001b[33m\u001b[2m^--\u001b[22m 'three' is not recognized as a valid pseudo-class. Did you mean '::three' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│     color: green;\u001b[22m\n\u001b[2m│   }\u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a:one {\n  color: red;\n}\n\n\n.b::two(x) {\n  color: blue;\n}\n@media (width >= 40rem) {\n  .c:three .d {\n    color: green;\n  }\n}\n",
+  "minify": true,
+  "code": ".a:one{color:red}.b::two(x){color:#00f}@media (min-width:40rem){.c:three .d{color:green}}",
+  "warnings": [
+   "Found 3 warnings while optimizing generated CSS:\n\nIssue #1:\n\u001b[2m│\u001b[22m .a:one {\n\u001b[2m┆\u001b[22m    \u001b[33m\u001b[2m^--\u001b[22m 'one' is not recognized as a valid pseudo-class. Did you mean '::one' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│   color: red;\u001b[22m\n\u001b[2m│ }\u001b[22m\n\nIssue #2:\n\u001b[2m│ \u001b[22m\n\u001b[2m│ \u001b[22m\n\u001b[2m│\u001b[22m .b::two(x) {\n\u001b[2m┆\u001b[22m         \u001b[33m\u001b[2m^--\u001b[22m 'two' is not recognized as a valid pseudo-element. Did you mean ':two' (pseudo-class) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│   color: blue;\u001b[22m\n\u001b[2m│ }\u001b[22m\n\nIssue #3:\n\u001b[2m│ }\u001b[22m\n\u001b[2m│ @media (width >= 40rem) {\u001b[22m\n\u001b[2m│\u001b[22m   .c:three .d {\n\u001b[2m┆\u001b[22m      \u001b[33m\u001b[2m^--\u001b[22m 'three' is not recognized as a valid pseudo-class. Did you mean '::three' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│     color: green;\u001b[22m\n\u001b[2m│   }\u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a :deep(.b) { color: red }\n.c:slotted(p) { color: red }\n:global(.d) { color: red }\n.e::ng-deep .f { color: red }\n:host-context(.g) .h { color: red }\n",
+  "minify": false,
+  "code": ".a :deep(.b) {\n  color: red;\n}\n\n.c:slotted(p) {\n  color: red;\n}\n\n:global(.d) {\n  color: red;\n}\n\n.e::ng-deep .f {\n  color: red;\n}\n\n:host-context(.g) .h {\n  color: red;\n}\n",
+  "warnings": []
+ },
+ {
+  "input": ".a :deep(.b) { color: red }\n.c:slotted(p) { color: red }\n:global(.d) { color: red }\n.e::ng-deep .f { color: red }\n:host-context(.g) .h { color: red }\n",
+  "minify": true,
+  "code": ".a :deep(.b){color:red}.c:slotted(p){color:red}:global(.d){color:red}.e::ng-deep .f{color:red}:host-context(.g) .h{color:red}",
+  "warnings": []
+ },
+ {
+  "input": ".a :deep(.b) { color: red }\n.c:unknown-thing { color: red }\n.d:global(.e) { color: red }\n",
+  "minify": false,
+  "code": ".a :deep(.b) {\n  color: red;\n}\n\n.c:unknown-thing {\n  color: red;\n}\n\n.d:global(.e) {\n  color: red;\n}\n",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .a :deep(.b) { color: red }\u001b[22m\n\u001b[2m│\u001b[22m .c:unknown-thing { color: red }\n\u001b[2m┆\u001b[22m    \u001b[33m\u001b[2m^--\u001b[22m 'unknown-thing' is not recognized as a valid pseudo-class. Did you mean '::unknown-thing' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ .d:global(.e) { color: red }\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a :deep(.b) { color: red }\n.c:unknown-thing { color: red }\n.d:global(.e) { color: red }\n",
+  "minify": true,
+  "code": ".a :deep(.b){color:red}.c:unknown-thing{color:red}.d:global(.e){color:red}",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .a :deep(.b) { color: red }\u001b[22m\n\u001b[2m│\u001b[22m .c:unknown-thing { color: red }\n\u001b[2m┆\u001b[22m    \u001b[33m\u001b[2m^--\u001b[22m 'unknown-thing' is not recognized as a valid pseudo-class. Did you mean '::unknown-thing' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ .d:global(.e) { color: red }\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".é { color: red }\n.ü .日本:unknown-here { color: red }\n",
+  "minify": false,
+  "code": ".é {\n  color: red;\n}\n\n.ü .日本:unknown-here {\n  color: red;\n}\n",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .é { color: red }\u001b[22m\n\u001b[2m│\u001b[22m .ü .日本:unknown-here { color: red }\n\u001b[2m┆\u001b[22m        \u001b[33m\u001b[2m^--\u001b[22m 'unknown-here' is not recognized as a valid pseudo-class. Did you mean '::unknown-here' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".é { color: red }\n.ü .日本:unknown-here { color: red }\n",
+  "minify": true,
+  "code": ".é{color:red}.ü .日本:unknown-here{color:red}",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .é { color: red }\u001b[22m\n\u001b[2m│\u001b[22m .ü .日本:unknown-here { color: red }\n\u001b[2m┆\u001b[22m        \u001b[33m\u001b[2m^--\u001b[22m 'unknown-here' is not recognized as a valid pseudo-class. Did you mean '::unknown-here' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": "@layer components {\n  .card {\n    color: red;\n    &:not-known {\n      color: blue;\n    }\n  }\n}\n",
+  "minify": false,
+  "code": "@layer components {\n  .card {\n    color: red;\n  }\n\n  .card:not-known {\n    color: #00f;\n  }\n}\n",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│   .card {\u001b[22m\n\u001b[2m│     color: red;\u001b[22m\n\u001b[2m│\u001b[22m     &:not-known {\n\u001b[2m┆\u001b[22m       \u001b[33m\u001b[2m^--\u001b[22m 'not-known' is not recognized as a valid pseudo-class. Did you mean '::not-known' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│       color: blue;\u001b[22m\n\u001b[2m│     }\u001b[22m\n"
+  ]
+ },
+ {
+  "input": "@layer components {\n  .card {\n    color: red;\n    &:not-known {\n      color: blue;\n    }\n  }\n}\n",
+  "minify": true,
+  "code": "@layer components{.card{color:red}.card:not-known{color:#00f}}",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│   .card {\u001b[22m\n\u001b[2m│     color: red;\u001b[22m\n\u001b[2m│\u001b[22m     &:not-known {\n\u001b[2m┆\u001b[22m       \u001b[33m\u001b[2m^--\u001b[22m 'not-known' is not recognized as a valid pseudo-class. Did you mean '::not-known' (pseudo-element) or is this a typo?\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│       color: blue;\u001b[22m\n\u001b[2m│     }\u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a { color: red }\n@media (min-width: ) { .b { color: blue } }\n.c { color: green }\n",
+  "minify": false,
+  "code": ".a {\n  color: red;\n}\n\n@media (min-width: ) {\n  .b {\n    color: #00f;\n  }\n}\n\n.c {\n  color: green;\n}\n",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .a { color: red }\u001b[22m\n\u001b[2m│\u001b[22m @media (min-width: ) { .b { color: blue } }\n\u001b[2m┆\u001b[22m                  \u001b[33m\u001b[2m^--\u001b[22m Invalid media query\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ .c { color: green }\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a { color: red }\n@media (min-width: ) { .b { color: blue } }\n.c { color: green }\n",
+  "minify": true,
+  "code": ".a{color:red}@media (min-width: ){.b{color:#00f}}.c{color:green}",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .a { color: red }\u001b[22m\n\u001b[2m│\u001b[22m @media (min-width: ) { .b { color: blue } }\n\u001b[2m┆\u001b[22m                  \u001b[33m\u001b[2m^--\u001b[22m Invalid media query\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ .c { color: green }\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a { color: red }\n.b { & > { color: blue } }\n.c { color: green }\n",
+  "minify": false,
+  "code": ".a {\n  color: red;\n}\n\n.c {\n  color: green;\n}\n",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .a { color: red }\u001b[22m\n\u001b[2m│\u001b[22m .b { & > { color: blue } }\n\u001b[2m┆\u001b[22m          \u001b[33m\u001b[2m^--\u001b[22m Invalid dangling combinator in selector\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ .c { color: green }\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a { color: red }\n.b { & > { color: blue } }\n.c { color: green }\n",
+  "minify": true,
+  "code": ".a{color:red}.c{color:green}",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .a { color: red }\u001b[22m\n\u001b[2m│\u001b[22m .b { & > { color: blue } }\n\u001b[2m┆\u001b[22m          \u001b[33m\u001b[2m^--\u001b[22m Invalid dangling combinator in selector\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ .c { color: green }\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a { color: red }\n..b { color: blue }\n.c { color: green }\n",
+  "minify": false,
+  "code": ".a {\n  color: red;\n}\n\n.c {\n  color: green;\n}\n",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .a { color: red }\u001b[22m\n\u001b[2m│\u001b[22m ..b { color: blue }\n\u001b[2m┆\u001b[22m  \u001b[33m\u001b[2m^--\u001b[22m Expected identifier in class selector, got Delim('.')\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ .c { color: green }\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": ".a { color: red }\n..b { color: blue }\n.c { color: green }\n",
+  "minify": true,
+  "code": ".a{color:red}.c{color:green}",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ .a { color: red }\u001b[22m\n\u001b[2m│\u001b[22m ..b { color: blue }\n\u001b[2m┆\u001b[22m  \u001b[33m\u001b[2m^--\u001b[22m Expected identifier in class selector, got Delim('.')\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ .c { color: green }\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": "@import \"x.css\";\n.a { color: red }\n@import \"late.css\";\n",
+  "minify": false,
+  "code": "@import \"x.css\";\n\n.a {\n  color: red;\n}\n",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ @import \"x.css\";\u001b[22m\n\u001b[2m│ .a { color: red }\u001b[22m\n\u001b[2m│\u001b[22m @import \"late.css\";\n\u001b[2m┆\u001b[22m        \u001b[33m\u001b[2m^--\u001b[22m @import rules must precede all rules aside from @charset and @layer statements\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ },
+ {
+  "input": "@import \"x.css\";\n.a { color: red }\n@import \"late.css\";\n",
+  "minify": true,
+  "code": "@import \"x.css\";.a{color:red}",
+  "warnings": [
+   "Found 1 warning while optimizing generated CSS:\n\n\u001b[2m│ @import \"x.css\";\u001b[22m\n\u001b[2m│ .a { color: red }\u001b[22m\n\u001b[2m│\u001b[22m @import \"late.css\";\n\u001b[2m┆\u001b[22m        \u001b[33m\u001b[2m^--\u001b[22m @import rules must precede all rules aside from @charset and @layer statements\u001b[39m\n\u001b[2m┆\u001b[22m\n\u001b[2m│ \u001b[22m\n"
+  ]
+ }
+]

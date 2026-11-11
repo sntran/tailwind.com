@@ -1,0 +1,18 @@
+# The versions of the other projects that this repository follows.
+# scripts/sync-upstream.sh reads and writes this file.
+TAILWINDCSS_VERSION=4.3.5
+TAILWINDCSS_COMMIT=9b2c925c19aae46ff4f9cf54a2fa6d2dbac7fa19
+LIGHTNINGCSS_NPM=1.33.0
+LIGHTNINGCSS_CRATE=1.0.0-alpha.72
+QUICKJS_VERSION=2026-06-04
+QUICKJS_COMMIT=e585640ffa2cf88ce7c2d587583c6fe15928ec2f
+# The plugins that the standalone program of Tailwind CSS has in its file
+# (native/tailwind/assets/plugins): the versions of its lock file.
+STANDALONE_FORMS=0.5.11
+STANDALONE_TYPOGRAPHY=0.5.20
+STANDALONE_ASPECT_RATIO=0.4.2
+# The standalone program of the release of Tailwind CSS, for
+# tests/standalone.sh (from sha256sums.txt of the release).
+STANDALONE_LINUX_X64_SHA256=e47695cee3f0d90623a91f3939b08bdee610eb5ad99340adff9d4145b284d6cc
+# The TypeScript transform (native/tailwind/assets/typescript.js).
+SUCRASE_VERSION=3.35.1

@@ -1,0 +1,78 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .grid-ok {
+    display: block;
+    @supports (display: grid) {
+      display: grid;
+      &:hover {
+        gap: 1rem;
+      }
+    }
+  }
+  @media print {
+    .print-hidden {
+      display: none;
+    }
+  }
+  .spin-slow {
+    animation: plugin-spin 3s linear infinite;
+    @keyframes plugin-spin {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  }
+  @media (min-width: 640px) {
+    @supports (gap: 1px) {
+      @container (min-width: 10rem) {
+        .deep {
+          gap: 1px;
+        }
+      }
+    }
+  }
+  @layer plugin-layer {
+    .deep {
+      color: red;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .motion-ok {
+      transition: all 150ms;
+    }
+  }
+  @media (hover: hover) {
+    @media (min-width: 640px) {
+      @supports (gap: 1px) {
+        @container (min-width: 10rem) {
+          .hover\:deep:hover {
+            gap: 1px;
+          }
+        }
+      }
+    }
+    @layer plugin-layer {
+      .hover\:deep:hover {
+        color: red;
+      }
+    }
+  }
+  @media (width >= 64rem) {
+    .lg\:grid-ok {
+      display: block;
+    }
+    @supports (display: grid) {
+      .lg\:grid-ok {
+        display: grid;
+      }
+      .lg\:grid-ok:hover {
+        gap: 1rem;
+      }
+    }
+  }
+}
+

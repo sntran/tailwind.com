@@ -1,0 +1,9 @@
+@import "./theme.css";
+@import "./components/buttons.css" layer(components);
+@import "./print.css" print;
+@layer utilities {
+  @tailwind utilities;
+}
+.app {
+  @apply flex;
+}

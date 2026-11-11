@@ -1,0 +1,20 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./index.html";
+
+.first:not-a-class {
+  color: red;
+}
+.kept {
+  color: blue;
+}
+@layer components {
+  .second::not-an-element(x) {
+    color: green;
+  }
+    .third:another-one .é {
+    color: teal;
+  }
+}
+.last { color: black }

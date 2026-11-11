@@ -1,0 +1,41 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .flex {
+    display: flex;
+  }
+  .bg-\[theme\(colors\.brand\.dark\)\] {
+    background-color: #4c1d95;
+  }
+  .p-\[theme\(spacing\.gutter\)\] {
+    padding: 1.5rem;
+  }
+  .text-\[theme\(colors\.brand\.DEFAULT\/50\%\)\] {
+    color: color-mix(in oklab, #7c3aed 50%, transparent);
+  }
+}
+.legacy-theme {
+  color: oklch(62.3% 0.214 259.815);
+  background: #7c3aed;
+  border-color: color-mix(in oklab, #4c1d95 50%, transparent);
+  outline-color: #fff;
+  padding: 1rem 1.5rem;
+  margin: 0.625rem;
+  font-family: Oswald;
+  font-size: 4rem;
+  line-height: 1.1;
+  border-radius: 1rem;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.2);
+  width: calc(100% - 16rem);
+  z-index: 1000;
+  fill: tomato;
+  stroke: #4c1d95;
+  accent-color: #7c3aed;
+  caret-color: color-mix(in oklab, #7c3aed 20%, transparent);
+}
+@media (min-width: 700px) {
+  .legacy-theme {
+    color: oklch(63.7% 0.237 25.331);
+  }
+}
+

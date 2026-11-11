@@ -1,0 +1,31 @@
+/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */
+@layer theme, base, components, utilities;
+@layer utilities {
+  .bg-fromconfig {
+    background-color: #111111;
+  }
+  .bg-fromplugin {
+    background-color: #222222;
+  }
+  .local-plugin {
+    color: #111111;
+    background: #222222;
+    --json: from-json;
+  }
+  .default-name {
+    color: silver;
+  }
+  .object-plugin {
+    color: cyan;
+  }
+  .opt {
+    color: gold;
+  }
+  .plain-plugin {
+    color: lime;
+  }
+  .inline-variant\:inline-plain:is(.inline) {
+    color: pink;
+  }
+}
+

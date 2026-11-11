@@ -1,0 +1,29 @@
+<div class="mx-auto max-w-2xl px-4 py-20 sm:px-6 lg:px-8">
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body">
+      <h2 class="card-title">Settings</h2>
+      <form phx-change="validate" phx-submit="save" class="phx-change-loading:opacity-50 space-y-4 group">
+        <input type="text" class="input w-full group-[.phx-submit-loading]:cursor-wait" />
+        <input type="checkbox" class="toggle toggle-primary" />
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-ghost btn-sm">Cancel</button>
+          <button class="btn btn-primary phx-submit-loading:opacity-75">
+            <span class="hero-check-mini"></span> Save
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="toast toast-top toast-end">
+    <div role="alert" class="alert alert-info">
+      <span class="hero-information-circle size-5 shrink-0"></span>
+      <span>Saved.</span>
+      <button class="btn btn-circle btn-xs" aria-label="close">
+        <span class="hero-x-mark size-4 opacity-40 group-hover:opacity-70"></span>
+      </button>
+    </div>
+  </div>
+  <span class="badge badge-warning dark:badge-outline">New</span>
+  <span class="hero-arrow-path-solid motion-safe:animate-spin"></span>
+  <span class="hero-bars-3-micro hero-does-not-exist md:hero-check-solid"></span>
+</div>
