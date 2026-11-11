@@ -552,6 +552,10 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("pb", "padding-bottom"),
         ("pl", "padding-left"),
     ] {
+        // The utilities of 4.2.0 (`switches::LOGICAL_UTILITIES`).
+        if matches!(name, "pbs" | "pbe") && !crate::switches::LOGICAL_UTILITIES.on() {
+            continue;
+        }
         spacing_utility(
             utilities,
             name,
@@ -633,11 +637,13 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     });
 
     // `font-feature-settings`
-    functional_utility(
-        utilities,
-        "font-features",
-        UtilityDescription::new(|value, _, _| Some(vec![decl("font-feature-settings", value)])),
-    );
+    if crate::switches::FONT_FEATURES.on() {
+        functional_utility(
+            utilities,
+            "font-features",
+            UtilityDescription::new(|value, _, _| Some(vec![decl("font-feature-settings", value)])),
+        );
+    }
 
     static_decls(utilities, "uppercase", &[("text-transform", "uppercase")]);
     static_decls(utilities, "lowercase", &[("text-transform", "lowercase")]);

@@ -231,7 +231,8 @@ impl Optimizer<'_> {
 
                 let needs_color_mix = self.polyfills & crate::POLYFILLS_COLOR_MIX != 0
                     && !context.supports_color_mix
-                    && !context.keyframes
+                    // Before 4.1.18, also in `@keyframes`.
+                    && !(context.keyframes && switches::KEYFRAMES_NO_COLOR_MIX_FALLBACK.on())
                     && value.contains("color-mix(");
 
                 let id = self.arena.add(Item::Node(node.clone()));
@@ -320,7 +321,12 @@ impl Optimizer<'_> {
             AstNode::AtRule(rule) => {
                 if rule.name == "@keyframes" {
                     context.keyframes = true;
-                } else if rule.name == "@supports" && rule.params.contains("color-mix(") {
+                } else if rule.name == "@supports"
+                    && rule.params.contains("color-mix(")
+                    && crate::switches::SUPPORTS_COLOR_MIX_NO_FALLBACK.on()
+                {
+                    // Before 4.2.0, a declaration in this rule got a
+                    // fallback as each other.
                     context.supports_color_mix = true;
                 }
 
@@ -558,13 +564,21 @@ impl Optimizer<'_> {
                     loc.clear_identity();
                 }
                 let fallback = self.arena.add(Item::Node(fallback));
+                // Before 4.1.16, the declaration was in a `&` rule.
+                let content = if switches::COLOR_MIX_FALLBACK_NO_AMPERSAND.on() {
+                    declaration
+                } else {
+                    let rule = self.arena.add(Item::Rule { selector: "&".to_string(), nodes: vec![declaration], loc: Loc::default() });
+                    self.arena.entries[declaration].parent = Some(rule);
+                    rule
+                };
                 let query = self.arena.add(Item::AtRule {
                     name: "@supports".to_string(),
                     params: "(color: color-mix(in lab, red, red))".to_string(),
-                    nodes: vec![declaration],
+                    nodes: vec![content],
                     loc: query_loc,
                 });
-                self.arena.entries[declaration].parent = Some(query);
+                self.arena.entries[content].parent = Some(query);
                 self.arena.entries[fallback].parent = Some(parent);
                 self.arena.entries[query].parent = Some(parent);
                 self.arena.children_mut(parent).splice(idx..=idx, [fallback, query]);

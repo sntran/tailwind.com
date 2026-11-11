@@ -279,6 +279,65 @@ No switch: a static value with the name of a property of `Object`
 |---|---|---|---|---|
 | `UTILITY_ROOT_ENDING_DASH` | fix | S | edge | Only in 4.2.0: `@utility foo--*` was not a valid name |
 
+### 4.2.0 (12 switches, all there; 1 change in the plugin layer; data changes with no switch)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `FRACTION_SPACES` | form | S | common | `w-1/2` gave `calc(1/2 * 100%)`, not `calc(1 / 2 * 100%)` |
+| `LOGICAL_UTILITIES` | feature, data | S | rare | No `inset-s-*`, `inset-e-*`, `inset-bs-*`, `inset-be-*`, `mbs-*`, `mbe-*`, `pbs-*`, `pbe-*`, `scroll-mbs-*`, `scroll-mbe-*`, `scroll-pbs-*`, `scroll-pbe-*`, `border-bs-*`, `border-be-*`, `inline-*`, `block-*`, `min-inline-*`, `max-inline-*`, `min-block-*`, `max-block-*`; the `…-block-start` and `…-block-end` properties had no place in the property order |
+| `START_END_ARE_OLD_UTILITIES` | form | S | edge | `start-*` and `end-*` were spacing utilities as `inset-x-*`: `start` with no value and `start-4/[5]` gave nothing |
+| `FONT_FEATURES` | feature, data | S | rare | No `font-features-*`; `font-feature-settings` had no place in the property order |
+| `RATIO_VALUE_SPACES` | form | S | rare | `--value(ratio)` of `@utility` gave `1/2`, not `1 / 2`, and `foo-01/2` gave nothing |
+| `ASPECT_FRACTION_DECIMALS` | feature | S | rare | `aspect-8.5/11` gave nothing |
+| `INSET_SHADOW_LIST_SPACES` | form | S | rare | A list of inset shadows had `,` and not `, ` between its shadows, and each shadow kept its spaces |
+| `UTILITY_NAME_ESCAPES` | fix | S | rare | `@utility push-1\/2` was an error |
+| `UTILITY_NAME_SCANNER_RULES` | fix | S | edge | The name of `@utility` had one pattern: `ui/button/sm`, `a.b`, `a-` and `a.5-*` were valid names |
+| `SUPPORTS_COLOR_MIX_NO_FALLBACK` | fix | S | rare | A declaration in `@supports (color: color-mix(…))` got a fallback and a second `@supports` rule |
+| `SOURCE_INLINE_WHITESPACE` | fix | S | edge | `@source inline( "underline" )` was the error "`@source` paths must be quoted." |
+| `SLOT_NODES_STAY` | form | S | edge | An `@keyframes` or `@property` rule in the nodes that replace `@slot` went out to the root |
+| colors (JS) | data | S | rare | `tailwindcss/colors` had no `mauve`, `olive`, `mist` and `taupe` |
+
+No switch: an `@custom-variant` whose `@slot` gets nodes with an `@slot`
+(`@custom-variant b { @variant a { @slot; } }`, where `a` is also an
+`@custom-variant` with a body) made an endless loop in the official
+compiler (a fault that stops the compiler). The new walk of the tree
+(`walk.ts`) gives the same result. Data, from the package: the colors
+`mauve`, `olive`, `mist` and `taupe` of `theme.css`.
+
+### 4.1.18 (6 switches, all there; 1 change in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `KEYFRAMES_NO_COLOR_MIX_FALLBACK` | fix | S | rare | A declaration with `color-mix(…)` in `@keyframes` got a fallback and an `@supports` rule |
+| `NAMED_VALUE_CHARACTERS` | fix | S | edge | `bg-foo=bar` and `data-foo=bar:flex` were valid: a named value had no check of its characters |
+| `CSS_ERROR_LOCATION` | form | S | rare | The message of a CSS syntax error had no `file:line:column: ` at its start (the compiler has the file only with the `from` option) |
+| `CONTENT_THEME_KEY` | feature | S | rare | `content-*` did not read `--content`: `content-slash` gave nothing |
+| `THEME_FN_DEFAULT_NAMESPACE` | fix | S | edge | `theme(ringColor.DEFAULT)` read `--ring-color`, not `--default-ring-color` (also `borderWidth`, `outlineWidth`, `ringWidth`, `transitionDuration`, `transitionTimingFunction`) |
+| `THEME_FN_KEEPS_KEY_CASE` | fix | S | edge | `theme(colors.fooBar)` read `--color-foo-bar`, not `--color-fooBar` |
+| config-theme-keys (JS) | fix | M | rare | The keys of the theme of a config changed to kebab case, and `ringColor.DEFAULT` of a config was `--ring-color` |
+
+No switch: the new function `candidatesToAst` and the file `cartesian.ts`
+are for the editor tools and the canonical form of candidates. The
+check of `source(…)` against the directory of its file, and its new
+message, are in the code of the command line (`cli/mod.rs`). That code
+has no switches: it gives the result of 4.1.18 for each version.
+
+### 4.1.17 (no switch)
+
+No switch: an `@variant` rule in the rules of a candidate
+(`[@variant_hover]:flex`) stayed in the output, which was not valid CSS.
+The Rust compiler replaces it in each version, as 4.1.17 does.
+
+### 4.1.16 (2 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `COLOR_MIX_FALLBACK_NO_AMPERSAND` | form | S | common | The `@supports` rule of a `color-mix(…)` fallback had the declaration in a `& { … }` rule |
+| `EMPTY_DATA_TYPE_IS_INVALID` | fix | S | edge | `bg-[:red]` gave `background-color: red` |
+
+No switch: the changes of `canonicalize-candidates.ts`, `signatures.ts`,
+`expand-declaration.ts` and `intellisense.ts` do not change the result of
+a build.
 ### 4.1.8 (1 switch, there)
 
 | Switch | Kind | Effort | How often | What was before |

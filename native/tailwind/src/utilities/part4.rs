@@ -91,6 +91,11 @@ fn alpha_replaced_shadow_properties(
         if !crate::switches::INSET_SHADOW_LIST.on() {
             return format!("{} {x}", js_trim(prefix));
         }
+        // Before 4.2.0, the prefix was `inset ` and each shadow stayed as
+        // it was.
+        if !crate::switches::INSET_SHADOW_LIST_SPACES.on() {
+            return segment(&x, b',').into_iter().map(|value| format!("{} {value}", js_trim(prefix))).collect::<Vec<_>>().join(",");
+        }
         segment(&x, b',')
             .into_iter()
             .map(|value| format!("{} {}", js_trim(prefix), js_trim(value)))
@@ -500,7 +505,8 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 decl("content", "var(--tw-content)"),
             ])
         })
-        .theme_keys(&["--content"]),
+        // Before 4.1.18, `content-*` did not read the theme.
+        .theme_keys(if crate::switches::CONTENT_THEME_KEY.on() { &["--content"] } else { &[] }),
     );
 
     {

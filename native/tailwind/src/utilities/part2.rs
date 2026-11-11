@@ -771,6 +771,10 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         ("border-b", "-bottom"),
         ("border-l", "-left"),
     ] {
+        // The utilities of 4.2.0 (`switches::LOGICAL_UTILITIES`).
+        if matches!(root, "border-bs" | "border-be") && !crate::switches::LOGICAL_UTILITIES.on() {
+            continue;
+        }
         let (style, width, color): (&'static str, &'static str, &'static str) = match side {
             "" => ("border-style", "border-width", "border-color"),
             "-inline" => ("border-inline-style", "border-inline-width", "border-inline-color"),

@@ -646,7 +646,8 @@ pub(super) fn key_path_to_css_property(path: &[String]) -> Option<String> {
         "transitionTimingFunction" => Some("transition-timing-function"),
         _ => None,
     };
-    if let Some(special_default) = special_default {
+    // (Before 4.1.18, it was in the namespace of the key.)
+    if let Some(special_default) = special_default.filter(|_| crate::switches::THEME_FN_DEFAULT_NAMESPACE.on()) {
         if path.get(1).is_some_and(|key| key == "DEFAULT") {
             return Some(format!("default-{special_default}"));
         }
@@ -691,7 +692,8 @@ pub(super) fn key_path_to_css_property(path: &[String]) -> Option<String> {
 
         // The namespace, a nested key of a tuple, and `lineHeight` are in
         // kebab case.
-        if index == 0 || part.starts_with('-') || part == "lineHeight" {
+        // (Before 4.1.18, each part was in kebab case.)
+        if index == 0 || part.starts_with('-') || part == "lineHeight" || !crate::switches::THEME_FN_KEEPS_KEY_CASE.on() {
             part = kebab_case(&part);
         }
 

@@ -419,7 +419,12 @@ fn handle_functional_utility(desc: UtilityDescription, negative: bool) -> impl F
                         if !is_positive_integer(lhs) || !is_positive_integer(rhs) {
                             return None;
                         }
-                        value = Some(format!("calc({lhs} / {rhs} * 100%)"));
+                        // Before 4.2.0, the fraction had no spaces.
+                        value = Some(if crate::switches::FRACTION_SPACES.on() {
+                            format!("calc({lhs} / {rhs} * 100%)")
+                        } else {
+                            format!("calc({fraction} * 100%)")
+                        });
                     }
                 }
 

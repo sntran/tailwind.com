@@ -50,7 +50,12 @@ pub fn create_css_utility(node: &AtRule) -> Option<RegisterUtility> {
 /// name at the time of this call.
 pub fn create_css_utility_shared(node: SharedAtRule) -> Option<RegisterUtility> {
     // The name can have escapes: `@utility foo-1\/2` is `foo-1/2`.
-    let name = unescape(&node.borrow().params).into_owned();
+    // (Before 4.2.0, the name was the text as it was.)
+    let name = if crate::switches::UTILITY_NAME_ESCAPES.on() {
+        unescape(&node.borrow().params).into_owned()
+    } else {
+        node.borrow().params.clone()
+    };
 
     if is_valid_functional_utility_name(&name) {
         return Some(Box::new(move |design_system: &mut DesignSystem| {
@@ -539,6 +544,14 @@ fn resolve_value_function(
 
             match data_type {
                 // A ratio is `<integer>/<integer>`.
+                // (Before 4.2.0, the result was the text of the candidate.)
+                DataType::Ratio if !crate::switches::RATIO_VALUE_SPACES.on() => {
+                    let parts = segment(resolved, b'/');
+                    if !parts.first().is_some_and(|p| is_positive_integer(p)) || !parts.get(1).is_some_and(|p| is_positive_integer(p)) {
+                        continue;
+                    }
+                    return Some(Resolved { nodes: value_parser::parse(resolved), ratio: true });
+                }
                 DataType::Ratio => {
                     let parts = segment(resolved, b'/');
                     let is_integer = |part: Option<&&str>| {
@@ -613,9 +626,21 @@ fn utility_root_length(name: &str) -> Option<usize> {
     Some(pos)
 }
 
+/// The name check before 4.2.0: `/^-?[a-z][a-zA-Z0-9/%._-]*$/`. A
+/// functional name had `-*` after this text.
+fn is_old_utility_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    let start = usize::from(bytes.first() == Some(&b'-'));
+    bytes.get(start).is_some_and(u8::is_ascii_lowercase)
+        && bytes[start + 1..].iter().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'%' | b'.' | b'_' | b'-'))
+}
+
 /// `true` for the name of a static utility: `tab-size`, `p-1.5`, `w-50%`,
 /// `text-xs/8`.
 pub fn is_valid_static_utility_name(name: &str) -> bool {
+    if !crate::switches::UTILITY_NAME_SCANNER_RULES.on() {
+        return is_old_utility_name(name);
+    }
     let Some(root_length) = utility_root_length(name) else { return false };
     let (root, value) = name.as_bytes().split_at(root_length);
 
@@ -666,6 +691,9 @@ pub fn is_valid_static_utility_name(name: &str) -> bool {
 /// `true` for the name of a functional utility: `tab-size-*`.
 pub fn is_valid_functional_utility_name(name: &str) -> bool {
     let Some(name) = name.strip_suffix("-*") else { return false };
+    if !crate::switches::UTILITY_NAME_SCANNER_RULES.on() {
+        return is_old_utility_name(name);
+    }
     // The root is the full name. A root that ends in `-` is valid, so a
     // candidate such as `foo--bar` is possible.
     // (4.2.0 did not permit that end.)

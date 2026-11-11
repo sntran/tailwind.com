@@ -803,7 +803,11 @@ impl Collector {
 
         if path.starts_with("inline(") {
             inline = true;
-            path = js_trim(slice(path, 7));
+            path = slice(path, 7);
+            // Before 4.2.0, white space around the argument was an error.
+            if crate::switches::SOURCE_INLINE_WHITESPACE.on() {
+                path = js_trim(path);
+            }
         }
 
         if !is_quoted(path) {

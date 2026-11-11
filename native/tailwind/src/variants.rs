@@ -1174,6 +1174,27 @@ fn quote_attribute_value(input: &str) -> String {
 /// Replace each `@slot` with `nodes`. Put each `@keyframes` and `@property`
 /// rule in an at-root node.
 pub fn substitute_at_slot(ast: &mut Vec<AstNode>, nodes: &[AstNode]) {
+    // Before 4.2.0, the walk also went into the nodes that replaced
+    // `@slot`. So the `@keyframes` and `@property` rules of these nodes
+    // went into at-root nodes too. (An `@slot` in these nodes made an
+    // endless loop in the official compiler: here it stays.)
+    let wrapped: Vec<AstNode>;
+    let nodes = if switches::SLOT_NODES_STAY.on() {
+        nodes
+    } else {
+        let mut copy = nodes.to_vec();
+        walk(&mut copy, |node, _| match node {
+            AstNode::AtRule(r) if r.name == "@keyframes" || r.name == "@property" => {
+                let mut inner = std::mem::take(r);
+                inner.loc = Default::default();
+                *node = at_root(vec![AstNode::AtRule(inner)]);
+                WalkAction::Skip
+            }
+            _ => WalkAction::Continue,
+        });
+        wrapped = copy;
+        &wrapped
+    };
     walk(ast, |node, _| {
         let AstNode::AtRule(r) = node else { return WalkAction::Continue };
         if r.name == "@slot" {

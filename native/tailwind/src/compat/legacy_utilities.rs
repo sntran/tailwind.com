@@ -83,6 +83,10 @@ pub fn register_legacy_utilities(design_system: &mut DesignSystem) {
 
     // The `start` and `end` inset utilities. `inset-s` and `inset-e`
     // replace them.
+    // (Before 4.2.0, they were spacing utilities: `utilities/part1.rs`.)
+    if !crate::switches::START_END_ARE_OLD_UTILITIES.on() {
+        return;
+    }
     for (name, property) in [("start", "inset-inline-start"), ("end", "inset-inline-end")] {
         utilities.r#static(format!("{name}-auto"), move |_, _| Some(vec![decl(property, "auto")]));
         utilities.r#static(format!("{name}-full"), move |_, _| Some(vec![decl(property, "100%")]));

@@ -276,6 +276,117 @@ pub const FRACTION_WHITE_SPACE: Switch = Switch::since(4, 2, 2, "a fraction can 
 /// foo--*`. Before (only in 4.2.0): the name was not valid.
 pub const UTILITY_ROOT_ENDING_DASH: Switch = Switch::since(4, 2, 1, "the root of a functional @utility can end with -");
 
+// --- 4.2.0 ----------------------------------------------------------------
+
+/// The utilities of the logical properties: `inset-s-*`, `inset-e-*`,
+/// `inset-bs-*`, `inset-be-*`, `mbs-*`, `mbe-*`, `pbs-*`, `pbe-*`,
+/// `scroll-mbs-*`, `scroll-mbe-*`, `scroll-pbs-*`, `scroll-pbe-*`,
+/// `border-bs-*`, `border-be-*`, `inline-*`, `block-*` and their `min-` and
+/// `max-` forms, and the `…-block-start` and `…-block-end` properties in
+/// the order of the properties. Before: no such utilities, and these
+/// properties had no place in the order.
+pub const LOGICAL_UTILITIES: Switch = Switch::since(4, 2, 0, "utilities of the logical properties");
+
+/// `start-*` and `end-*` are old utilities of the plugin layer: `start`
+/// with no value gives the value of `--inset` or `--spacing`, and a bare
+/// value takes each modifier (`start-4/[5]`). Before: they were spacing
+/// utilities as `inset-x-*`: no result for these two forms.
+pub const START_END_ARE_OLD_UTILITIES: Switch = Switch::since(4, 2, 0, "start-* and end-* are old utilities");
+
+/// The utility `font-features-*`, and `font-feature-settings` in the order
+/// of the properties. Before: no such utility, and the property had no
+/// place in the order.
+pub const FONT_FEATURES: Switch = Switch::since(4, 2, 0, "font-features-* utility");
+
+/// The fraction of a utility has spaces around the `/`: `w-1/2` gives
+/// `calc(1 / 2 * 100%)`. Before: `calc(1/2 * 100%)`.
+pub const FRACTION_SPACES: Switch = Switch::since(4, 2, 0, "the fraction of a utility has spaces around the /");
+
+/// `--value(ratio)` of `@utility` gives the ratio with spaces around the
+/// `/` (`1 / 2`), and each part is a number that is an integer (`01/2`).
+/// Before: the text of the candidate (`1/2`), and each part was an integer
+/// with no extra `0` at its start.
+pub const RATIO_VALUE_SPACES: Switch = Switch::since(4, 2, 0, "--value(ratio) gives the ratio with spaces around the /");
+
+/// The parts of an `aspect-*` fraction can be multiples of 0.25:
+/// `aspect-8.5/11`. Before: only integers.
+pub const ASPECT_FRACTION_DECIMALS: Switch = Switch::since(4, 2, 0, "aspect-* fractions can have multiples of 0.25");
+
+/// Each shadow of an `inset-shadow-*` list gets `inset`, one space, and
+/// the shadow with no space at its ends, and the list has `, ` between
+/// its shadows. Before: `inset ` and the shadow as it was, with `,`
+/// between the shadows.
+pub const INSET_SHADOW_LIST_SPACES: Switch = Switch::since(4, 2, 0, "an inset-shadow-* list has regular spaces");
+
+/// The name of `@utility` can have escapes: `@utility push-1\/2` is
+/// `push-1/2`. Before: the name was the text as it was, so an escape was
+/// an error.
+pub const UTILITY_NAME_ESCAPES: Switch = Switch::since(4, 2, 0, "the name of @utility can have escapes");
+
+/// The name of `@utility` follows the rules of the scanner: one `/` with a
+/// character after it, `.` only between digits, `%` only at the end and
+/// after a digit, no `-` at the end, and a functional name has only a
+/// root. Before: one pattern, `-?[a-z][a-zA-Z0-9/%._-]*` (with `-*` at the
+/// end of a functional name).
+pub const UTILITY_NAME_SCANNER_RULES: Switch = Switch::since(4, 2, 0, "the name of @utility follows the rules of the scanner");
+
+/// A declaration in `@supports (… color-mix(…) …)` gets no `color-mix(…)`
+/// fallback. Before: it got a fallback and a second `@supports` rule.
+pub const SUPPORTS_COLOR_MIX_NO_FALLBACK: Switch = Switch::since(4, 2, 0, "no color-mix() fallback in @supports with color-mix()");
+
+/// `@source inline(…)` can have white space around its argument. Before:
+/// that was the error "`@source` paths must be quoted."
+pub const SOURCE_INLINE_WHITESPACE: Switch = Switch::since(4, 2, 0, "@source inline() can have white space around its argument");
+
+/// The nodes that replace `@slot` in the body of `@custom-variant` stay as
+/// they are. Before: an `@keyframes` or `@property` rule in these nodes
+/// went out to the root, as the same rules of the body. (An `@slot` in
+/// these nodes made an endless loop: see docs/SWITCHES.md.)
+pub const SLOT_NODES_STAY: Switch = Switch::since(4, 2, 0, "the nodes that replace @slot stay as they are");
+
+// --- 4.1.18 ---------------------------------------------------------------
+
+/// A declaration in `@keyframes` gets no `color-mix(…)` fallback. Before:
+/// it got a fallback and an `@supports` rule, as each other declaration.
+pub const KEYFRAMES_NO_COLOR_MIX_FALLBACK: Switch = Switch::since(4, 1, 18, "no color-mix() fallback in @keyframes");
+
+/// A named value of a utility or a variant, and a named modifier, have
+/// only letters, digits, `_`, `.`, `%` and `-`: `bg-foo=bar` and
+/// `data-foo=bar:flex` are not valid. Before: no check.
+pub const NAMED_VALUE_CHARACTERS: Switch = Switch::since(4, 1, 18, "a named value has only letters, digits, _ . % and -");
+
+/// The message of a CSS syntax error starts with the file, the line and
+/// the column, when the compiler has the path of the stylesheet (`from`).
+/// Before: only the message.
+pub const CSS_ERROR_LOCATION: Switch = Switch::since(4, 1, 18, "a CSS syntax error has the file, the line and the column");
+
+/// `content-*` reads the theme key `--content`: `content-slash`. Before:
+/// only arbitrary values.
+pub const CONTENT_THEME_KEY: Switch = Switch::since(4, 1, 18, "content-* reads --content");
+
+/// `theme(…)` with a path of Tailwind CSS v3 reads the `DEFAULT` of
+/// `borderWidth`, `outlineWidth`, `ringColor`, `ringWidth`,
+/// `transitionDuration` and `transitionTimingFunction` from the
+/// `--default-*` namespace: `theme(ringColor.DEFAULT)` is
+/// `--default-ring-color`. Before: `--ring-color`.
+pub const THEME_FN_DEFAULT_NAMESPACE: Switch = Switch::since(4, 1, 18, "theme(ringColor.DEFAULT) reads --default-ring-color");
+
+/// `theme(…)` with a path of Tailwind CSS v3 keeps the case of a key:
+/// `theme(colors.fooBar)` is `--color-fooBar`. Only the namespace, a
+/// nested key of a tuple and `lineHeight` change to kebab case. Before:
+/// each key changed to kebab case (`--color-foo-bar`).
+pub const THEME_FN_KEEPS_KEY_CASE: Switch = Switch::since(4, 1, 18, "theme(colors.fooBar) keeps the case of the key");
+
+// --- 4.1.16 ---------------------------------------------------------------
+
+/// The `@supports` rule of a `color-mix(…)` fallback holds the declaration
+/// itself. Before: the declaration was in a rule with the selector `&` in
+/// that `@supports` rule.
+pub const COLOR_MIX_FALLBACK_NO_AMPERSAND: Switch = Switch::since(4, 1, 16, "the @supports rule of a color-mix() fallback has no & rule");
+
+/// An arbitrary value with an empty data type is not valid: `bg-[:red]`.
+/// Before: the value was the text after the `:`, with no data type.
+pub const EMPTY_DATA_TYPE_IS_INVALID: Switch = Switch::since(4, 1, 16, "an empty data type of an arbitrary value is not valid");
 // --- 4.1.8 ----------------------------------------------------------------
 
 /// The error of `@apply` for a candidate with no result gives the reason:
@@ -474,6 +585,26 @@ pub const ALL: &[&Switch] = &[
     &UNESCAPE_NUL_IS_REPLACED,
     &FRACTION_WHITE_SPACE,
     &UTILITY_ROOT_ENDING_DASH,
+    &LOGICAL_UTILITIES,
+    &START_END_ARE_OLD_UTILITIES,
+    &FONT_FEATURES,
+    &FRACTION_SPACES,
+    &RATIO_VALUE_SPACES,
+    &ASPECT_FRACTION_DECIMALS,
+    &INSET_SHADOW_LIST_SPACES,
+    &UTILITY_NAME_ESCAPES,
+    &UTILITY_NAME_SCANNER_RULES,
+    &SUPPORTS_COLOR_MIX_NO_FALLBACK,
+    &SOURCE_INLINE_WHITESPACE,
+    &SLOT_NODES_STAY,
+    &KEYFRAMES_NO_COLOR_MIX_FALLBACK,
+    &NAMED_VALUE_CHARACTERS,
+    &CSS_ERROR_LOCATION,
+    &CONTENT_THEME_KEY,
+    &THEME_FN_DEFAULT_NAMESPACE,
+    &THEME_FN_KEEPS_KEY_CASE,
+    &COLOR_MIX_FALLBACK_NO_AMPERSAND,
+    &EMPTY_DATA_TYPE_IS_INVALID,
     &APPLY_ERROR_REASONS,
     &ROTATE_NEGATIVE_ARBITRARY,
     &CRLF_STAYS,
