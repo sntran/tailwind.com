@@ -87,6 +87,11 @@ fn alpha_replaced_shadow_properties(
         if prefix.is_empty() {
             return x;
         }
+        // Before 4.2.0, the prefix was `inset ` and each shadow stayed as
+        // it was.
+        if !crate::switches::INSET_SHADOW_LIST_SPACES.on() {
+            return segment(&x, b',').into_iter().map(|value| format!("{} {value}", js_trim(prefix))).collect::<Vec<_>>().join(",");
+        }
         segment(&x, b',')
             .into_iter()
             .map(|value| format!("{} {}", js_trim(prefix), js_trim(value)))

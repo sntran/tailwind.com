@@ -203,6 +203,63 @@ fn handle_rotate(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSystem)
 }
 
 /// Register the utilities of this part.
+/// The utilities of `inline-size`, `block-size` and their `min-` and `max-`
+/// properties.
+fn register_logical_sizes(u: &mut Utilities) {
+    for (key, value) in [("full", "100%"), ("min", "min-content"), ("max", "max-content"), ("fit", "fit-content")] {
+
+        st(u, &format!("inline-{key}"), &[("inline-size", value)]);
+        st(u, &format!("block-{key}"), &[("block-size", value)]);
+        st(u, &format!("min-inline-{key}"), &[("min-inline-size", value)]);
+        st(u, &format!("min-block-{key}"), &[("min-block-size", value)]);
+        st(u, &format!("max-inline-{key}"), &[("max-inline-size", value)]);
+        st(u, &format!("max-block-{key}"), &[("max-block-size", value)]);
+    }
+
+    for (key, value) in [("svw", "100svw"), ("lvw", "100lvw"), ("dvw", "100dvw")] {
+        st(u, &format!("inline-{key}"), &[("inline-size", value)]);
+        st(u, &format!("min-inline-{key}"), &[("min-inline-size", value)]);
+        st(u, &format!("max-inline-{key}"), &[("max-inline-size", value)]);
+    }
+
+    for (key, value) in [("svh", "100svh"), ("lvh", "100lvh"), ("dvh", "100dvh")] {
+        st(u, &format!("block-{key}"), &[("block-size", value)]);
+        st(u, &format!("min-block-{key}"), &[("min-block-size", value)]);
+        st(u, &format!("max-block-{key}"), &[("max-block-size", value)]);
+    }
+
+    st(u, "inline-auto", &[("inline-size", "auto")]);
+    st(u, "block-auto", &[("block-size", "auto")]);
+    st(u, "min-inline-auto", &[("min-inline-size", "auto")]);
+    st(u, "min-block-auto", &[("min-block-size", "auto")]);
+
+    st(u, "block-lh", &[("block-size", "1lh")]);
+    st(u, "min-block-lh", &[("min-block-size", "1lh")]);
+    st(u, "max-block-lh", &[("max-block-size", "1lh")]);
+
+    st(u, "inline-screen", &[("inline-size", "100vw")]);
+    st(u, "min-inline-screen", &[("min-inline-size", "100vw")]);
+    st(u, "max-inline-screen", &[("max-inline-size", "100vw")]);
+    st(u, "block-screen", &[("block-size", "100vh")]);
+    st(u, "min-block-screen", &[("min-block-size", "100vh")]);
+    st(u, "max-block-screen", &[("max-block-size", "100vh")]);
+
+    st(u, "max-inline-none", &[("max-inline-size", "none")]);
+    st(u, "max-block-none", &[("max-block-size", "none")]);
+
+    let logical_sizes: [(&str, &[&'static str], &'static str); 6] = [
+        ("inline", &["--spacing", "--container"], "inline-size"),
+        ("min-inline", &["--spacing", "--container"], "min-inline-size"),
+        ("max-inline", &["--spacing", "--container"], "max-inline-size"),
+        ("block", &["--spacing"], "block-size"),
+        ("min-block", &["--spacing"], "min-block-size"),
+        ("max-block", &["--spacing"], "max-block-size"),
+    ];
+    for (name, namespaces, prop) in logical_sizes {
+        spacing_utility(u, name, namespaces, move |value, _| Some(vec![decl(prop, value)]), fractions());
+    }
+}
+
 pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     let u = utilities;
 
@@ -252,11 +309,19 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     st(u, "relative", &[("position", "relative")]);
     st(u, "sticky", &[("position", "sticky")]);
 
+    // The utilities of 4.2.0 (`switches::LOGICAL_UTILITIES`).
+    let logical_utilities = crate::switches::LOGICAL_UTILITIES.on();
+    // Before 4.2.0, `start` and `end` were spacing utilities as the others
+    // of this list. Now they are in `compat/legacy_utilities.rs`.
+    let start_end_here = !crate::switches::START_END_ARE_OLD_UTILITIES.on();
+
     // `inset`
     for (name, prop) in [
         ("inset", "inset"),
         ("inset-x", "inset-inline"),
         ("inset-y", "inset-block"),
+        ("start", "inset-inline-start"),
+        ("end", "inset-inline-end"),
         ("inset-s", "inset-inline-start"),
         ("inset-e", "inset-inline-end"),
         ("inset-bs", "inset-block-start"),
@@ -266,6 +331,11 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("bottom", "bottom"),
         ("left", "left"),
     ] {
+        match name {
+            "start" | "end" if !start_end_here => continue,
+            "inset-s" | "inset-e" | "inset-bs" | "inset-be" if !logical_utilities => continue,
+            _ => {}
+        }
         st(u, &format!("{name}-auto"), &[(prop, "auto")]);
         st(u, &format!("{name}-full"), &[(prop, "100%")]);
         st(u, &format!("-{name}-full"), &[(prop, "-100%")]);
@@ -399,6 +469,9 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("mb", "margin-bottom"),
         ("ml", "margin-left"),
     ] {
+        if matches!(namespace, "mbs" | "mbe") && !logical_utilities {
+            continue;
+        }
         st(u, &format!("{namespace}-auto"), &[(prop, "auto")]);
         spacing_utility(u, namespace, &["--margin", "--spacing"], move |value, _| Some(vec![decl(prop, value)]), negative());
     }
@@ -469,7 +542,10 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
                 let fraction = value.fraction?;
                 let parts = segment(fraction, b'/');
                 let (lhs, rhs) = (parts[0], parts.get(1).copied().unwrap_or(""));
-                if !is_valid_spacing_multiplier(lhs) || !is_valid_spacing_multiplier(rhs) {
+                // Before 4.2.0, each part was an integer.
+                let is_valid_part =
+                    if crate::switches::ASPECT_FRACTION_DECIMALS.on() { is_valid_spacing_multiplier } else { is_positive_integer };
+                if !is_valid_part(lhs) || !is_valid_part(rhs) {
                     return None;
                 }
                 Some(fraction.to_string())
@@ -540,56 +616,8 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     }
 
     // `inline-size`, `block-size` and their `min-` and `max-` properties
-    for (key, value) in [("full", "100%"), ("min", "min-content"), ("max", "max-content"), ("fit", "fit-content")] {
-        st(u, &format!("inline-{key}"), &[("inline-size", value)]);
-        st(u, &format!("block-{key}"), &[("block-size", value)]);
-        st(u, &format!("min-inline-{key}"), &[("min-inline-size", value)]);
-        st(u, &format!("min-block-{key}"), &[("min-block-size", value)]);
-        st(u, &format!("max-inline-{key}"), &[("max-inline-size", value)]);
-        st(u, &format!("max-block-{key}"), &[("max-block-size", value)]);
-    }
-
-    for (key, value) in [("svw", "100svw"), ("lvw", "100lvw"), ("dvw", "100dvw")] {
-        st(u, &format!("inline-{key}"), &[("inline-size", value)]);
-        st(u, &format!("min-inline-{key}"), &[("min-inline-size", value)]);
-        st(u, &format!("max-inline-{key}"), &[("max-inline-size", value)]);
-    }
-
-    for (key, value) in [("svh", "100svh"), ("lvh", "100lvh"), ("dvh", "100dvh")] {
-        st(u, &format!("block-{key}"), &[("block-size", value)]);
-        st(u, &format!("min-block-{key}"), &[("min-block-size", value)]);
-        st(u, &format!("max-block-{key}"), &[("max-block-size", value)]);
-    }
-
-    st(u, "inline-auto", &[("inline-size", "auto")]);
-    st(u, "block-auto", &[("block-size", "auto")]);
-    st(u, "min-inline-auto", &[("min-inline-size", "auto")]);
-    st(u, "min-block-auto", &[("min-block-size", "auto")]);
-
-    st(u, "block-lh", &[("block-size", "1lh")]);
-    st(u, "min-block-lh", &[("min-block-size", "1lh")]);
-    st(u, "max-block-lh", &[("max-block-size", "1lh")]);
-
-    st(u, "inline-screen", &[("inline-size", "100vw")]);
-    st(u, "min-inline-screen", &[("min-inline-size", "100vw")]);
-    st(u, "max-inline-screen", &[("max-inline-size", "100vw")]);
-    st(u, "block-screen", &[("block-size", "100vh")]);
-    st(u, "min-block-screen", &[("min-block-size", "100vh")]);
-    st(u, "max-block-screen", &[("max-block-size", "100vh")]);
-
-    st(u, "max-inline-none", &[("max-inline-size", "none")]);
-    st(u, "max-block-none", &[("max-block-size", "none")]);
-
-    let logical_sizes: [(&str, &[&'static str], &'static str); 6] = [
-        ("inline", &["--spacing", "--container"], "inline-size"),
-        ("min-inline", &["--spacing", "--container"], "min-inline-size"),
-        ("max-inline", &["--spacing", "--container"], "max-inline-size"),
-        ("block", &["--spacing"], "block-size"),
-        ("min-block", &["--spacing"], "min-block-size"),
-        ("max-block", &["--spacing"], "max-block-size"),
-    ];
-    for (name, namespaces, prop) in logical_sizes {
-        spacing_utility(u, name, namespaces, move |value, _| Some(vec![decl(prop, value)]), fractions());
+    if logical_utilities {
+        register_logical_sizes(u);
     }
 
     u.r#static("container", |_, ds| {
@@ -1069,6 +1097,9 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("scroll-mb", "scroll-margin-bottom"),
         ("scroll-ml", "scroll-margin-left"),
     ] {
+        if matches!(namespace, "scroll-mbs" | "scroll-mbe") && !logical_utilities {
+            continue;
+        }
         spacing_utility(
             u,
             namespace,
@@ -1092,6 +1123,9 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("scroll-pb", "scroll-padding-bottom"),
         ("scroll-pl", "scroll-padding-left"),
     ] {
+        if matches!(namespace, "scroll-pbs" | "scroll-pbe") && !logical_utilities {
+            continue;
+        }
         spacing_utility(
             u,
             namespace,

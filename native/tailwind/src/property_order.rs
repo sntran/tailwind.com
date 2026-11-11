@@ -377,6 +377,18 @@ pub fn property_index(property: &str) -> Option<usize> {
     {
         return None;
     }
+    // Before 4.2.0, the same for these properties.
+    if property == "font-feature-settings" && !crate::switches::FONT_FEATURES.on() {
+        return None;
+    }
+    if (property.ends_with("-block-start")
+        || property.ends_with("-block-end")
+        || property.starts_with("border-block-start-")
+        || property.starts_with("border-block-end-"))
+        && !crate::switches::LOGICAL_UTILITIES.on()
+    {
+        return None;
+    }
     static INDEX: OnceLock<HashMap<&str, usize>> = OnceLock::new();
     INDEX
         .get_or_init(|| {

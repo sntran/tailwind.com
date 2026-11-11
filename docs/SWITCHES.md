@@ -279,6 +279,31 @@ No switch: a static value with the name of a property of `Object`
 |---|---|---|---|---|
 | `UTILITY_ROOT_ENDING_DASH` | fix | S | edge | Only in 4.2.0: `@utility foo--*` was not a valid name |
 
+### 4.2.0 (12 switches, all there; 1 change in the plugin layer; data changes with no switch)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `FRACTION_SPACES` | form | S | common | `w-1/2` gave `calc(1/2 * 100%)`, not `calc(1 / 2 * 100%)` |
+| `LOGICAL_UTILITIES` | feature, data | S | rare | No `inset-s-*`, `inset-e-*`, `inset-bs-*`, `inset-be-*`, `mbs-*`, `mbe-*`, `pbs-*`, `pbe-*`, `scroll-mbs-*`, `scroll-mbe-*`, `scroll-pbs-*`, `scroll-pbe-*`, `border-bs-*`, `border-be-*`, `inline-*`, `block-*`, `min-inline-*`, `max-inline-*`, `min-block-*`, `max-block-*`; the `…-block-start` and `…-block-end` properties had no place in the property order |
+| `START_END_ARE_OLD_UTILITIES` | form | S | edge | `start-*` and `end-*` were spacing utilities as `inset-x-*`: `start` with no value and `start-4/[5]` gave nothing |
+| `FONT_FEATURES` | feature, data | S | rare | No `font-features-*`; `font-feature-settings` had no place in the property order |
+| `RATIO_VALUE_SPACES` | form | S | rare | `--value(ratio)` of `@utility` gave `1/2`, not `1 / 2`, and `foo-01/2` gave nothing |
+| `ASPECT_FRACTION_DECIMALS` | feature | S | rare | `aspect-8.5/11` gave nothing |
+| `INSET_SHADOW_LIST_SPACES` | form | S | rare | A list of inset shadows had `,` and not `, ` between its shadows, and each shadow kept its spaces |
+| `UTILITY_NAME_ESCAPES` | fix | S | rare | `@utility push-1\/2` was an error |
+| `UTILITY_NAME_SCANNER_RULES` | fix | S | edge | The name of `@utility` had one pattern: `ui/button/sm`, `a.b`, `a-` and `a.5-*` were valid names |
+| `SUPPORTS_COLOR_MIX_NO_FALLBACK` | fix | S | rare | A declaration in `@supports (color: color-mix(…))` got a fallback and a second `@supports` rule |
+| `SOURCE_INLINE_WHITESPACE` | fix | S | edge | `@source inline( "underline" )` was the error "`@source` paths must be quoted." |
+| `SLOT_NODES_STAY` | form | S | edge | An `@keyframes` or `@property` rule in the nodes that replace `@slot` went out to the root |
+| colors (JS) | data | S | rare | `tailwindcss/colors` had no `mauve`, `olive`, `mist` and `taupe` |
+
+No switch: an `@custom-variant` whose `@slot` gets nodes with an `@slot`
+(`@custom-variant b { @variant a { @slot; } }`, where `a` is also an
+`@custom-variant` with a body) made an endless loop in the official
+compiler (a fault that stops the compiler). The new walk of the tree
+(`walk.ts`) gives the same result. Data, from the package: the colors
+`mauve`, `olive`, `mist` and `taupe` of `theme.css`.
+
 The scanner of the source files follows no version, in each engine. Its
 changes in these releases: the Markdown and Ruby pre-processors, and the
 `.jsonl` and `.ndjson` files.

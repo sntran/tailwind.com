@@ -295,7 +295,12 @@ impl Optimizer<'_> {
             AstNode::AtRule(rule) => {
                 if rule.name == "@keyframes" {
                     context.keyframes = true;
-                } else if rule.name == "@supports" && rule.params.contains("color-mix(") {
+                } else if rule.name == "@supports"
+                    && rule.params.contains("color-mix(")
+                    && crate::switches::SUPPORTS_COLOR_MIX_NO_FALLBACK.on()
+                {
+                    // Before 4.2.0, a declaration in this rule got a
+                    // fallback as each other.
                     context.supports_color_mix = true;
                 }
 
