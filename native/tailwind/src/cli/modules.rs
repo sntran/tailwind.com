@@ -20,6 +20,23 @@ impl FileSystem {
     }
 }
 
+/// The directories of the environment variable `NODE_PATH`.
+///
+/// The separator is `;` on Windows and `:` on the other systems, as in
+/// Node.js. `tailwind.com` is one file for all the systems, so the system
+/// is the system at run time. (`std::env::split_paths` is for the system
+/// of the build, and is not there for WASI.)
+pub fn node_path() -> Vec<PathBuf> {
+    let Some(paths) = std::env::var_os("NODE_PATH") else { return Vec::new() };
+    #[cfg(tw_js)]
+    let windows = crate::compat::js::engine::platform() == "win32";
+    // A build with no JavaScript engine has no C code for this question.
+    #[cfg(not(tw_js))]
+    let windows = cfg!(windows);
+    let separator = if windows { ';' } else { ':' };
+    paths.to_string_lossy().split(separator).filter(|path| !path.is_empty()).map(PathBuf::from).collect()
+}
+
 fn kind(file_type: std::fs::FileType) -> FileKind {
     if file_type.is_dir() {
         FileKind::Directory
@@ -86,8 +103,7 @@ impl ModuleLoader for FileSystem {
     }
 
     fn node_path(&self) -> Vec<String> {
-        let Some(paths) = std::env::var_os("NODE_PATH") else { return Vec::new() };
-        std::env::split_paths(&paths).map(|path| path.to_string_lossy().into_owned()).filter(|path| !path.is_empty()).collect()
+        node_path().into_iter().map(|path| path.to_string_lossy().into_owned()).collect()
     }
 
     fn cwd(&self) -> String {

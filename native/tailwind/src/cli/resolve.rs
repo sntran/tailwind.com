@@ -145,9 +145,7 @@ fn from_packages(id: &str, base: &Path) -> Option<PathBuf> {
     };
 
     let mut roots: Vec<PathBuf> = base.ancestors().map(|dir| dir.join("node_modules")).collect();
-    if let Some(node_path) = std::env::var_os("NODE_PATH") {
-        roots.extend(std::env::split_paths(&node_path));
-    }
+    roots.extend(super::modules::node_path());
 
     for root in roots {
         let dir = root.join(&name);
