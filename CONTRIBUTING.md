@@ -30,8 +30,8 @@ CI runs the tests for each pull request.
 
 For tests on a system that you do not have (Windows, macOS, Linux on
 arm64, or FreeBSD, NetBSD and OpenBSD in a VM), use SSH to a runner of
-CI. This is the method of BEAM.com, and it needs an Erlang/OTP on your
-computer (or `BEAM_COM`, the path of a `beam.com`):
+CI. You need `ssh`, and `cargo` or `cloudflared` for the bridge to the
+tunnel:
 
 1. Make a key, one time:
    `sh scripts/remote_ssh_client.sh keygen ~/.ssh/tailwind_com_ci`.
@@ -47,14 +47,15 @@ computer (or `BEAM_COM`, the path of a `beam.com`):
 scripts/remote_ssh_client.sh debug/ssh ~/.ssh/tailwind_com_ci exec 'uname -a'
 scripts/remote_ssh_client.sh debug/ssh ~/.ssh/tailwind_com_ci put build/tailwind.com tailwind.com
 scripts/remote_ssh_client.sh debug/ssh ~/.ssh/tailwind_com_ci get out.log out.log
-scripts/remote_ssh_client.sh debug/ssh - bridge 2222   # for OpenSSH: ssh -p 2222 runner@127.0.0.1
+scripts/remote_ssh_client.sh debug/ssh ~/.ssh/tailwind_com_ci shell
 ```
 
-With a VM, the session is on the Linux runner, and `ssh freebsd CMD` (or
-`netbsd`, `openbsd`) runs a command in the VM. Each command runs with
-bash in the work directory of the job. `touch "$REMOTE_SSH_STOP"` ends
-the job, and so does the limit of minutes. The job deletes the branch
-at its end.
+The server is the OpenSSH server of the runner, as the user of the job,
+behind a quick tunnel of Cloudflare. With a VM, the session is on the
+Linux runner, and `ssh freebsd CMD` (or `netbsd`, `openbsd`) runs a
+command in the VM. A session starts in the work directory of the job.
+`touch "$REMOTE_SSH_STOP"` ends the job, and so does the limit of
+minutes. The job deletes the branch at its end.
 
 ## Rules for a change
 

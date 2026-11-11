@@ -9,3 +9,4 @@ erl_crash.dump
 # The generated part of the npm package (scripts/npm.sh), and npm itself.
 /runtime/
 /tailwind.com-*.tgz
+/tools/*/target/

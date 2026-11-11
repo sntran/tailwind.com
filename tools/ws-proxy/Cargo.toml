@@ -1,0 +1,17 @@
+[package]
+name = "ws-proxy"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "A bridge between standard input and output and a WebSocket, for the ProxyCommand of ssh"
+publish = false
+
+# This tool is not a part of tailwind.com: it has its own workspace, so
+# its dependencies are not in the Cargo.lock of the compiler.
+[workspace]
+
+[dependencies]
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2"
+webpki-roots = "0.26"

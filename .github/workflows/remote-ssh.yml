@@ -1,16 +1,16 @@
 # SSH to a runner of CI, for tests and debugging on a system that a person
 # does not have: Windows, macOS, Linux on arm64, or a BSD in a VM on a
-# Linux runner. This is the workflow of BEAM.com. Erlang :ssh is the
-# server (scripts/remote_ssh.erl), behind a WebSocket and a quick tunnel
-# of Cloudflare. The job puts the URL and the fingerprint of the host key
-# on the branch BRANCH, and deletes the branch at its end. Then:
+# Linux runner. This is the method of the workflow of BEAM.com, with the
+# OpenSSH server of the runner (scripts/remote_ssh_runner.sh) behind a
+# quick tunnel of Cloudflare. The job puts the URL, the user and the host
+# key on the branch BRANCH, and deletes the branch at its end. Then:
 #
 #   scripts/remote_ssh_client.sh BRANCH KEY exec 'uname -a'
 #
 # Only the private key of the public key of the request can log in. The
 # job gets no secret. Its token can write to the repository (for the
 # branch) and read the artifacts of other runs (gh run download), and the
-# commands get it as GH_TOKEN.
+# sessions get it as GH_TOKEN.
 #
 # Start it by hand (workflow_dispatch), or with a push that changes the
 # file .github/remote-ssh.request on a work branch. The file has one
@@ -123,15 +123,6 @@ jobs:
         env:
           KEY: ${{ needs.request.outputs.key }}
         run: printf '%s\n' "$KEY" > "$RUNNER_TEMP/authorized_keys"
-      - name: Install Erlang/OTP
-        if: runner.os != 'macOS'
-        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1
-        with:
-          otp-version: "29"
-      - name: Install Erlang/OTP (macOS)
-        if: runner.os == 'macOS'
-        run: brew install erlang
-
       # A BSD in a VM. The VM stays after its step: a command of the SSH
       # session reaches it with "ssh freebsd CMD" (or netbsd, openbsd),
       # and the work directory of the job is in the VM too.
@@ -163,8 +154,6 @@ jobs:
           BRANCH: ${{ needs.request.outputs.branch }}
           MINUTES: ${{ needs.request.outputs.minutes }}
           KEYS: ${{ runner.temp }}/authorized_keys
-          ERL_MODE: erl
           WORK: ${{ github.workspace }}
-          REMOTE_SSH_SHELL: ${{ runner.os == 'Windows' && 'C:\Program Files\Git\bin\bash.exe' || '' }}
           GH_TOKEN: ${{ github.token }}
         run: sh scripts/remote_ssh_runner.sh

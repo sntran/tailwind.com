@@ -1,24 +1,31 @@
 #!/bin/sh
-# The runner part of .github/workflows/remote-ssh.yml: an SSH server of
-# Erlang :ssh (scripts/remote_ssh.erl), a quick tunnel of Cloudflare to
-# its WebSocket, and the branch $BRANCH with the files url and
-# fingerprint, so that scripts/remote_ssh_client.sh can find the server.
-# The branch holds one commit with no parent, and this script deletes it
-# at its end.
+# The runner part of .github/workflows/remote-ssh.yml: the OpenSSH server
+# of the runner on 127.0.0.1, a quick tunnel of Cloudflare to it, and the
+# branch $BRANCH with the files url, user and known_hosts, so that
+# scripts/remote_ssh_client.sh can find the server. The branch holds one
+# commit with no parent, and this script deletes it at its end.
+#
+# The server runs as the user of the job, with its own host key and its
+# own configuration: it does not use the SSH service of the system. Only
+# the keys of $KEYS can log in. A session starts in $WORK.
 #
 # Environment: BRANCH, KEYS (a file in the format of authorized_keys),
-# MINUTES, WORK, PROBE_TRIES (60), and ERL_MODE: erl (an OTP on the PATH, the default) or beam.com (with BEAM_COM, the path of
-# beam.com). This script and scripts/remote_ssh.erl come from BEAM.com.
+# MINUTES (60, at most 120), WORK (the directory of a session),
+# PROBE_TRIES (60).
+#
+# The job ends after MINUTES, or when the file $REMOTE_SSH_STOP exists
+# (a session has this variable).
 set -u
-: "${BRANCH:?}" "${KEYS:?}" "${MINUTES:=60}" "${ERL_MODE:=erl}" "${PROBE_TRIES:=60}"
+: "${BRANCH:?}" "${KEYS:?}" "${MINUTES:=60}" "${PROBE_TRIES:=60}"
 [ "$MINUTES" -gt 120 ] && MINUTES=120
 TMP=${RUNNER_TEMP:-/tmp}
-WORK=${WORK:-$TMP/work}
+WORK=${WORK:-$(pwd)}
 PORT=${REMOTE_SSH_PORT:-8022}
-mkdir -p "$TMP" "$WORK"
-repo=$(pwd)
-log=$TMP/remote_ssh.log
-tunnel_log=$TMP/cloudflared.log
+dir=$TMP/remote-ssh
+mkdir -p "$dir"
+log=$dir/sshd.log
+tunnel_log=$dir/cloudflared.log
+stop=$dir/stop
 
 # cloudflared 2026.10.7, with the SHA-256 of each file.
 CF_VERSION=2026.10.7
@@ -36,19 +43,19 @@ cloudflared() {
             s=2493dbc168923bb3e59e5e7716f71deced92992eea9acd6e9d74f84ac7751343 ;;
         *) echo "remote ssh: no cloudflared for $(uname -s) $(uname -m)" >&2; return 1 ;;
     esac
-    curl -fsSL -o "$TMP/$f" \
+    curl -fsSL -o "$dir/$f" \
         "https://github.com/cloudflare/cloudflared/releases/download/$CF_VERSION/$f" || return 1
     # From standard input: with a file name that has a backslash (Windows),
     # sha256sum puts a backslash before the hash.
-    got=$( (sha256sum < "$TMP/$f" 2>/dev/null || shasum -a 256 < "$TMP/$f") | cut -d' ' -f1)
+    got=$( (sha256sum < "$dir/$f" 2>/dev/null || shasum -a 256 < "$dir/$f") | cut -d' ' -f1)
     if [ "$got" != "$s" ]; then
         echo "remote ssh: the SHA-256 of $f is $got, not $s" >&2
         return 1
     fi
     case $f in
-        *.tgz) tar -xzf "$TMP/$f" -C "$TMP" cloudflared && CLOUDFLARED=$TMP/cloudflared ;;
-        *.exe) CLOUDFLARED=$TMP/$f ;;
-        *) chmod +x "$TMP/$f" && CLOUDFLARED=$TMP/$f ;;
+        *.tgz) tar -xzf "$dir/$f" -C "$dir" cloudflared && CLOUDFLARED=$dir/cloudflared ;;
+        *.exe) CLOUDFLARED=$dir/$f ;;
+        *) chmod +x "$dir/$f" && CLOUDFLARED=$dir/$f ;;
     esac
 }
 
@@ -78,37 +85,101 @@ wait_for() {
     return 1
 }
 
-export REMOTE_SSH_MINUTES=$MINUTES REMOTE_SSH_PORT=$PORT
-case $ERL_MODE in
-    beam.com)
-        sh "${BEAM_COM:?}" -a ssh "$repo/scripts/remote_ssh.erl" -- \
-            serve "$KEYS" "$WORK" > "$log" 2>&1 &
-        server_pid=$! ;;
-    erl)
-        erlc -o "$TMP" "$repo/scripts/remote_ssh.erl" || exit 1
-        erl -noshell -pa "$TMP" -run remote_ssh main serve "$KEYS" "$WORK" > "$log" 2>&1 &
-        server_pid=$! ;;
-esac
-if ! fp=$(wait_for 'SHA256:[A-Za-z0-9+/=]+' 300 "$log" "$server_pid"); then
+# The server program. sshd needs its full path. On Windows, Git has an
+# sshd (MSYS2) that runs as the user of the job.
+sshd=$(command -v sshd 2>/dev/null || true)
+for candidate in /usr/sbin/sshd /usr/bin/sshd "/c/Program Files/Git/usr/bin/sshd.exe"; do
+    [ -n "$sshd" ] && break
+    [ -x "$candidate" ] && sshd=$candidate
+done
+if [ -z "$sshd" ]; then
+    echo "remote ssh: no sshd on this runner" >&2
+    exit 1
+fi
+keygen=$(command -v ssh-keygen 2>/dev/null || echo "$(dirname "$sshd")/ssh-keygen")
+
+# The directory for privilege separation, where sshd of Linux needs it.
+if [ "$(uname -s)" = Linux ] && [ ! -d /run/sshd ]; then
+    sudo mkdir -p /run/sshd 2>/dev/null || true
+fi
+
+"$keygen" -q -t ed25519 -N '' -f "$dir/host_key" || exit 1
+cp "$KEYS" "$dir/authorized_keys"
+chmod 600 "$dir/authorized_keys" "$dir/host_key"
+user=$(id -un)
+
+# The environment of a session: the token of the job, the stop file, and
+# the work directory.
+{
+    echo "export GH_TOKEN='${GH_TOKEN:-}'"
+    echo "export REMOTE_SSH_STOP='$stop'"
+    echo "export GITHUB_REPOSITORY='${GITHUB_REPOSITORY:-}'"
+    echo "export PATH=\"$PATH\""
+    echo "cd '$WORK'"
+} > "$dir/session.sh"
+chmod 600 "$dir/session.sh"
+
+# A command of the client runs with bash, after the file session.sh. With
+# no command, the session is a shell.
+cat > "$dir/command.sh" <<EOF
+#!/bin/sh
+. '$dir/session.sh'
+if [ -n "\${SSH_ORIGINAL_COMMAND:-}" ]; then
+    case "\$SSH_ORIGINAL_COMMAND" in
+        internal-sftp*|*sftp-server*) exec \$SSH_ORIGINAL_COMMAND ;;
+    esac
+    exec bash -c "\$SSH_ORIGINAL_COMMAND"
+fi
+exec bash -l
+EOF
+chmod 700 "$dir/command.sh"
+
+sftp=internal-sftp
+cat > "$dir/sshd_config" <<EOF
+Port $PORT
+ListenAddress 127.0.0.1
+HostKey $dir/host_key
+PidFile $dir/sshd.pid
+AuthorizedKeysFile $dir/authorized_keys
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+StrictModes no
+AllowTcpForwarding yes
+ClientAliveInterval 30
+Subsystem sftp $sftp
+ForceCommand $dir/command.sh
+EOF
+# PAM is not in each build of sshd: use the option only where it is valid.
+if "$sshd" -t -f "$dir/sshd_config" -o UsePAM=no 2>/dev/null; then
+    echo "UsePAM no" >> "$dir/sshd_config"
+fi
+if ! "$sshd" -t -f "$dir/sshd_config"; then
+    echo "remote ssh: the configuration of sshd is not valid" >&2
+    exit 1
+fi
+
+"$sshd" -D -e -f "$dir/sshd_config" > "$log" 2>&1 &
+server_pid=$!
+if ! wait_for 'Server listening on' 60 "$log" "$server_pid" > /dev/null; then
     cat "$log"
     echo "remote ssh: the server did not start" >&2
     exit 1
 fi
-cat "$log"
+fp=$("$keygen" -l -f "$dir/host_key.pub" | cut -d' ' -f2)
 
 # CLOUDFLARED: a cloudflared that is there already, for a test.
 [ -n "${CLOUDFLARED:-}" ] || cloudflared || exit 1
-"$CLOUDFLARED" tunnel --no-autoupdate --url "http://127.0.0.1:$PORT" > "$tunnel_log" 2>&1 &
+"$CLOUDFLARED" tunnel --no-autoupdate --url "tcp://127.0.0.1:$PORT" > "$tunnel_log" 2>&1 &
 tunnel_pid=$!
 if ! host=$(wait_for '[a-z0-9-]+\.trycloudflare\.com' 120 "$tunnel_log" "$tunnel_pid"); then
     cat "$tunnel_log"
     echo "remote ssh: the tunnel did not start" >&2
     exit 1
 fi
-# The name of the tunnel needs some seconds in DNS. The server answers
-# 400 to a request that is not a WebSocket.
+# The name of the tunnel needs some seconds in DNS.
 n=0
-until [ "$(curl -s -o /dev/null -w '%{http_code}' "https://$host/")" = 400 ]; do
+until curl -s -o /dev/null "https://$host/"; do
     n=$((n + 1))
     if [ $n -ge "$PROBE_TRIES" ]; then
         echo "remote ssh: https://$host/ does not answer" >&2
@@ -117,15 +188,22 @@ until [ "$(curl -s -o /dev/null -w '%{http_code}' "https://$host/")" = 400 ]; do
     sleep 2
 done
 
-printf 'wss://%s/\n' "$host" > "$TMP/url"
-printf '%s\n' "$fp" > "$TMP/fingerprint"
-tree=$(printf '100644 blob %s\turl\n100644 blob %s\tfingerprint\n' \
-    "$(git hash-object -w "$TMP/url")" "$(git hash-object -w "$TMP/fingerprint")" | git mktree)
+printf 'wss://%s/\n' "$host" > "$dir/url"
+printf '%s\n' "$user" > "$dir/user"
+# The host key, for the alias that the client uses.
+printf 'remote-ssh %s\n' "$(cut -d' ' -f1,2 "$dir/host_key.pub")" > "$dir/known_hosts"
+tree=$(printf '100644 blob %s\turl\n100644 blob %s\tuser\n100644 blob %s\tknown_hosts\n' \
+    "$(git hash-object -w "$dir/url")" "$(git hash-object -w "$dir/user")" \
+    "$(git hash-object -w "$dir/known_hosts")" | git mktree)
 commit=$(echo "Remote SSH: wss://$host/" | git commit-tree "$tree")
 git push -q -f origin "$commit:refs/heads/$BRANCH" || exit 1
-echo "remote ssh: wss://$host/ $fp, for $MINUTES minutes"
+echo "remote ssh: wss://$host/ $fp, the user $user, for $MINUTES minutes"
 echo "remote ssh: scripts/remote_ssh_client.sh $BRANCH KEY exec 'uname -a'"
 
-wait "$server_pid"
-server_pid=
-tail -n 1 "$log"
+# Until the limit of minutes, the stop file, or the end of the server.
+end=$(( $(date +%s) + MINUTES * 60 ))
+while [ "$(date +%s)" -lt "$end" ] && [ ! -e "$stop" ] && kill -0 "$server_pid" 2>/dev/null; do
+    sleep 5
+done
+tail -n 5 "$log"
+echo "remote ssh: the end"
