@@ -428,6 +428,58 @@ before 4.1.2, a `color-mix(…)` with less than three parts
 | `FALLBACKS_AFTER_IMPORTS` | fix | S | rare | The fallbacks of `@property` went after the comments at the start: before an `@charset`, an `@import` or an `@layer` with no body |
 | `BRACE_RANGE_NO_PADDING` | fix | S | rare | `{0..10}` in `@source inline(…)` gave `00`, `01`, … `10` |
 
+### 4.1.0 (15 switches, all there; 3 changes in the plugin layer; data changes with no switch)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `AT_PROPERTY_FALLBACKS` | feature | S | each build | The `@property` rules had no fallbacks: no `@supports … { @layer base { … } }` rule |
+| `COLOR_MIX_FALLBACK` | feature | S | common | A declaration with `color-mix(…)` and a theme variable had no fallback and no `@supports` rule |
+| `GRADIENT_POSITION_FALLBACK` | form | S | common | `bg-linear-to-r` gave one `--tw-gradient-position: to right in oklab`, with no `@supports` rule |
+| `SHADOW_ALPHA` | feature, form | M | common | `shadow-red-500` gave `--tw-shadow-color: var(--color-red-500)`, `shadow-sm/50` gave nothing, `shadow/50` and `shadow-[…]/50` ignored the modifier, and `--tw-shadow-alpha` and `--tw-inset-shadow-alpha` had no `@property` rule |
+| `DROP_SHADOW_COLOR` | feature, form | M | common | `drop-shadow-*` took only a theme value or an arbitrary value: no color, no modifier, and no `--tw-drop-shadow-color`, `--tw-drop-shadow-alpha` and `--tw-drop-shadow-size` (each filter utility had three fewer `@property` rules) |
+| `TEXT_SHADOW` | feature | S | rare | No `text-shadow-*`; `text-shadow-sm` was the font size `--text-shadow-sm` |
+| `MASK_UTILITIES` | feature, data | S | rare | No `mask-*`; the `mask-*` and `--tw-mask-*` properties had no place in the property order |
+| `SAFE_AND_LAST_BASELINE_ALIGNMENT` | feature | S | rare | No `items-center-safe`, `justify-end-safe` and the 16 other `…-safe` utilities; no `items-baseline-last` and `self-baseline-last` |
+| `WRAP_UTILITIES` | feature | S | rare | No `wrap-anywhere`, `wrap-break-word`, `wrap-normal` |
+| `BG_SIZE_AND_POSITION` | feature | S | rare | No `bg-size-*` and `bg-position-*` |
+| `CORNER_POSITION_NAMES` | feature | S | rare | No `bg-top-left`, `bg-top-right`, `bg-bottom-left`, `bg-bottom-right`, and no `object-*` with these names: only `bg-left-top`, `object-left-top`, … |
+| `STATIC_VARIANTS_OF_4_1` | feature | S | rare | No `details-content`, `user-valid`, `user-invalid`, `inverted-colors`, `noscript`, `pointer-none`, `pointer-coarse`, `pointer-fine`, `any-pointer-none`, `any-pointer-coarse`, `any-pointer-fine` |
+| `SOURCE_NOT_AND_INLINE` | feature | S | rare | `@source not "…"`, `@source inline(…)` and `@source not inline(…)` were the error "`@source` paths must be quoted." |
+| `ARBITRARY_VALUE_CHECK` | fix | S | edge | An arbitrary value had no check: `[color:red;background:blue]`, `w-[1px)]` and `[--x:{a:b}]` were valid |
+| `THEME_VARIABLE_AFTER_KEY_PATH` | fix | S | rare | After the first `theme(colors.red.500)` in a stylesheet, `--theme(--color-red-500)` gave the value and not `var(--color-red-500)`, and did not mark the variable as used |
+| theme-variable-with-plugins (JS) | fix | S | rare | With a plugin or a config, each `--theme(--color-red-500)` gave the value and not the variable |
+| config-content-not (JS) | feature | S | rare | A `content` entry of a config that starts with `!` was a source with the `!` in its pattern, not a negated source |
+| colors (JS) | data | S | rare | `tailwindcss/colors` had the lightness of each `oklch(…)` as a number (`0.984`), not as a percentage (`98.4%`) |
+
+No switch: before 4.1.0, a `}` with no open bracket before it in an
+arbitrary value (`w-[}]`, `[color:red}html{color:blue]`, `[&}]:flex`)
+went into the output and closed the rule too early, which was not valid
+CSS. The Rust compiler refuses such a value in each version, as 4.1.0
+does (`utils/is_valid_arbitrary.rs`), and the fuzzer knows this fault
+(`closesARuleEarly` in `tests/fuzz/fuzz.mjs`). So for a version before
+4.1.0, `@apply w-[}]` is the error of `@apply` for a class that is not
+known. Each other part of the check is in `ARBITRARY_VALUE_CHECK`.
+
+No switch: `bg-left-top`, `object-left-top` and the six other corner
+positions moved to the old utilities of the plugin layer, with the same
+result. The feature flags (`feature-flags.ts`) were off in the released
+package of 4.0.17, so their utilities and variants are new in 4.1.0; the
+variants `scripting`, `scripting-none` and `scripting-initial` were in
+no release. The `polyfills` option of `compile` is new: before 4.1.0,
+the compiler had no fallbacks to switch off. A source of `@source` has
+the new field `negated`, which only the command line uses (`cli/mod.rs`,
+with no switches). The scanner and the optimizer follow no version:
+`node_modules` and `.gitignore`, symbolic links, Razor files, and the
+new targets of Lightning CSS.
+
+`THEME_VARIABLE_AFTER_KEY_PATH` is in the Rust part of the plugin layer
+(`compat.rs`): Tailwind CSS makes the full configuration at the first
+`theme(…)` with a key path, also with no plugin. Before 4.1.0, the
+theme function of that configuration then read each path.
+
+Data, from the package: the lightness of each color of `theme.css` as a
+percentage, and the new `--text-shadow-*` values.
+
 The scanner of the source files follows no version, in each engine. Its
 changes in these releases: the Markdown and Ruby pre-processors, and the
 `.jsonl` and `.ndjson` files.

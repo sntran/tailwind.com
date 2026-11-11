@@ -109,6 +109,55 @@ function same(a, b) {
   return a.css === b.css && a.error === b.error && a.panic === undefined && b.panic === undefined
 }
 
+// A known fault of Tailwind CSS before 4.1.14: an `@variant` rule in the
+// body of `@custom-variant` stays in the output, which is not valid CSS.
+// This compiler replaces the rule in each version (docs/SWITCHES.md). A
+// result of the official compiler with this fault is not a difference.
+const [major, minor, patch] = version.split('.').map(Number)
+const KEEPS_AT_VARIANT = major === 4 && (minor < 1 || (minor === 1 && patch < 14))
+
+// A known fault of Tailwind CSS before 4.1.0: an arbitrary value had no
+// check, so a `}` with no open bracket before it (`w-[}]`) closed the
+// rule of the output too early, which is not valid CSS. This compiler
+// refuses such a value in each version (docs/SWITCHES.md).
+const CLOSES_A_RULE_EARLY = major === 4 && minor < 1
+
+// True when a line of the CSS has a `}` with no open `{` before it on
+// that line, and the line is not only that `}`. The printer writes the
+// `}` of a rule on a line of its own.
+function closesARuleEarly(css) {
+  for (const line of css.split('\n')) {
+    if (line.trim() === '}') continue
+    // An escape and a string have no brackets.
+    const text = line.replace(/\\./g, '').replace(/"[^"]*"|'[^']*'/g, '')
+    let depth = 0
+    for (const character of text) {
+      if (character === '{') depth++
+      else if (character === '}' && depth-- === 0) return true
+    }
+  }
+  return false
+}
+
+function hasKnownFault(official) {
+  if (official.css === undefined) return false
+  if (KEEPS_AT_VARIANT && /^\s*@variant /m.test(official.css)) return true
+  return CLOSES_A_RULE_EARLY && closesARuleEarly(official.css)
+}
+
+// The case with no candidate that shows the known fault alone: the other
+// candidates are compared again. `null`: the stylesheet shows the fault
+// with no candidate (`@apply` of a custom variant).
+async function withoutKnownFault(c) {
+  if (hasKnownFault(await officialResult({ ...c, candidates: [] }))) return null
+  const candidates = []
+  for (const one of c.candidates) {
+    if (!hasKnownFault(await officialResult({ ...c, candidates: [one] }))) candidates.push(one)
+  }
+  const rest = { ...c, candidates }
+  return hasKnownFault(await officialResult(rest)) ? null : rest
+}
+
 // --- The generators ------------------------------------------------------
 
 const design = await off.loadDesignSystem('@import "tailwindcss";')
@@ -310,7 +359,7 @@ function compilerCase() {
 async function differs(c) {
   const [ours] = ourResults([c])
   const theirs = await officialResult(c)
-  return !same(ours, theirs)
+  return !same(ours, theirs) && !hasKnownFault(theirs)
 }
 
 // The smallest part of the case that still differs: first the
@@ -389,7 +438,7 @@ fs.writeFileSync(failuresFile, '')
 let failures = 0
 let compared = 0
 // What the cases did, to show that they test more than errors.
-const stats = { compilerErrors: 0, compilerCss: 0, cssBytes: 0, projectErrors: 0, projectCss: 0, javascript: 0 }
+const stats = { compilerErrors: 0, compilerCss: 0, cssBytes: 0, projectErrors: 0, projectCss: 0, javascript: 0, knownFaults: 0, knownFaultsOnly: 0 }
 
 function record(entry) {
   failures++
@@ -420,6 +469,13 @@ for (let done = 0; done < opts.cases && Date.now() < compilerDeadline; done += B
       stats.cssBytes += theirs.css.length
     }
     if (same(ours[i], theirs)) continue
+    if (hasKnownFault(theirs)) {
+      stats.knownFaults++
+      const rest = await withoutKnownFault(cases[i])
+      if (rest === null) stats.knownFaultsOnly++
+      if (rest === null || !(await differs(rest))) continue
+      cases[i] = rest
+    }
     const reduced = await reduce(cases[i])
     const [reducedOurs] = ourResults([reduced])
     const reducedTheirs = await officialResult(reduced)
@@ -456,6 +512,11 @@ for (let n = 0; n < opts.projects && Date.now() < deadline; n++) {
 console.log(
   `fuzz: compiler cases with CSS ${stats.compilerCss} (${(stats.cssBytes / 1e6).toFixed(1)} MB), with an error ${stats.compilerErrors}, with JavaScript ${stats.javascript}; projects with CSS ${stats.projectCss}, with an error ${stats.projectErrors}`,
 )
+if (stats.knownFaults > 0) {
+  console.log(
+    `fuzz: ${stats.knownFaults} cases with a known fault of Tailwind CSS ${version} (output that is not valid CSS): ${stats.knownFaults - stats.knownFaultsOnly} compared again with no candidate that shows it, ${stats.knownFaultsOnly} not compared (the stylesheet shows it)`,
+  )
+}
 console.log(`fuzz: ${compared} cases compared, ${failures} different (seed ${opts.seed})`)
 if (failures > 0) {
   console.log(`fuzz: the failures are in ${failuresFile}`)

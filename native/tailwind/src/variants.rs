@@ -905,7 +905,11 @@ pub fn create_variants(theme: &Theme) -> Variants {
     static_variant(v, "file", &["&::file-selector-button"], None);
     static_variant(v, "placeholder", &["&::placeholder"], None);
     static_variant(v, "backdrop", &["&::backdrop"], None);
-    static_variant(v, "details-content", &["&::details-content"], None);
+    // The variants of 4.1.0 (`switches::STATIC_VARIANTS_OF_4_1`).
+    let variants_of_4_1 = switches::STATIC_VARIANTS_OF_4_1.on();
+    if variants_of_4_1 {
+        static_variant(v, "details-content", &["&::details-content"], None);
+    }
 
     for (name, selector) in [("before", "&::before"), ("after", "&::after")] {
         v.r#static(
@@ -951,8 +955,10 @@ pub fn create_variants(theme: &Theme) -> Variants {
     static_variant(v, "required", &["&:required"], None);
     static_variant(v, "valid", &["&:valid"], None);
     static_variant(v, "invalid", &["&:invalid"], None);
-    static_variant(v, "user-valid", &["&:user-valid"], None);
-    static_variant(v, "user-invalid", &["&:user-invalid"], None);
+    if variants_of_4_1 {
+        static_variant(v, "user-valid", &["&:user-valid"], None);
+        static_variant(v, "user-invalid", &["&:user-invalid"], None);
+    }
     static_variant(v, "in-range", &["&:in-range"], None);
     static_variant(v, "out-of-range", &["&:out-of-range"], None);
     static_variant(v, "read-only", &["&:read-only"], None);
@@ -1132,16 +1138,18 @@ pub fn create_variants(theme: &Theme) -> Variants {
 
     static_variant(v, "forced-colors", &["@media (forced-colors: active)"], None);
 
-    static_variant(v, "inverted-colors", &["@media (inverted-colors: inverted)"], None);
+    if variants_of_4_1 {
+        static_variant(v, "inverted-colors", &["@media (inverted-colors: inverted)"], None);
 
-    static_variant(v, "pointer-none", &["@media (pointer: none)"], None);
-    static_variant(v, "pointer-coarse", &["@media (pointer: coarse)"], None);
-    static_variant(v, "pointer-fine", &["@media (pointer: fine)"], None);
-    static_variant(v, "any-pointer-none", &["@media (any-pointer: none)"], None);
-    static_variant(v, "any-pointer-coarse", &["@media (any-pointer: coarse)"], None);
-    static_variant(v, "any-pointer-fine", &["@media (any-pointer: fine)"], None);
+        static_variant(v, "pointer-none", &["@media (pointer: none)"], None);
+        static_variant(v, "pointer-coarse", &["@media (pointer: coarse)"], None);
+        static_variant(v, "pointer-fine", &["@media (pointer: fine)"], None);
+        static_variant(v, "any-pointer-none", &["@media (any-pointer: none)"], None);
+        static_variant(v, "any-pointer-coarse", &["@media (any-pointer: coarse)"], None);
+        static_variant(v, "any-pointer-fine", &["@media (any-pointer: fine)"], None);
 
-    static_variant(v, "noscript", &["@media (scripting: none)"], None);
+        static_variant(v, "noscript", &["@media (scripting: none)"], None);
+    }
 
     variants
 }

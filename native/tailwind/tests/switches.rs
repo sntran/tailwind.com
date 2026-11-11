@@ -88,6 +88,27 @@ fn a_css_syntax_error_has_its_location_from_4_1_18() {
 }
 
 #[test]
+fn a_closing_curly_bracket_with_no_open_bracket_is_not_valid_in_each_version() {
+    // Before 4.1.0, the official compiler had no check of an arbitrary
+    // value: `w-[}]` gave `width: };`, and that `}` closes the rule too
+    // early. This output is not valid CSS, so the Rust compiler gives
+    // nothing for such a candidate, as 4.1.0 does.
+    let css = "@tailwind utilities;";
+    let candidates: Vec<String> =
+        ["w-[}]", "[color:red}html{color:blue]", "bg-[red}html{color:blue]", "[&}]:flex", "data-[a}]:flex", "[--x:{}}]"]
+            .iter()
+            .map(|candidate| candidate.to_string())
+            .collect();
+    for version in [Version(4, 0, 17), Version(4, 1, 0), Version::NATIVE] {
+        assert_eq!(result(css, &candidates, version), result(css, &[], version), "as Tailwind CSS {version}");
+    }
+    // A `}` that closes a `{` of the value was valid before 4.1.0.
+    let block = ["[--x:{a:b}]".to_string()];
+    assert_eq!(result(css, &block, Version(4, 0, 17)), serde_json::json!({ "css": ".\\[--x\\:\\{a\\:b\\}\\] {\n  --x: {a:b};\n}\n" }));
+    assert_eq!(result(css, &block, Version(4, 1, 0)), result(css, &[], Version(4, 1, 0)));
+}
+
+#[test]
 fn each_switch_is_in_the_list() {
     // The list is for the documents: a switch that is not in it is easy
     // to forget. The newest switches are first.

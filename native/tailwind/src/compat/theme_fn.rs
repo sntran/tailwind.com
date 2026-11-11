@@ -246,7 +246,8 @@ impl CompatTheme {
     }
 
     /// The replacement of `resolveThemeValue` of `upgradeToFullPluginSupport`,
-    /// for a path that does not start with `--`.
+    /// for a path that does not start with `--`. Before 4.1.0, also for a
+    /// path with `--` (`switches::THEME_VARIABLE_AFTER_KEY_PATH`).
     pub(super) fn resolve_theme_value(&self, design_system: &DesignSystem, path: &str) -> Option<String> {
         let mut resolved = theme_fn(design_system, &self.theme, &|value| value, path);
 

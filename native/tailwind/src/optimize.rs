@@ -589,6 +589,14 @@ impl Optimizer<'_> {
 
 /// Make the tree ready for the printer.
 pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: crate::Polyfills) -> Vec<AstNode> {
+    // Before 4.1.0, the compiler had no polyfills.
+    let mut polyfills = polyfills;
+    if !switches::AT_PROPERTY_FALLBACKS.on() {
+        polyfills &= !crate::POLYFILLS_AT_PROPERTY;
+    }
+    if !switches::COLOR_MIX_FALLBACK.on() {
+        polyfills &= !crate::POLYFILLS_COLOR_MIX;
+    }
     let mut arena = Arena::default();
     let root = arena.add(Item::List(Vec::new()));
     let at_roots = arena.add(Item::List(Vec::new()));
