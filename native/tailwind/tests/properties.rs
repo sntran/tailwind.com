@@ -23,6 +23,7 @@ fn build(batches: &[Vec<String>]) -> String {
             test_mode: true,
             from: None,
             module_loader: None,
+        version: None,
         },
     )
     .unwrap();
@@ -124,7 +125,7 @@ proptest! {
         "@custom-variant b (&:hover);", "@variant b { .c { color: red } }", ".d { @apply flex; }", "@source inline(\"p-{1,2}\");",
     ])) {
         let input = format!("{extra}\n{css}");
-        if let Ok(mut compiler) = compile(&input, CompileOptions { base: String::new(), polyfills: tailwind::POLYFILLS_ALL, load_stylesheet: None, test_mode: true, from: None, module_loader: None }) {
+        if let Ok(mut compiler) = compile(&input, CompileOptions { base: String::new(), polyfills: tailwind::POLYFILLS_ALL, load_stylesheet: None, test_mode: true, from: None, module_loader: None , version: None}) {
             compiler.build(&["flex".to_string(), "b:a-x".to_string()]);
         }
     }

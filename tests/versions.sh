@@ -86,11 +86,15 @@ echo "versions.sh: $native: the script engine gives the output of the native eng
 
 # Each version of PACKAGES.
 count=0
+native_versions=
 for version in $(grep -v '^#' "$root/PACKAGES" | cut -d' ' -f1); do
     [ "$version" = "$native" ] && continue
     line=$(choose "$version" "" --version) || fail "$version is not in the program"
+    # The Rust compiler has some of the older versions (its switches),
+    # and the script engine has the other ones.
     case "$line" in
         *"(tailwindcss v$version, script engine)") ;;
+        *"(tailwindcss v$version)") native_versions="$native_versions $version" ;;
         *) fail "$version: --version gives: $line" ;;
     esac
     choose "$version" "" -i app.css -o out.css 2> out.log || { cat out.log >&2; fail "$version: the build failed"; }
@@ -104,7 +108,16 @@ for version in $(grep -v '^#' "$root/PACKAGES" | cut -d' ' -f1); do
     done
     count=$((count + 1))
 done
-echo "versions.sh: $count other versions build the project with their own compiler: pass"
+echo "versions.sh: $count other versions build the project: pass"
+
+# For a version that the Rust compiler has, the two engines must give the
+# same output: the script engine is the official compiler of that version.
+for version in $native_versions; do
+    choose "$version" native -i app.css -o native.css 2> /dev/null || fail "$version: the native engine failed"
+    choose "$version" script -i app.css -o script.css 2> /dev/null || fail "$version: the script engine failed"
+    cmp -s native.css script.css || fail "$version: the native engine and the script engine give different output"
+done
+[ -z "$native_versions" ] || echo "versions.sh: the Rust compiler as$native_versions gives the output of the official compiler: pass"
 
 # A version that is not there, and a wrong engine.
 if choose 4.999.0 "" -i app.css -o out.css 2> out.log; then

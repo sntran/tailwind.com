@@ -249,6 +249,7 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
             // `<!--` and `-->` between the nodes of the root.
             else if stack.is_empty()
                 && buffer.is_empty()
+                && crate::switches::HTML_COMMENT_MARKS.on()
                 && ((current == DASH && bytes[i + 1..].starts_with(b"->"))
                     || (current == LESS_THAN && bytes[i + 1..].starts_with(b"!--")))
             {

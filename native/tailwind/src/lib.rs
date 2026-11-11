@@ -21,6 +21,7 @@ pub mod property_order;
 #[cfg(tw_js)]
 pub mod script;
 pub mod selector_parser;
+pub mod switches;
 pub mod source_maps;
 pub mod theme;
 pub mod to_css;
@@ -28,10 +29,12 @@ pub mod utilities;
 pub mod utils;
 pub mod value_parser;
 pub mod variants;
+pub mod version;
 pub mod walk;
 
 pub use compat::module_loader::{FileKind, FileStat, MemoryLoader, ModuleLoader};
 pub use index::{compile, CompileOptions, Compiler, Root, Source, Stylesheet, VERSION};
+pub use version::Version;
 
 /// An error of the compiler. The message is the message of Tailwind CSS.
 #[derive(Debug, Clone, PartialEq, Eq)]

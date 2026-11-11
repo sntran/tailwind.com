@@ -40,6 +40,7 @@ use crate::utils::js::js_trim;
 use crate::utils::segment::segment;
 use crate::utils::topological_sort::topological_sort;
 use crate::variants::{compounds_for_selectors, is_valid_variant_name, substitute_at_variant, VariantOptions};
+use crate::version::{self, Version};
 use crate::walk::{walk, WalkAction};
 use crate::{
     Error, Features, Polyfills, Result, FEATURES_AT_THEME, FEATURES_NONE, FEATURES_UTILITIES, POLYFILLS_ALL,
@@ -77,6 +78,9 @@ pub struct CompileOptions<'a> {
     /// `@config`. `None`: these rules are errors, as upstream with no
     /// `loadModule`.
     pub module_loader: Option<Rc<dyn ModuleLoader>>,
+    /// The version of Tailwind CSS to compile as (`version.rs`). `None`:
+    /// the version of the port.
+    pub version: Option<Version>,
 }
 
 impl Default for CompileOptions<'_> {
@@ -88,6 +92,7 @@ impl Default for CompileOptions<'_> {
             test_mode: false,
             from: None,
             module_loader: None,
+            version: None,
         }
     }
 }
@@ -128,6 +133,8 @@ pub struct Compiler {
     /// first use.
     all_valid_candidates: Vec<String>,
     all_valid_candidates_set: HashSet<String>,
+    /// The version of Tailwind CSS that this compiler follows.
+    version: Version,
     /// The output of the last compilation.
     compiled: Option<String>,
     previous_ast_node_count: usize,
@@ -156,6 +163,7 @@ impl Compiler {
     /// `build`. Here `try_build` gives that error, and `build` gives the
     /// CSS without the candidate of the failure.
     pub fn build(&mut self, candidates: &[String]) -> String {
+        let _version = version::enter(self.version);
         let output = self.build_css(candidates);
         self.design_system.take_js_error();
         output
@@ -163,6 +171,7 @@ impl Compiler {
 
     /// `build`, with the error of a JavaScript plugin function.
     pub fn try_build(&mut self, candidates: &[String]) -> Result<String> {
+        let _version = version::enter(self.version);
         let output = self.build_css(candidates);
         match self.design_system.take_js_error() {
             Some(error) => Err(error),
@@ -255,6 +264,7 @@ impl Compiler {
     /// The source map of the last output of `build` (`buildSourceMap`).
     /// It has mappings only when `compile` got the `from` option.
     pub fn build_source_map(&self) -> DecodedSourceMap {
+        let _version = version::enter(self.version);
         match &self.compiled_ast {
             Some(ast) => create_source_map(ast),
             // No compilation yet, or the stylesheet uses no feature: the
@@ -300,11 +310,13 @@ fn node_at_mut<'a>(tree: &'a mut [AstNode], path: &[usize]) -> Option<&'a mut As
 
 /// Compile a stylesheet.
 pub fn compile(css: &str, options: CompileOptions) -> Result<Compiler> {
+    let version = options.version.unwrap_or(Version::NATIVE);
+    let _version = version::enter(version);
     let ast = css_parser::parse_with_source(css, options.from.as_deref())?;
     let mut parsed = parse_css(ast, &options)?;
 
     if !options.test_mode {
-        parsed.ast.insert(0, comment(format!("! tailwindcss v{VERSION} | MIT License | https://tailwindcss.com ")));
+        parsed.ast.insert(0, comment(format!("! tailwindcss v{version} | MIT License | https://tailwindcss.com ")));
     }
 
     // The node of `@tailwind utilities` becomes a plain context node. It
@@ -332,6 +344,7 @@ pub fn compile(css: &str, options: CompileOptions) -> Result<Compiler> {
         input: css.to_string(),
         utilities_path,
         polyfills: options.polyfills,
+        version,
         all_valid_candidates,
         all_valid_candidates_set,
         compiled: None,

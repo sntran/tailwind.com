@@ -27,6 +27,7 @@
 use crate::index::{Compiler, Root, Source};
 use crate::source_maps::DecodedSourceMap;
 use super::patch::{self, Entry, Patch};
+use crate::version::Version;
 use crate::Result;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -162,33 +163,36 @@ pub fn stored_versions() -> Vec<String> {
 /// The engine and the version of a run of the program.
 #[derive(Clone)]
 pub enum Selection {
-    /// The Rust compiler of the program.
-    Native,
+    /// The Rust compiler of the program, as this version. For another
+    /// version than the version of the port, the stylesheets come from
+    /// the package of that version.
+    Native { version: Version, package: Option<Rc<DirectoryPackage>> },
     /// The official compiler of this package.
     Script(Rc<DirectoryPackage>),
 }
 
 impl Selection {
     /// The version of Tailwind CSS.
-    pub fn version(&self) -> &str {
+    pub fn version(&self) -> String {
         match self {
-            Selection::Native => crate::index::VERSION,
-            Selection::Script(package) => &package.version,
+            Selection::Native { version, .. } => version.to_string(),
+            Selection::Script(package) => package.version.clone(),
         }
     }
 
     /// The name of the engine.
     pub fn engine(&self) -> &'static str {
         match self {
-            Selection::Native => "native",
+            Selection::Native { .. } => "native",
             Selection::Script(_) => "script",
         }
     }
 
-    /// The package of the script engine.
+    /// The package that gives the stylesheets of Tailwind CSS. `None`:
+    /// the stylesheets of the program.
     pub fn package(&self) -> Option<&DirectoryPackage> {
         match self {
-            Selection::Native => None,
+            Selection::Native { package, .. } => package.as_deref(),
             Selection::Script(package) => Some(package),
         }
     }
@@ -203,52 +207,61 @@ pub fn requested_version() -> String {
 }
 
 /// The engine and the version that the environment asks for.
+///
+/// The Rust compiler can compile as each version from `Version::OLDEST`
+/// to its own version (`version.rs`). With no engine in the environment,
+/// these versions use it, and each other version uses the script engine.
 pub fn select() -> std::result::Result<Selection, String> {
     let version = requested_version();
     let engine = std::env::var(ENGINE_VARIABLE).unwrap_or_default();
     let native_version = crate::index::VERSION;
 
+    let missing = |version: &str| -> String {
+        let mut message = format!("Tailwind CSS v{version} is not in this program.");
+        if version.split('.').next() != Some("4") {
+            message.push_str(" The program is for Tailwind CSS 4.");
+        } else {
+            message.push_str(&format!(
+                " Put the files of the npm package tailwindcss@{version} in the directory `{version}` of a directory, and give that directory in the variable {PACKAGES_VARIABLE}."
+            ));
+        }
+        let mut known = vec![format!("{native_version} (native)")];
+        known.extend(stored_versions().into_iter().filter(|stored| stored != native_version));
+        message.push_str(&format!("\nThe versions of this program: {}", known.join(", ")));
+        message
+    };
     let script = |version: &str| -> std::result::Result<Selection, String> {
         if !cfg!(tw_js) {
             return Err(format!(
                 "This build of the program has no JavaScript engine, and its compiler is Tailwind CSS v{native_version}. It cannot compile for v{version}."
             ));
         }
-        match find_package(version) {
-            Some(package) => Ok(Selection::Script(Rc::new(package))),
-            None => {
-                let stored = stored_versions();
-                let mut message = format!("Tailwind CSS v{version} is not in this program.");
-                if version.split('.').next() != Some("4") {
-                    message.push_str(" The program is for Tailwind CSS 4.");
-                } else {
-                    message.push_str(&format!(
-                        " Put the files of the npm package tailwindcss@{version} in the directory `{version}` of a directory, and give that directory in the variable {PACKAGES_VARIABLE}."
-                    ));
-                }
-                let mut known = vec![format!("{native_version} (native)")];
-                known.extend(stored.into_iter().filter(|stored| stored != native_version));
-                message.push_str(&format!("\nThe versions of this program: {}", known.join(", ")));
-                Err(message)
-            }
+        find_package(version).map(|package| Selection::Script(Rc::new(package))).ok_or_else(|| missing(version))
+    };
+    // The Rust compiler as this version, when it can.
+    let native = |version: &str| -> Option<std::result::Result<Selection, String>> {
+        let parsed = Version::parse(version)?;
+        if parsed == Version::NATIVE {
+            return Some(Ok(Selection::Native { version: parsed, package: None }));
         }
+        if parsed < Version::OLDEST || parsed > Version::NATIVE {
+            return None;
+        }
+        // The stylesheets of that version are in its package.
+        Some(match find_package(version) {
+            Some(package) => Ok(Selection::Native { version: parsed, package: Some(Rc::new(package)) }),
+            None => Err(missing(version)),
+        })
     };
 
     match engine.as_str() {
-        "" => {
-            if version == native_version {
-                Ok(Selection::Native)
-            } else {
-                script(&version)
-            }
-        }
-        "native" => {
-            if version == native_version {
-                Ok(Selection::Native)
-            } else {
-                Err(format!("The native engine is Tailwind CSS v{native_version}. Tailwind CSS v{version} needs the script engine."))
-            }
-        }
+        "" => native(&version).unwrap_or_else(|| script(&version)),
+        "native" => native(&version).unwrap_or_else(|| {
+            Err(format!(
+                "The native engine has Tailwind CSS v{} to v{native_version}. Tailwind CSS v{version} needs the script engine.",
+                Version::OLDEST
+            ))
+        }),
         "script" => script(&version),
         other => Err(format!("The variable {ENGINE_VARIABLE} must be `native` or `script`, not `{other}`.")),
     }

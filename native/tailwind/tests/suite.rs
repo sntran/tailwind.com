@@ -224,6 +224,7 @@ fn replay(record: &Record) -> Outcome {
         test_mode: true,
         from: record.options.from.clone(),
         module_loader: None,
+        version: None,
     };
 
     let compiled = compile(&record.input, options);
@@ -309,6 +310,7 @@ fn replay_with_modules(record: &Record) -> Outcome {
         test_mode: true,
         from: record.options.from.clone(),
         module_loader: None,
+        version: None,
     };
     match compile(&record.input, options) {
         Err(error) if [PLUGIN_NEEDS_JAVASCRIPT, CONFIG_NEEDS_JAVASCRIPT, NO_LOAD_MODULE].contains(&error.message.as_str()) => Outcome::Pass,

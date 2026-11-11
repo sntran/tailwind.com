@@ -614,7 +614,8 @@ impl JsRuntime {
 
             // The modules, the files and the process: `platform.rs`.
             _ => {
-                let platform = Platform { engine: &self.engine, loader: &*self.loader, causes: &self.causes, version: crate::index::VERSION };
+                let version = crate::version::current().to_string();
+                let platform = Platform { engine: &self.engine, loader: &*self.loader, causes: &self.causes, version: &version };
                 platform.op(op, arg).unwrap_or_else(|| Err(format!("The host has no operation `{op}`.")))
             }
         }

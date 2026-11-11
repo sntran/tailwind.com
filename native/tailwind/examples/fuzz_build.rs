@@ -13,6 +13,11 @@
 //! the npm package gives it. A panic is an output line too
 //! (`{"panic": "..."}`), so one case does not stop the run.
 //!
+//! The Rust compiler compiles as the version of the package in ASSETS_DIR
+//! (`package.json`), so the fuzzer can compare it with the official
+//! compiler of an older version: a difference is a behavior that has no
+//! switch in `src/switches.rs`.
+//!
 //! With `FUZZ_ENGINE=script` in the environment, the script engine builds
 //! each case: the official compiler of the package in ASSETS_DIR
 //! (`dist/lib.js`), in the JavaScript engine of the program. Then the
@@ -115,9 +120,10 @@ fn load(assets: &Path, id: &str, _base: &str) -> tailwind::Result<Stylesheet> {
     })
 }
 
-fn one(assets: &Path, css: &str, candidates: &[String], base: &str) -> serde_json::Value {
+fn one(assets: &Path, version: Option<tailwind::Version>, css: &str, candidates: &[String], base: &str) -> serde_json::Value {
     let loader = |id: &str, base: &str| load(assets, id, base);
     let options = CompileOptions {
+        version,
         base: base.to_string(),
         load_stylesheet: Some(&loader),
         module_loader: Some(Rc::new(Quiet::default())),
@@ -137,6 +143,12 @@ fn main() {
         let json: serde_json::Value = serde_json::from_str(&text).expect("package.json");
         Rc::new(NpmPackage { directory: assets.clone(), version: json["version"].as_str().unwrap_or_default().to_string() })
     });
+    // The Rust compiler compiles as the version of the package in
+    // ASSETS_DIR: its switches (src/switches.rs) follow that version.
+    let version = std::fs::read_to_string(assets.join("package.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|json| tailwind::Version::parse(json["version"].as_str()?));
     // A panic of a case is a result, not a message on stderr.
     std::panic::set_hook(Box::new(|_| {}));
     let stdout = std::io::stdout();
@@ -155,7 +167,7 @@ fn main() {
         let base = case["base"].as_str().unwrap_or("").to_string();
         let build = std::panic::AssertUnwindSafe(|| match &script {
             Some(package) => one_script(package, &css, &candidates, &base),
-            None => one(&assets, &css, &candidates, &base),
+            None => one(&assets, version, &css, &candidates, &base),
         });
         let result = std::panic::catch_unwind(build).unwrap_or_else(|p| {
             let text = p

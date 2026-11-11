@@ -324,7 +324,7 @@ fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), fr
     let modules = Rc::new(modules::FileSystem::with_quiet_console(quiet));
     let base = input_base.to_string_lossy().into_owned();
     let compiler = match &options.engine {
-        Selection::Native => AnyCompiler::Native(Box::new(compile(
+        Selection::Native { version, .. } => AnyCompiler::Native(Box::new(compile(
             css,
             CompileOptions {
                 base,
@@ -333,6 +333,7 @@ fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), fr
                 test_mode: false,
                 from,
                 module_loader: Some(modules.clone()),
+                version: Some(*version),
             },
         )?)),
         #[cfg(tw_js)]
@@ -718,7 +719,7 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
 /// names it.
 fn print_version() -> i32 {
     match engine::select() {
-        Ok(Selection::Native) => println!("tailwind.com v{PROGRAM_VERSION} (tailwindcss v{})", crate::index::VERSION),
+        Ok(Selection::Native { version, .. }) => println!("tailwind.com v{PROGRAM_VERSION} (tailwindcss v{version})"),
         Ok(selection) => println!("tailwind.com v{PROGRAM_VERSION} (tailwindcss v{}, {} engine)", selection.version(), selection.engine()),
         Err(message) => {
             eprintln!("{message}");

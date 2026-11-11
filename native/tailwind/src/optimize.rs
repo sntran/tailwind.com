@@ -5,6 +5,7 @@
 //! the new tree in an arena: each node and each list of children has an id.
 //! `handle_nesting` uses paths of child indices into its result.
 
+use crate::switches;
 use crate::ast::{self, at_rule, style_rule, AstNode, AtRule, ContextMap, ContextValue, Declaration, Loc};
 use crate::source_maps::SourceLocation;
 use crate::design_system::DesignSystem;
@@ -646,13 +647,15 @@ fn color_mix_fallback(value: &str, theme: &Theme) -> Option<String> {
 
         // The interpolation method is optional. Without it, there is no
         // fallback. A comment can be before `in`.
-        let mut args = value_parser::to_css(&function.nodes);
-        if args.contains("/*") {
-            args = replace_comments(&args);
-            function.nodes = value_parser::parse(&args);
-        }
-        if !starts_with_in(js_trim_start(&args)) {
-            return WalkAction::Continue;
+        if switches::COLOR_MIX_NEEDS_METHOD.on() {
+            let mut args = value_parser::to_css(&function.nodes);
+            if args.contains("/*") {
+                args = replace_comments(&args);
+                function.nodes = value_parser::parse(&args);
+            }
+            if !starts_with_in(js_trim_start(&args)) {
+                return WalkAction::Continue;
+            }
         }
 
         let mut contains_unresolvable_vars = false;
@@ -721,7 +724,12 @@ fn color_mix_fallback(value: &str, theme: &Theme) -> Option<String> {
             // The fallback uses `srgb`: old browsers do not know `oklab(…)`.
             // The color space is the second node after the first node that
             // is not a separator. With no such node, upstream reads index 1.
-            let index = function.nodes.iter().position(|node| !node.is_separator()).map_or(1, |idx| idx + 2);
+            // Before 4.3.5: always the third node.
+            let index = if switches::COLOR_MIX_NEEDS_METHOD.on() {
+                function.nodes.iter().position(|node| !node.is_separator()).map_or(1, |idx| idx + 2)
+            } else {
+                2
+            };
             if let Some(ValueAstNode::Word(colorspace)) = function.nodes.get_mut(index) {
                 if matches!(colorspace.value.as_str(), "oklab" | "oklch" | "lab" | "lch") {
                     colorspace.value = "srgb".to_string();

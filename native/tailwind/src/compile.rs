@@ -102,7 +102,11 @@ pub fn compile_candidates(
     let flags = if respect_important { COMPILE_RESPECT_IMPORTANT } else { COMPILE_NONE };
 
     // With one candidate, the sort needs no variant order.
-    let variant_order_map = if matches.len() > 1 { Some(design_system.get_variant_order()) } else { None };
+    let variant_order_map = if matches.len() > 1 || !crate::switches::ONE_CANDIDATE_NO_VARIANT_ORDER.on() {
+        Some(design_system.get_variant_order())
+    } else {
+        None
+    };
 
     // Make the rules.
     for (raw, candidates) in &matches {
