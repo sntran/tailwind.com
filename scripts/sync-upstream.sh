@@ -191,11 +191,11 @@ apply() {
         log "Lightning CSS $npm_version is the crate $crate"
     fi
 
-    log "The stylesheets of the npm package"
-    mkdir -p "$work/npm"
-    (cd "$work/npm" && npm pack --silent "tailwindcss@$new" > /dev/null && tar xzf tailwindcss-"$new".tgz)
+    log "The stylesheets of the repository of Tailwind CSS"
+    # The files of the repository, as the standalone program has them. The
+    # npm package has another index.css, in another format.
     for f in index theme preflight utilities; do
-        cp "$work/npm/package/$f.css" native/tailwind/assets/$f.css
+        cp "$clone/packages/tailwindcss/$f.css" native/tailwind/assets/$f.css
         cp "$clone/packages/tailwindcss/$f.css" tests/upstream/css/$f.css
     done
 

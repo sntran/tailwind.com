@@ -58,6 +58,18 @@ if (!fs.existsSync(bin)) {
   })
 }
 
+// The stylesheets of the Tailwind CSS repository, as the standalone program
+// has them. The npm package has another index.css: one file with the text of
+// theme.css and preflight.css in another format (other quotes and line
+// breaks). The other stylesheets of the npm package are the same as in the
+// repository. tests/upstream/css has the files of the repository.
+{
+  let upstreamCss = path.join(path.dirname(fileURLToPath(import.meta.url)), '../css')
+  for (let name of ['index.css', 'theme.css', 'preflight.css', 'utilities.css']) {
+    fs.copyFileSync(path.join(upstreamCss, name), path.join(scratch, 'node_modules/tailwindcss', name))
+  }
+}
+
 // The plugins that the standalone program has in its file, at the versions of package.json of
 // this directory. A case that uses one of them with no node_modules directory in its project
 // gets the package from the scratch directory.

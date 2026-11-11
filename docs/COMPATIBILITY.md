@@ -34,6 +34,22 @@ bug, except the items of "Known differences".
 The scanner is the crate of Tailwind CSS itself, so the classes that it
 finds in the source files are the same by construction.
 
+## The two official programs
+
+The official standalone program and the official npm CLI give different
+text for `@import "tailwindcss"`: the standalone program has the
+stylesheets of the Tailwind CSS repository, and the npm package has
+another `index.css`, with the text of `theme.css` and `preflight.css` in
+another format (double quotes, other line breaks). The CSS has the same
+meaning, and with `--minify` the two give the same output.
+
+This program has the stylesheets of the repository, so its output is the
+output of the standalone program, the program of the Hex package
+`tailwind`. The records of the npm CLI in `tests/upstream` are made with
+the same stylesheets (`tools/run-cli.mjs` puts them in its copy of the
+npm package), and the CI job `standalone` compares the records with the
+real standalone program.
+
 ## Known differences
 
 - **JavaScript plugins and configs** run in QuickJS, and not in Node.js
