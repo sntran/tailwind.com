@@ -74,6 +74,11 @@ jobs:
           IN_BRANCH: ${{ inputs.branch }}
           IN_MINUTES: ${{ inputs.minutes }}
         run: |
+          # A push that removes the file ends a request: no session.
+          if [ "$EVENT" != workflow_dispatch ] && [ ! -f .github/remote-ssh.request ]; then
+            echo "No request file: no session."
+            exit 0
+          fi
           value() { sed -n "s/^$1=//p" .github/remote-ssh.request | head -n 1; }
           if [ "$EVENT" = workflow_dispatch ]; then
             os=$IN_OS vm=$IN_VM key=$IN_KEY branch=$IN_BRANCH minutes=$IN_MINUTES
@@ -109,6 +114,7 @@ jobs:
   ssh:
     name: SSH on ${{ needs.request.outputs.os }} (${{ needs.request.outputs.vm }})
     needs: request
+    if: needs.request.outputs.os != ''
     runs-on: ${{ needs.request.outputs.os }}
     timeout-minutes: 125
     concurrency:
