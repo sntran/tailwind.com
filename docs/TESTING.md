@@ -15,7 +15,9 @@ and for the tools that make them again). The tests need no Node.js.
 |---|---|
 | `tests/suite.rs` | Each `compile` call of the unit tests of Tailwind CSS: the output, or the error message; the features, the sources and the root. Then all the recorded candidates in one build, and `@import "tailwindcss"` with real-world classes. |
 | `tests/plugin_suite.rs` | The 296 `compile` calls of the unit tests of Tailwind CSS that load a JavaScript plugin or config, with each module as source text (`plugin-suite.jsonl.gz`): the CSS of each build, the error message, the features and the sources. |
-| `tests/js_plugins.rs` | `@plugin` and `@config` with a file system in memory: CommonJS and ES modules, `require` and `import` between them, cycles, JSON, packages, the modules of the program, `fs` and `path`, the errors, an exception in a build. The JSON of 10,983 candidates against `parseCandidate` of Tailwind CSS. The Rust code and the JavaScript code for `theme(…)` and the legacy utilities give the same output. |
+| `tests/js_plugins.rs` | `@plugin` and `@config` with a file system in memory: CommonJS and ES modules, TypeScript modules, `require` and `import` between them, cycles, JSON, packages, `imports` of a `package.json`, `import()` in a CommonJS file, the modules of the program, the three plugins in the program, `fs` and `path`, the errors and their `cause` chain, an exception in a build. The JSON of 10,983 candidates against `parseCandidate` of Tailwind CSS. The Rust code and the JavaScript code for `theme(…)` and the legacy utilities give the same output. |
+| `tests/node_api.rs` | The parts of Node.js that a module gets, against the record of Node.js 22 (`tests/fixtures/node_api.json`): 124 values for `Buffer`, `URL`, `URLSearchParams`, `TextEncoder`, `TextDecoder`, the timers, `structuredClone`, `process`, `os`, `url`, `util`, `assert`, `fs`, `module`. The resolver against `require.resolve` and `import.meta.resolve` of Node.js: 80 names, each one for `require` and for `import`. The three rules: each call that writes a file, opens a connection or starts a process throws the error of its rule. `import.meta`, the timers at the end of a module, and the format of `console.log`. |
+| `tests/warnings.rs`, `tests/optimize_warnings.rs` | The warnings for `--value(…)` of `@utility`. The warnings of the optimizer against the record of the official program (`tests/fixtures/optimize_warnings.json`): the code and the exact text with its color codes, for 13 inputs, plain and minified. |
 | `tests/nodes.rs` | For each of 75,082 candidates: the rules before the last pass, the order of their properties and the count of declarations. |
 | `tests/css_utility.rs` | `@utility`: 222 stylesheets with 35,044 candidates. |
 | `tests/variants.rs` | The variants: the cases of `variants.test.ts`, `@variant`, `@slot`, and the sort order of 345 variants. |
@@ -71,13 +73,25 @@ The crate uses `proptest`:
 
 ## The program
 
-`tests/cli.sh PROGRAM` runs the program on 17 small projects, and
+`tests/cli.sh PROGRAM` runs the program on 20 small projects, and
 compares the output and the exit status with the record of the official
 program (`tests/upstream/cli`): automatic source detection with
 `.gitignore`, `source(none)`, `@source`, `@source not`,
 `@source inline()`, imports, `@theme`, `@utility`, `@variant`, `@apply`,
 `@reference`, the functions, a prefix, `--minify`, `--optimize`, `--cwd`,
-a Phoenix project, and two errors. CI runs it with `tailwind.com` on
+a Phoenix project, two errors, and three projects with warnings (the
+optimizer with one warning and with three, and `--value(…)` of
+`@utility`).
+
+A case can have more files than the output and the exit status:
+
+| File | What |
+|---|---|
+| `stderr.txt` | For an error: each line of the message of the official program must be in the error output. |
+| `stderr-contains.txt` | With the exit status 0: the warning lines of the official program, with no color codes. Each line must be in the error output. With an error: the lines that must be there, for a message that another JavaScript engine cannot repeat. |
+| `env.txt` | The environment variables for the program, one `NAME=VALUE` for each line. `<project>` is the path of the project. These cases do not run on Windows. |
+| `project.txt` | In place of `project/`: the name of another case. The two cases use one project. |
+| `standalone.txt` | The record comes from the npm program with the module rules of the standalone program: see `tests/standalone.sh` below. | CI runs it with `tailwind.com` on
 Linux, macOS and Windows, on x86_64 and aarch64.
 
 `CASES=tests/upstream/cli-map sh tests/cli.sh PROGRAM` runs the 29
@@ -94,17 +108,33 @@ the test puts the same text into the output of the program (also into
 a map that is in a comment as Base64 text; this needs the command
 `base64`). These cases do not run on Windows.
 
-`CASES=tests/upstream/cli-js sh tests/cli.sh PROGRAM` runs the 88
+`CASES=tests/upstream/cli-js sh tests/cli.sh PROGRAM` runs the 100
 projects with JavaScript plugins and configs: each function of the
 plugin API, config files (theme, `darkMode`, `prefix`, `important`,
-`content`, presets), ES modules and CommonJS, `@tailwindcss/typography`,
-`@tailwindcss/forms`, `tailwindcss-animate`, daisyUI, a Phoenix 1.8
-project with heroicons and daisyUI, and 18 errors. For an error, each
-line of the message of the official program must be in the error
-output. One case (`error-plugin-syntax`) has a message of the JavaScript
-parser of the official program, which another engine cannot repeat: its
-file `stderr-contains.txt` has the text that must be there (the path of
-the file).
+`content`, presets), ES modules and CommonJS, TypeScript configs and
+plugins (`.ts`, `.mts`, `.cts`, and a JavaScript config that imports
+TypeScript files), `@tailwindcss/typography`, `@tailwindcss/forms`,
+`tailwindcss-animate`, daisyUI, the three plugins in the program with
+no `node_modules` directory, two Phoenix projects with heroicons and
+daisyUI (the layout to Phoenix 1.8.5 with vendor files, and the layout
+of Phoenix 1.8.9 with `deps/`, `NODE_PATH` and `phoenix-colocated`),
+two configs with a warning, and 19 errors. For an error, each line of
+the message of the official program must be in the error output. Two
+cases (`error-plugin-syntax`, `error-ts-syntax`) have a message of the
+JavaScript parser of the official program, which another engine cannot
+repeat: their file `stderr-contains.txt` has the text that must be
+there (the path of the file).
+
+`sh tests/standalone.sh PROGRAM` is for the official standalone program
+of Tailwind CSS, and not for this program. The records of the cases
+with `standalone.txt` come from the npm program with a copy of the two
+module rules of the standalone program
+(`tests/upstream/tools/bun-interop.mjs`). The script runs the real
+standalone program on these cases (10 cases: the Phoenix projects, the
+daisyUI bundle, the plugins in the program), and a difference from the
+record is an error with a diff. `sh tests/standalone.sh --download DIR`
+gets `tailwindcss-linux-x64` of the release and checks its SHA-256
+(`UPSTREAM`). The job `standalone` of CI does the two steps.
 
 `tests/watch.sh PROGRAM [--poll=ms]` tests the watch: an edit of a
 source file, a new file in a new directory, a file replaced by a
@@ -118,7 +148,7 @@ WASI program in Node.js. `CASES` selects the directory of the cases, as
 for `tests/cli.sh`. The project is the root directory there, so a
 source of a map is `/app.css`. The cases with JavaScript (all of
 `cli-js`, and 6 cases of `cli-map`) need a program from a build with
-`WASI_SDK_PATH`.
+`WASI_SDK_PATH`. `<project>` in `env.txt` is the directory `/` there.
 
 ## The TLA+ models
 

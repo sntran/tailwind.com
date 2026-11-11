@@ -10,7 +10,7 @@ aarch64.
 [BEAM.com](https://github.com/sntran/BEAM.com). It takes the place of:
 
 - **The official `tailwindcss` program**: the same options, the same
-  output, in one file of about 18 MB for all the systems and both CPUs.
+  output, in one file of about 19 MB for all the systems and both CPUs.
 - **The Hex package `tailwind`** in a Phoenix project: this repository
   is also an Erlang and Elixir project with the application name
   `tailwind`, the module `Tailwind`, and the tasks `mix tailwind` and
@@ -81,8 +81,10 @@ as before: the watch stops when the Phoenix server stops.
 A new Phoenix project has `@plugin` lines in `assets/css/app.css` (for
 heroicons and daisyUI). These plugins are JavaScript. The program runs
 them: see [JavaScript plugins and configs](#javascript-plugins-and-configs).
-The output for the project of `mix phx.new` (Phoenix 1.8) is the same as
-the output of the official program, byte for byte.
+The output for the project of `mix phx.new` is the same as the output of
+the official program, byte for byte, for the two layouts of Phoenix 1.8:
+daisyUI in `assets/vendor` (to 1.8.5), and daisyUI in `deps/` with
+`NODE_PATH` and the `phoenix-colocated` import (1.8.6 and later).
 
 An Erlang project uses the module `tailwind` (`tailwind:install/0`,
 `tailwind:run/2`), with the same configuration in the application
@@ -139,11 +141,12 @@ expects the same text, byte for byte:
 | Each class of the default design system, each variant, 6,000 random candidates and 784 edge cases, one at a time | 75,082 candidates |
 | The same candidates in one build (the sort of the output) | 24 MB of CSS |
 | `@import "tailwindcss"` with real-world classes, also through the optimizer | 686 candidates |
-| The official command line program on small projects | 17 projects |
+| The official command line program on small projects, also the warnings of the optimizer and of `@utility` | 20 projects |
 | The source maps of the official compiler and of its optimizer | 317 stylesheets |
 | The official command line program with `--map`, also with a JavaScript plugin and config | 29 projects |
-| The official command line program on projects with JavaScript plugins and configs (daisyUI, heroicons, `@tailwindcss/typography`, `@tailwindcss/forms`, a Phoenix project) | 88 projects |
+| The official command line program on projects with JavaScript and TypeScript plugins and configs (daisyUI, heroicons, `@tailwindcss/typography`, `@tailwindcss/forms`, two Phoenix projects) | 100 projects |
 | The `compile` calls of the unit tests of Tailwind CSS that load a JavaScript plugin or config | 296 calls |
+| Node.js 22 for the parts of Node.js that a plugin gets (`Buffer`, `URL`, timers, `fs`, `util`, ...), and for the files that `require` and `import` find | 124 values, 160 questions |
 
 See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the results and
 the known differences, and [`docs/TESTING.md`](docs/TESTING.md) for the
@@ -164,27 +167,40 @@ JavaScript of Tailwind CSS itself (`addBase`, `addUtilities`,
 `darkMode`, `prefix`, `important`, `content`, `blocklist`).
 
 - A module is a CommonJS file or an ES module (`.js`, `.cjs`, `.mjs`),
-  or a JSON file. `require` and `import` find relative files and
-  packages in `node_modules` (`exports` and `main` of `package.json`),
-  and the directories of `NODE_PATH`.
+  a TypeScript file (`.ts`, `.mts`, `.cts`), or a JSON file. `require`
+  and `import` find relative files and packages in `node_modules`
+  (`exports`, `imports` and `main` of `package.json`), and the
+  directories of `NODE_PATH`.
+- **TypeScript**: `@config "./tailwind.config.ts"` and
+  `@plugin "./plugin.ts"` work. The program removes the types. It does
+  not check them, as the official program.
 - `tailwindcss/plugin`, `tailwindcss/colors`, `tailwindcss/defaultTheme`
   and `tailwindcss/lib/util/flattenColorPalette` are in the file. A
   project needs no `node_modules` for them.
-- A module can read files: `fs` (`readFileSync`, `readdirSync`,
-  `existsSync`, `statSync`), `path`, and a small `util`. It cannot write
-  files, start a process, or open a network connection.
+- `@tailwindcss/forms`, `@tailwindcss/typography` and
+  `@tailwindcss/aspect-ratio` are in the file, as in the standalone
+  program of Tailwind CSS: `@plugin "@tailwindcss/typography"` works
+  with no `node_modules`.
+- A module gets a part of Node.js: `Buffer`, `URL`, `TextEncoder`,
+  `setTimeout`, `structuredClone`, `process.env`, and the modules `fs`
+  (reads only), `path`, `os`, `url`, `util`, `assert` and `module`.
+- A module cannot write files, start a process, or open a network
+  connection: such a call throws an error that names the rule (see
+  [`SECURITY.md`](SECURITY.md)).
 - The watch builds again when a plugin or config file changes.
 
 What does not work:
 
-- **TypeScript modules** (`tailwind.config.ts`): the error names the
-  file. Use a JavaScript file.
-- **The other modules of Node.js** (`os`, `crypto`, `child_process`,
-  `http`, ...), `Buffer`, timers and `fetch`. A plugin that needs them
-  at load time gives an error.
-- **`@tailwindcss/forms`, `@tailwindcss/typography` and
-  `@tailwindcss/aspect-ratio` are not in the file**, as they are in the
-  standalone program of Tailwind CSS. They work from `node_modules`.
+- **The other modules of Node.js** (`crypto`, `stream`, `events`,
+  `zlib`, ...), `Intl` and `Temporal`. A plugin that needs them at load
+  time gives an error.
+- **A TypeScript file with JSX** (`.tsx`), and decorators.
+- **`import "tailwindcss"` for a value** in a config (the full compiler
+  as a JavaScript module). `import type { Config } from "tailwindcss"`
+  works: a type import has no JavaScript.
+
+See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for all the
+differences.
 
 ## Limits
 
@@ -206,7 +222,7 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 `tailwind.wasm` of each release is the same program for WASI
 (`wasm32-wasip1`): it runs in Node.js, Wasmtime, and other hosts with a
 WASI file system. It has the same JavaScript engine for `@plugin` and
-`@config`.
+`@config`, with TypeScript and the three plugins in the file.
 
 ## Documentation
 

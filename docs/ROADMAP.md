@@ -3,13 +3,13 @@
 The sequence is by value for a Phoenix project.
 
 1. **More of Node.js for JavaScript plugins.** `@plugin` and `@config`
-   work with QuickJS and the plugin layer of Tailwind CSS. What is not
-   there: TypeScript modules (`tailwind.config.ts`; the official program
-   uses jiti for them), the modules `os`, `crypto` and `url`, `Buffer`,
-   and the three plugins that the standalone program of Tailwind CSS
-   has in its file (`@tailwindcss/forms`, `@tailwindcss/typography`,
-   `@tailwindcss/aspect-ratio`): here they load from `node_modules`
-   only. An interrupt for a plugin that does not end is also not there.
+   work with QuickJS and the plugin layer of Tailwind CSS, also with
+   TypeScript modules, the three plugins of the standalone program, and
+   a part of Node.js (`Buffer`, `URL`, timers, `fs`, `os`, `url`,
+   `util`, `assert`, `module`). What is not there: the modules `crypto`,
+   `stream`, `events` and `zlib`, the module `tailwindcss` itself for a
+   config that imports a value from it, TypeScript files with JSX or
+   decorators, and an interrupt for a plugin that does not end.
 2. **File events for the watch on Windows** (`ReadDirectoryChangesW`).
    The watch polls there.
 3. **`tailwind.wasm` in the BEAM**: run the compiler in the WebAssembly
