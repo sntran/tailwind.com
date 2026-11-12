@@ -142,6 +142,11 @@ One `tailwind.com` compiles for each version of Tailwind CSS 4. The
 variable `TAILWINDCSS_VERSION` selects the version, and the Erlang and
 Elixir modules set it from `version` of the configuration:
 
+To try the versions with no install, open the site:
+<https://sntran.github.io/tailwind.com/>. It runs `tailwind.wasm` in the
+browser, and compares two versions, or the Rust compiler with the
+official compiler of one version ([`docs/SITE.md`](docs/SITE.md)).
+
 ```sh
 TAILWINDCSS_VERSION=4.1.18 sh ./tailwind.com -i app.css -o dist/app.css
 ```
@@ -285,7 +290,9 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 `tailwind.wasm` of each release is the same program for WASI
 (`wasm32-wasip1`): it runs in Node.js, Wasmtime, and other hosts with a
 WASI file system. It has the same JavaScript engine for `@plugin` and
-`@config`, with TypeScript and the three plugins in the file.
+`@config`, with TypeScript and the three plugins in the file. The site
+runs it in the browser, with a small WASI host in JavaScript
+(`site/wasi.mjs`, [`docs/SITE.md`](docs/SITE.md)).
 
 ## Documentation
 
@@ -297,6 +304,7 @@ WASI file system. It has the same JavaScript engine for `@plugin` and
 | [`docs/INTERNALS.md`](docs/INTERNALS.md) | The parts of the compiler and of the file, and how they relate to Tailwind CSS. |
 | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/TESTING.md`](docs/TESTING.md) | Build `tailwind.com`, and the tests. |
 | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) | The time, the memory and the size, against the official programs. |
+| [`docs/SITE.md`](docs/SITE.md) | The site on GitHub Pages: `tailwind.wasm` in the browser, with each version. |
 | [`docs/SYNC.md`](docs/SYNC.md) | Move to a new version of Tailwind CSS. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What comes next. |
 | [`CHANGELOG.md`](CHANGELOG.md) | The changes of each version. |

@@ -1,0 +1,13 @@
+/* The CSS of the site. site/build.mjs builds it with tailwind.com. The
+   scanner reads the classes of index.html and app.mjs: app.mjs writes each
+   class name in full. */
+@import "tailwindcss" source(none);
+@source "./index.html";
+@source "./app.mjs";
+
+@layer base {
+  textarea,
+  pre {
+    tab-size: 2;
+  }
+}

@@ -364,6 +364,15 @@ The fuzzer found one fault of the script engine: Tailwind CSS uses
 first run of the recorded projects found the other one: the sort (see
 "How the script engine stays the same as V8" in `VERSIONS.md`).
 
+## The site
+
+`tests/site/browser.mjs` runs `tailwind.wasm` in Chromium with the WASI
+host of the site (`site/wasi.mjs`), and compares each result with
+`node:wasi` on a real directory. `tests/site/page.mjs` opens the page of
+`site/build.mjs` in Chromium, with each example and each recorded case.
+The job `site` of `.github/workflows/build.yml` runs the two tests. See
+[`SITE.md`](SITE.md).
+
 ## Benchmarks
 
 `tests/bench/run.mjs` measures the time, the memory and the size of

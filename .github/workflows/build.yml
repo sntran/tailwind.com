@@ -131,6 +131,44 @@ jobs:
           path: build/tailwind.wasm
           if-no-files-found: error
 
+  # The site (site/, docs/SITE.md): tailwind.wasm in Chromium, with the
+  # WASI host of the page. The host must give the result of node:wasi, and
+  # each example and each recorded case of the page must build.
+  site:
+    name: The site in Chromium
+    needs: wasm
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: tailwind.wasm
+          path: build
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Build the site
+        run: node site/build.mjs --wasm build/tailwind.wasm
+      - name: Playwright with Chromium
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/playwright" playwright@1.63.0
+          "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium
+      - name: The WASI host in Chromium, against node:wasi
+        env:
+          NODE_PATH: ${{ runner.temp }}/playwright/node_modules
+        run: node tests/site/browser.mjs --packages build/site-packages
+      - name: The page in Chromium
+        env:
+          NODE_PATH: ${{ runner.temp }}/playwright/node_modules
+        run: node tests/site/page.mjs --screenshot build/site/screenshot.png
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: site
+          path: build/site
+          retention-days: 7
+
   tlc:
     name: The TLA+ models
     runs-on: ubuntu-26.04
@@ -459,7 +497,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     # A release waits for every compatibility gate, including the
     # standalone-reference and BSD system tests.
-    needs: [test, standalone, wasm, tlc, systems, bsd, mix, npm]
+    needs: [test, standalone, wasm, site, tlc, systems, bsd, mix, npm]
     runs-on: ubuntu-26.04
     permissions:
       contents: write
@@ -549,3 +587,18 @@ jobs:
           grep -q "\"name\": \"@$owner/tailwind.com\"" package.json
           printf '@%s:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$owner" "$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/ghp/npmrc"
           npm publish --userconfig "$RUNNER_TEMP/ghp/npmrc" --registry https://npm.pkg.github.com
+
+  # The site on GitHub Pages, with tailwind.wasm of this release. A
+  # release that the token of a workflow makes starts no other workflow,
+  # so this job calls pages.yml.
+  pages:
+    name: The site on GitHub Pages
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
+    with:
+      tag: ${{ github.ref_name }}

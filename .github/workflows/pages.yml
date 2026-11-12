@@ -1,0 +1,89 @@
+name: Pages
+
+# The site of tailwind.com on GitHub Pages (site/, docs/SITE.md): the page
+# runs tailwind.wasm of a release in the browser. The job "pages" of
+# build.yml calls this workflow after each release. A run by hand deploys
+# the release of the input `tag`, or the latest release.
+#
+# The repository needs Pages with the source "GitHub Actions" (Settings,
+# Pages).
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag of the release
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag of the release (empty for the latest release)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: The release
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          tag=${TAG:-$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)}
+          echo "The site is for the release $tag."
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+      - name: tailwind.wasm of the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          mkdir -p build
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern tailwind.wasm --pattern SHA256SUMS --dir build
+          (cd build && grep ' tailwind.wasm$' SHA256SUMS | sha256sum -c -)
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Build the site
+        run: node site/build.mjs --wasm build/tailwind.wasm
+      - name: Playwright with Chromium
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/playwright" playwright@1.63.0
+          "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium
+      - name: The page in Chromium
+        env:
+          NODE_PATH: ${{ runner.temp }}/playwright/node_modules
+        run: node tests/site/page.mjs
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: build/site
+
+  deploy:
+    name: Deploy the site
+    needs: build
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    # One deploy at a time, and a deploy that started ends.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
