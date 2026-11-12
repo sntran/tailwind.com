@@ -863,6 +863,13 @@ Before 4.0.4, where the result of `--value(…)` had a `--value(…)` that
 gives the same result again (`foo-[--value([*])]`), the official compiler
 did not stop. The Rust compiler gives the result of 4.0.4 there.
 
+In 4.0.2 and 4.0.3, an `@variant` rule that is the old form of
+`@custom-variant` (no body, or a body with `@slot`) had a fault in an
+import with options. With no body, the official compiler gave the error
+"Cannot use `@variant` with unknown variant". With `@slot`, it stopped
+with a stack overflow. The Rust compiler gives the result of 4.0.4 for
+the two.
+
 ### 4.0.3 (1 switch, there)
 
 | Switch | Kind | Effort | How often | What was before |

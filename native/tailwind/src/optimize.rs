@@ -755,7 +755,7 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
     }
 
     // In 4.0.6 and 4.0.7, and before 4.0.5, each theme variable and each
-    // `@keyframes` rule of the tree stayed in the output.
+    // `@keyframes` rule of the theme stayed in the output.
     let remove_unused = optimizer.removal != Removal::No;
     if remove_unused {
         optimizer.remove_unused_theme_variables(root);
@@ -886,32 +886,18 @@ fn is_variable_used(
 
 /// JavaScript `value.split(/\s+/)`.
 pub fn split_at_white_space(value: &str) -> Vec<&str> {
-    let mut names = Vec::new();
-    let mut start = 0;
-    let mut chars = value.char_indices().peekable();
-    while let Some((idx, c)) = chars.next() {
-        if !is_js_whitespace(c) {
-            continue;
-        }
-        names.push(&value[start..idx]);
-        let mut end = idx + c.len_utf8();
-        while let Some(&(next_idx, next)) = chars.peek() {
-            if !is_js_whitespace(next) {
-                break;
-            }
-            end = next_idx + next.len_utf8();
-            chars.next();
-        }
-        start = end;
-    }
-    names.push(&value[start..]);
-    names
+    split_at(value, false)
 }
 
 /// JavaScript `value.split(/[\s,]+/)`.
 /// (Before 4.0.16, a comma was not a separator: `value.split(/\s+/)`.)
 fn extract_keyframe_names(value: &str) -> Vec<&str> {
-    let comma = crate::switches::KEYFRAME_NAMES_AFTER_COMMA.on();
+    split_at(value, crate::switches::KEYFRAME_NAMES_AFTER_COMMA.on())
+}
+
+/// The parts of the text between runs of white space (and of commas, with
+/// `comma`).
+fn split_at(value: &str, comma: bool) -> Vec<&str> {
     let is_separator = |c: char| (comma && c == ',') || is_js_whitespace(c);
     let mut names = Vec::new();
     let mut start = 0;
