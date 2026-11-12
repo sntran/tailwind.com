@@ -6,12 +6,38 @@ name: Fuzz
 # a new seed, so each run tries new inputs. A difference fails the job,
 # and the artifact "fuzz" has the case and its reduced form. See
 # docs/TESTING.md.
+#
+# A push or a pull request runs it only when a file that the fuzzer tests
+# changes: the compiler, the fuzzer, the records, the packages. The run of
+# each night tests each version with a longer time. A pull request from a
+# work branch of this repository (feat/, fix/, ci/) runs no job: the push
+# of that branch already ran each job on the same commit.
 on:
   push:
     branches: [main, "feat/**", "fix/**", "ci/**"]
-    paths-ignore: ["**.md", "docs/**", ".github/remote-ssh.request"]
+    paths:
+      - "native/**"
+      - "c_src/**"
+      - "tests/fuzz/**"
+      - "tests/upstream/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "PACKAGES"
+      - "UPSTREAM"
+      - ".github/workflows/fuzz.yml"
   pull_request:
-    paths-ignore: ["**.md", "docs/**"]
+    paths:
+      - "native/**"
+      - "c_src/**"
+      - "tests/fuzz/**"
+      - "tests/upstream/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "PACKAGES"
+      - "UPSTREAM"
+      - ".github/workflows/fuzz.yml"
   schedule:
     # Each night, with a longer time.
     - cron: "41 3 * * *"
@@ -36,6 +62,7 @@ concurrency:
 jobs:
   fuzz:
     name: Differential fuzz against the official Tailwind CSS
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 75
     steps:
@@ -73,6 +100,7 @@ jobs:
   # another scanner and another optimizer.
   script:
     name: The script engine with Tailwind CSS ${{ matrix.version }}
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 40
     strategy:
@@ -111,6 +139,7 @@ jobs:
   # its versions.
   programs:
     name: Build the program and the builder
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:

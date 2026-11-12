@@ -210,7 +210,8 @@ file events of each system (inotify, kqueue, `ReadDirectoryChangesW`)
 and with the poll.
 
 A differential fuzzer also compares the two compilers live on new random
-stylesheets, classes and projects, in CI for each push and each night.
+stylesheets, classes and projects, in CI for each change of the compiler
+and each night.
 
 The scanner of source files is the Rust crate of Tailwind CSS itself
 (`tailwindcss-oxide`), and `--minify` and `--optimize` use the same

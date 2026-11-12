@@ -9,6 +9,10 @@ on:
     branches: [main, "feat/**", "fix/**", "ci/**"]
     tags: ["v*"]
     paths-ignore: ["**.md", "docs/**", ".github/remote-ssh.request"]
+  # A pull request from a work branch of this repository (feat/, fix/,
+  # ci/) runs no job: the push of that branch already ran each job on the
+  # same commit. A pull request from a fork runs each job. The jobs with
+  # no `needs` have this condition; the other jobs need them.
   pull_request:
     paths-ignore: ["**.md", "docs/**", ".github/remote-ssh.request"]
   workflow_dispatch:
@@ -33,6 +37,7 @@ env:
 jobs:
   test:
     name: Tests of the compiler
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
@@ -87,6 +92,7 @@ jobs:
   # cases: a difference fails the job with a diff.
   standalone:
     name: The official standalone program, against the record
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
@@ -98,6 +104,7 @@ jobs:
 
   wasm:
     name: The program for WASI
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
@@ -133,6 +140,7 @@ jobs:
 
   tlc:
     name: The TLA+ models
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
@@ -143,6 +151,7 @@ jobs:
 
   build:
     name: Build tailwind.com
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
