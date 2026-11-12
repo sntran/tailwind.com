@@ -12,9 +12,9 @@
 //!
 //! - `TAILWINDCSS_VERSION`: the version of Tailwind CSS (default: the
 //!   version of the native engine).
-//! - `TAILWIND_COM_ENGINE`: `native` or `script`. With no value, the
-//!   version of the native engine uses the native engine, and each other
-//!   version uses the script engine.
+//! - `TAILWIND_COM_ENGINE`: `native` or `script`. With no value, each
+//!   version from `Version::OLDEST` to the version of the port uses the
+//!   native engine, and each other version uses the script engine.
 //! - `TAILWIND_COM_PACKAGES`: a directory with one directory for each
 //!   version (`4.2.0/package.json`, `4.2.0/dist/lib.js`, ...): the files
 //!   of the npm package.

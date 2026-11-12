@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>tailwind.com: each version of Tailwind CSS 4</title>
+    <meta name="description" content="Build markup with each version of Tailwind CSS 4, from 4.0.0 to the newest, in your browser. Compare two versions, or the Rust compiler with the official compiler.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%230284c7%22/%3E%3Cpath d=%22M8 14c2-4 5-5 8-3s5 1 8-3c-2 4-5 5-8 3s-5-1-8 3zm0 8c2-4 5-5 8-3s5 1 8-3c-2 4-5 5-8 3s-5-1-8 3z%22 fill=%22white%22/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="style.css">
+    <script type="module" src="app.mjs"></script>
+  </head>
+  <body class="min-h-screen bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
+    <header class="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div class="mx-auto flex max-w-screen-2xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+        <a href="./" class="font-mono text-lg font-bold text-sky-600 dark:text-sky-400">tailwind.com</a>
+        <nav class="flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
+          <a class="hover:text-sky-600 dark:hover:text-sky-400" href="https://github.com/sntran/tailwind.com#readme">Documentation</a>
+          <a class="hover:text-sky-600 dark:hover:text-sky-400" href="https://github.com/sntran/tailwind.com/releases/latest">Download</a>
+          <a class="hover:text-sky-600 dark:hover:text-sky-400" href="https://github.com/sntran/tailwind.com">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-screen-2xl space-y-4 px-4 py-6">
+      <section class="max-w-3xl space-y-2">
+        <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Each version of Tailwind CSS 4, in your browser</h1>
+        <p class="text-slate-600 dark:text-slate-300">
+          This page runs <code class="font-mono text-sm">tailwind.wasm</code>, the WebAssembly form of
+          <code class="font-mono text-sm">tailwind.com</code>, in your browser. Write markup and CSS, select a version
+          from 4.0.0 to the newest, and see the output. Compare two versions, or compare the Rust compiler with the official
+          compiler of one version. Nothing goes to a server.
+        </p>
+      </section>
+
+      <form id="controls" class="flex flex-wrap items-end gap-x-5 gap-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900" autocomplete="off">
+        <label class="grid max-w-full min-w-0 gap-1 text-sm font-medium">
+          Example
+          <select id="example" class="max-w-full min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1.5 font-normal dark:border-slate-700 dark:bg-slate-800"></select>
+        </label>
+        <fieldset class="grid gap-1 text-sm">
+          <legend class="mb-1 font-medium">Compare</legend>
+          <div class="flex flex-wrap gap-x-4 gap-y-1">
+            <label class="flex items-center gap-1.5"><input type="radio" name="mode" value="one" checked> One version</label>
+            <label class="flex items-center gap-1.5"><input type="radio" name="mode" value="two"> Two versions</label>
+            <label class="flex items-center gap-1.5"><input type="radio" name="mode" value="engines"> Rust and official</label>
+          </div>
+        </fieldset>
+        <label class="grid gap-1 text-sm font-medium">
+          <span id="version-a-label">Version</span>
+          <select id="version-a" class="rounded-md border border-slate-300 bg-white px-2 py-1.5 font-mono font-normal dark:border-slate-700 dark:bg-slate-800"></select>
+        </label>
+        <label id="version-b-field" class="grid gap-1 text-sm font-medium" hidden>
+          Second version
+          <select id="version-b" class="rounded-md border border-slate-300 bg-white px-2 py-1.5 font-mono font-normal dark:border-slate-700 dark:bg-slate-800"></select>
+        </label>
+        <label class="flex items-center gap-1.5 pb-1.5 text-sm"><input type="checkbox" id="minify"> <code class="font-mono">--minify</code></label>
+        <button type="button" id="copy-link" class="ml-auto rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">Copy a link to this page</button>
+      </form>
+
+      <div class="grid gap-4 lg:grid-cols-2">
+        <section class="grid gap-2">
+          <h2 class="text-sm font-semibold"><label for="markup">Markup (<code class="font-mono">index.html</code>)</label></h2>
+          <textarea id="markup" spellcheck="false" class="h-72 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 font-mono text-sm leading-6 dark:border-slate-800 dark:bg-slate-900"></textarea>
+        </section>
+        <section class="grid gap-2">
+          <h2 class="text-sm font-semibold"><label for="css">Input CSS (<code class="font-mono">app.css</code>)</label></h2>
+          <textarea id="css" spellcheck="false" class="h-72 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 font-mono text-sm leading-6 dark:border-slate-800 dark:bg-slate-900"></textarea>
+        </section>
+        <section class="grid min-w-0 gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-sm font-semibold">Output CSS</h2>
+            <div id="tabs" role="tablist" class="flex flex-wrap gap-1 text-sm"></div>
+          </div>
+          <pre id="output" class="h-96 overflow-auto rounded-xl border border-slate-200 bg-white p-3 font-mono text-xs leading-5 dark:border-slate-800 dark:bg-slate-900" tabindex="0"></pre>
+        </section>
+        <section class="grid min-w-0 gap-2">
+          <h2 class="text-sm font-semibold">Preview</h2>
+          <div id="previews" class="grid h-96 gap-2"></div>
+        </section>
+      </div>
+
+      <div id="status" role="status" class="min-h-6 text-sm text-slate-600 dark:text-slate-300">Loading <code class="font-mono">tailwind.wasm</code> …</div>
+      <pre id="messages" class="overflow-auto rounded-xl border border-amber-300 bg-amber-50 p-3 font-mono text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200" hidden></pre>
+
+      <section class="space-y-3 pt-6">
+        <h2 class="text-xl font-bold tracking-tight">The changes of Tailwind CSS, release by release</h2>
+        <p class="max-w-3xl text-slate-600 dark:text-slate-300">
+          The Rust compiler has a switch for each change of behavior in a release of Tailwind CSS, so it can compile as each
+          older version. Each recorded case shows one change: open it to compare the version before the change with the
+          version of the change. The method and the full list are in
+          <a class="text-sky-600 underline dark:text-sky-400" href="https://github.com/sntran/tailwind.com/blob/main/docs/SWITCHES.md">docs/SWITCHES.md</a>.
+        </p>
+        <div id="releases" class="grid gap-2"></div>
+      </section>
+    </main>
+
+    <footer class="border-t border-slate-200 py-6 text-center text-sm text-slate-500 dark:border-slate-800">
+      tailwind.com is not a product of Tailwind Labs. Tailwind CSS is a trademark of Tailwind Labs Inc.
+    </footer>
+  </body>
+</html>

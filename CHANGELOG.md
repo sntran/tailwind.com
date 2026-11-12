@@ -44,6 +44,13 @@ Each version of Tailwind CSS 4, from 4.0.0 to 4.3.5, in one file.
   the Rust compiler.
   `docs/SWITCHES.md` has the procedure, and the list of the changes of
   Tailwind CSS for each release.
+- The site on GitHub Pages (`site/`, `docs/SITE.md`): `tailwind.wasm` in
+  the browser, with each version. It shows the markup, the input CSS,
+  the output CSS and a preview. It compares two versions, or the Rust
+  compiler with the official compiler of one version, and opens the
+  recorded case of each switch. A WASI host in JavaScript
+  (`site/wasi.mjs`) runs the program with a file system in memory. The
+  job `pages` deploys the site after each release.
 - The program has the plugin layer of Tailwind CSS (the JavaScript for
   `@plugin` and `@config`) of each version that the Rust compiler
   serves, made from the source of that version with no change
