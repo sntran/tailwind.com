@@ -176,9 +176,9 @@ CSS in its plugin layer needs no switch and no work: the list marks it
 
 - `sh scripts/compat.sh UPSTREAM_CLONE` makes all the files. An older
   version is a patch file (`native/tailwind/assets/compat/VERSION.patch`,
-  3 KB to 12 KB): the difference from the file of the next newer
+  at most 31 KB): the difference from the file of the next newer
   version, in the format of the packages (`src/patch.rs`). The patch
-  files are in the program (76 KB in all), and `compat/js/bundles.rs`
+  files are in the program (170 KB in all), and `compat/js/bundles.rs`
   reads them.
 - The files do not depend on the computer. The job "test" of
   `.github/workflows/build.yml` makes them again from the source of
