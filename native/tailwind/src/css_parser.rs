@@ -518,10 +518,29 @@ pub fn parse_at_rule(buffer: &str, nodes: Vec<AstNode>) -> AtRule {
     }
 }
 
+/// Before 4.0.2, a text with no `:` was a declaration too: the property
+/// was the text with no last character, and the value was the text (`foo;`
+/// gave `fo: foo`). A declaration with no property is not valid CSS: for
+/// that one, the result is the error of 4.0.2.
+fn declaration_with_no_colon(buffer: &str) -> Option<AstNode> {
+    if crate::switches::DECLARATION_NEEDS_COLON.on() {
+        return None;
+    }
+    let mut characters = buffer.chars();
+    characters.next_back();
+    let property = js_trim(characters.as_str());
+    if property.is_empty() {
+        return None;
+    }
+    let important = buffer.find(IMPORTANT);
+    let value = js_trim(&buffer[..important.unwrap_or(buffer.len())]);
+    Some(decl_full(property, Some(value.to_string()), important.is_some()))
+}
+
 /// A declaration from its text. `colon_idx` is the offset of the `:`.
 /// `value_end` is the end of the value without comments after it.
 fn parse_declaration(buffer: &str, colon_idx: Option<usize>, value_end: usize) -> Option<AstNode> {
-    let colon_idx = colon_idx?;
+    let Some(colon_idx) = colon_idx else { return declaration_with_no_colon(buffer) };
 
     // Before 4.3.4: the first `!important` after the colon is the flag,
     // and it ends the value. (The text can be shorter than the place of

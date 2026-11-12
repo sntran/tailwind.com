@@ -177,8 +177,11 @@ fn filter_properties() -> AstNode {
         property("--tw-opacity", None, None),
         property("--tw-saturate", None, None),
         property("--tw-sepia", None, None),
-        property("--tw-drop-shadow", None, None),
     ];
+    // Before 4.0.7, the drop shadow had no `@property` rule.
+    if crate::switches::DROP_SHADOW_PROPERTY.on() {
+        properties.push(property("--tw-drop-shadow", None, None));
+    }
     // Before 4.1.0, a drop shadow had no color, alpha or size variable.
     if crate::switches::DROP_SHADOW_COLOR.on() {
         properties.extend([

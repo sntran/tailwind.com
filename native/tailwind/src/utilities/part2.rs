@@ -204,6 +204,27 @@ fn linear_gradient_direction(value: &str) -> Option<&'static str> {
     })
 }
 
+/// The value of `--tw-gradient-position`. Before 4.0.2, it had the comma
+/// that follows the position in the gradient.
+fn gradient_position(value: &str) -> String {
+    if crate::switches::GRADIENT_POSITION_NO_COMMA.on() {
+        value.to_string()
+    } else {
+        format!("{value},")
+    }
+}
+
+/// The value of `--tw-gradient-stops`. Before 4.0.2, the comma after the
+/// position was in the value of `--tw-gradient-position`, and the `var()`
+/// had an empty fallback.
+fn gradient_stops() -> &'static str {
+    if crate::switches::GRADIENT_POSITION_NO_COMMA.on() {
+        "var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))"
+    } else {
+        "var(--tw-gradient-via-stops, var(--tw-gradient-position,) var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))"
+    }
+}
+
 fn handle_bg_linear(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSystem) -> Option<Vec<AstNode>> {
     move |candidate, _| {
         let named = match candidate.value.as_ref()? {
@@ -218,7 +239,7 @@ fn handle_bg_linear(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyst
                     _ => value.clone(),
                 };
                 return Some(vec![
-                    decl("--tw-gradient-position", value.as_str()),
+                    decl("--tw-gradient-position", gradient_position(&value)),
                     decl("background-image", format!("linear-gradient(var(--tw-gradient-stops,{value}))")),
                 ]);
             }
@@ -242,7 +263,7 @@ fn handle_bg_linear(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyst
         // Before 4.1.0, there was no fallback with no method.
         if !crate::switches::GRADIENT_POSITION_FALLBACK.on() {
             return Some(vec![
-                decl("--tw-gradient-position", format!("{value} {interpolation_method}")),
+                decl("--tw-gradient-position", gradient_position(&format!("{value} {interpolation_method}"))),
                 decl("background-image", "linear-gradient(var(--tw-gradient-stops))"),
             ]);
         }
@@ -265,7 +286,7 @@ fn handle_bg_conic(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyste
                 return None;
             }
             return Some(vec![
-                decl("--tw-gradient-position", value.as_str()),
+                decl("--tw-gradient-position", gradient_position(value)),
                 decl("background-image", format!("conic-gradient(var(--tw-gradient-stops,{value}))")),
             ]);
         }
@@ -274,7 +295,7 @@ fn handle_bg_conic(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyste
 
         let Some(candidate_value) = &candidate.value else {
             return Some(vec![
-                decl("--tw-gradient-position", interpolation_method),
+                decl("--tw-gradient-position", gradient_position(&interpolation_method)),
                 decl("background-image", "conic-gradient(var(--tw-gradient-stops))"),
             ]);
         };
@@ -291,7 +312,7 @@ fn handle_bg_conic(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyste
         };
 
         Some(vec![
-            decl("--tw-gradient-position", format!("from {value} {interpolation_method}")),
+            decl("--tw-gradient-position", gradient_position(&format!("from {value} {interpolation_method}"))),
             decl("background-image", "conic-gradient(var(--tw-gradient-stops))"),
         ])
     }
@@ -910,7 +931,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
 
     u.functional("bg-radial", |candidate, _| match &candidate.value {
         None => Some(vec![
-            decl("--tw-gradient-position", resolve_interpolation_modifier(candidate.modifier.as_ref())),
+            decl("--tw-gradient-position", gradient_position(&resolve_interpolation_modifier(candidate.modifier.as_ref()))),
             decl("background-image", "radial-gradient(var(--tw-gradient-stops))"),
         ]),
         Some(UtilityValue::Arbitrary { value, .. }) => {
@@ -918,7 +939,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 return None;
             }
             Some(vec![
-                decl("--tw-gradient-position", value.as_str()),
+                decl("--tw-gradient-position", gradient_position(value)),
                 decl("background-image", format!("radial-gradient(var(--tw-gradient-stops,{value}))")),
             ])
         }
@@ -974,7 +995,6 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         Some(vec![decl("background-image", value)])
     });
 
-    const STOPS: &str = "var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))";
 
     gradient_stop_utility(
         u,
@@ -984,7 +1004,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 gradient_stop_properties(),
                 decl("--tw-sort", "--tw-gradient-from"),
                 decl("--tw-gradient-from", value),
-                decl("--tw-gradient-stops", STOPS),
+                decl("--tw-gradient-stops", gradient_stops()),
             ]
         },
         |value| vec![gradient_stop_properties(), decl("--tw-gradient-from-position", value)],
@@ -1000,7 +1020,11 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 decl("--tw-gradient-via", value),
                 decl(
                     "--tw-gradient-via-stops",
-                    "var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position)",
+                    if crate::switches::GRADIENT_POSITION_NO_COMMA.on() {
+                        "var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position)"
+                    } else {
+                        "var(--tw-gradient-position,) var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position)"
+                    },
                 ),
                 decl("--tw-gradient-stops", "var(--tw-gradient-via-stops)"),
             ]
@@ -1015,7 +1039,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 gradient_stop_properties(),
                 decl("--tw-sort", "--tw-gradient-to"),
                 decl("--tw-gradient-to", value),
-                decl("--tw-gradient-stops", STOPS),
+                decl("--tw-gradient-stops", gradient_stops()),
             ]
         },
         |value| vec![gradient_stop_properties(), decl("--tw-gradient-to-position", value)],

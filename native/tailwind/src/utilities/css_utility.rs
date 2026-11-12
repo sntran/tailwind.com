@@ -267,7 +267,16 @@ struct CompileState<'a> {
     /// The number of times that the functions of the declaration of the
     /// walk asked for its removal.
     removals: usize,
+    /// Before 4.0.4 (`switches::CSS_UTILITY_RESULT_NOT_VISITED`): the
+    /// number of results that the walk can visit again. `None`: the walk
+    /// does not visit a result.
+    revisits_left: Option<usize>,
+    /// The walk visited results without end.
+    endless: bool,
 }
+
+/// The limit of `CompileState::revisits_left` for one declaration.
+const REVISIT_LIMIT: usize = 1000;
 
 fn compile_functional(node: &AtRule, candidate: &FunctionalCandidate, design_system: &DesignSystem) -> Compiled {
     // Before 4.3.0, a functional utility needed a value.
@@ -288,6 +297,8 @@ fn compile_functional(node: &AtRule, candidate: &FunctionalCandidate, design_sys
         resolved_ratio_value: false,
         resolved_declarations: Vec::new(),
         removals: 0,
+        revisits_left: None,
+        endless: false,
     };
 
     resolve_declarations(&mut at_rule.nodes, true, &mut state);
@@ -338,7 +349,39 @@ fn resolve_declarations(nodes: &mut Vec<AstNode>, parent_is_rule: bool, state: &
                     if let Some(value) = declaration.value.as_deref().filter(|v| !v.is_empty()) {
                         let mut value_ast = value_parser::parse(value);
                         state.removals = 0;
-                        resolve_value_functions(&mut value_ast, state, &mut resolved);
+                        if crate::switches::CSS_UTILITY_RESULT_NOT_VISITED.on() {
+                            resolve_value_functions(&mut value_ast, state, &mut resolved);
+                        } else {
+                            // Before 4.0.4, the walk visited the nodes of
+                            // each result again: a `--value(…)` in an
+                            // arbitrary value of the candidate got a result
+                            // too. Where that has no end, upstream did not
+                            // stop: the result is then the result of 4.0.4.
+                            let flags = (
+                                state.used_value_fn,
+                                state.resolved_value_fn,
+                                state.used_modifier_fn,
+                                state.resolved_modifier_fn,
+                                state.resolved_ratio_value,
+                            );
+                            state.revisits_left = Some(REVISIT_LIMIT);
+                            state.endless = false;
+                            resolve_value_functions(&mut value_ast, state, &mut resolved);
+                            state.revisits_left = None;
+                            if state.endless {
+                                (
+                                    state.used_value_fn,
+                                    state.resolved_value_fn,
+                                    state.used_modifier_fn,
+                                    state.resolved_modifier_fn,
+                                    state.resolved_ratio_value,
+                                ) = flags;
+                                state.removals = 0;
+                                resolved = false;
+                                value_ast = value_parser::parse(value);
+                                resolve_value_functions(&mut value_ast, state, &mut resolved);
+                            }
+                        }
                         if state.removals > 0 {
                             // Before 4.0.15, a declaration could ask for
                             // its removal more than one time. Each more
@@ -389,7 +432,14 @@ fn resolve_value_functions(nodes: &mut Vec<ValueAstNode>, state: &mut CompileSta
             }
             let count = resolved.nodes.len();
             nodes.splice(index..=index, resolved.nodes);
-            index += count;
+            match &mut state.revisits_left {
+                None => index += count,
+                Some(0) => {
+                    state.endless = true;
+                    return false;
+                }
+                Some(left) => *left -= 1,
+            }
         } else if function.value == "--modifier" {
             // Before 4.3.0, a candidate with no modifier removed the
             // declaration here: there was no default.
@@ -411,7 +461,14 @@ fn resolve_value_functions(nodes: &mut Vec<ValueAstNode>, state: &mut CompileSta
             state.resolved_modifier_fn = true;
             let count = resolved.nodes.len();
             nodes.splice(index..=index, resolved.nodes);
-            index += count;
+            match &mut state.revisits_left {
+                None => index += count,
+                Some(0) => {
+                    state.endless = true;
+                    return false;
+                }
+                Some(left) => *left -= 1,
+            }
         } else {
             if !resolve_value_functions(&mut function.nodes, state, resolved_declaration) {
                 return false;

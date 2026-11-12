@@ -60,7 +60,13 @@ fn auto_track_spacing(value: &NamedValue, ds: &DesignSystem) -> Option<String> {
 
 /// A bare value for `grid-cols-*` and `grid-rows-*`.
 fn grid_repeat(value: &NamedValue, _: &DesignSystem) -> Option<String> {
-    is_strict_positive_integer(value.value).then(|| format!("repeat({}, minmax(0, 1fr))", value.value))
+    // Before 4.0.2, `grid-cols-0` and `grid-rows-0` were valid.
+    let valid = if crate::switches::GRID_TRACKS_NOT_ZERO.on() {
+        is_strict_positive_integer(value.value)
+    } else {
+        is_positive_integer(value.value)
+    };
+    valid.then(|| format!("repeat({}, minmax(0, 1fr))", value.value))
 }
 
 /// A description that sets one property.
@@ -403,7 +409,15 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             .negative()
             .bare(integer)
             .theme_keys(&["--order"])
-            .static_values(values("order", &[("first", "-9999"), ("last", "9999")])),
+            // (Before 4.0.4, the values were `calc(-infinity)` and `calc(infinity)`.)
+            .static_values(values(
+                "order",
+                if crate::switches::ORDER_FIRST_LAST_NUMBERS.on() {
+                    &[("first", "-9999"), ("last", "9999")]
+                } else {
+                    &[("first", "calc(-infinity)"), ("last", "calc(infinity)")]
+                },
+            )),
     );
 
     // `grid-column`
@@ -634,7 +648,15 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     st(u, "min-h-screen", &[("min-height", "100vh")]);
     st(u, "max-h-screen", &[("max-height", "100vh")]);
 
+    // Before 4.0.1, also `min-w-none` and `min-h-none`: `none` is not a
+    // value of these properties.
+    if !crate::switches::NO_MIN_SIZE_NONE.on() {
+        st(u, "min-w-none", &[("min-width", "none")]);
+    }
     st(u, "max-w-none", &[("max-width", "none")]);
+    if !crate::switches::NO_MIN_SIZE_NONE.on() {
+        st(u, "min-h-none", &[("min-height", "none")]);
+    }
     st(u, "max-h-none", &[("max-height", "none")]);
 
     spacing_utility(
@@ -894,6 +916,18 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         },
         negative(),
     );
+    // Before 4.0.8, `translate-z-px` and `-translate-z-px` were static
+    // utilities two times: each gave two equal rules.
+    if !crate::switches::TRANSLATE_Z_PX_ONE_RULE.on() {
+        for (name, value) in [("-translate-z-px", "-1px"), ("translate-z-px", "1px")] {
+            st_with(
+                u,
+                name,
+                translate_properties,
+                &[("--tw-translate-z", value), ("translate", "var(--tw-translate-x) var(--tw-translate-y) var(--tw-translate-z)")],
+            );
+        }
+    }
 
     st_with(
         u,

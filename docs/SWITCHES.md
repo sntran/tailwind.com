@@ -67,9 +67,16 @@ nothing wrong: that version is only slower.
 | 4.0.10 | Rust compiler | 0 more |
 | 4.0.9 | Rust compiler | 7 more |
 | 4.0.8 | Rust compiler | 6 more |
-| 4.0.0 to 4.0.7 | script engine | not counted |
+| 4.0.7 | Rust compiler | 8 more |
+| 4.0.6 | Rust compiler | 3 more |
+| 4.0.5 | Rust compiler | 1 more |
+| 4.0.4 | Rust compiler | 4 more |
+| 4.0.3 | Rust compiler | 7 more |
+| 4.0.2 | Rust compiler | 1 more |
+| 4.0.1 | Rust compiler | 7 more |
+| 4.0.0 | Rust compiler | 6 more |
 
-All the 158 switches of Tailwind CSS 4.0.9 to 4.3.5 are there. Each of
+All the 195 switches of Tailwind CSS 4.0.1 to 4.3.5 are there. Each of
 these versions uses the Rust compiler also for a stylesheet with
 `@plugin` or `@config`: see "The plugin layer" below.
 
@@ -751,6 +758,180 @@ its `@keyframes` rules, so each copy of the rule gave them again. From
 4.0.9, that rule is not in the output, and `THEME_KEYFRAMES_AT_THE_END`
 keeps the `@keyframes` rules out of it.
 
+### 4.0.8 (8 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `UNUSED_THEME_VARIABLES_REMOVED` | form | M | each build | In 4.0.6 and 4.0.7, each theme variable and each `@keyframes` rule of the theme was in the output |
+| `REFERENCE_IMPORT_THEME_IS_NORMAL` | form | S | common | An `@theme` in a reference import was an `@theme reference`, and a reference import gave nothing (as from 4.0.9: `REFERENCE_IMPORT_THEME` is the end) |
+| `THEME_RULE_AT_FIRST_THEME` | form | S | rare | The rule of the theme was at the place of the first `@theme` that is not a reference |
+| `IMPORT_THEME_OPTION_WITH_RULES` | feature | S | rare | An import with `theme(…)` and a style rule or a declaration was the error "Files imported with `@import "…" theme(…)` must only contain `@theme` blocks." |
+| `IMPORTANT_SKIPS_DASH_PROPERTIES` | form | S | common | `!important` went on each declaration (as from 4.0.10: `IMPORTANT_DASH_PROPERTIES` and `IMPORTANT_CUSTOM_PROPERTIES` are the end) |
+| `SORT_BY_EACH_PROPERTY` | fix | S | common | The sort compared only the first property of two rules, and then the count of the different properties with a place in the order (not the count of the declarations) |
+| `TRANSLATE_Z_PROPERTY_ORDER` | data | S | rare | `--tw-translate-z` had no place in the order of the properties |
+| `TRANSLATE_Z_PX_ONE_RULE` | fix | S | rare | `translate-z-px` and `-translate-z-px` gave two equal rules each |
+
+No switch: `extractUsedVariables` is the same code in a new file.
+
+The removal of 4.0.8 is not the removal of 4.0.5: see 4.0.5.
+
+### 4.0.7 (3 switches, all there; 1 change in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `COMPARE_WHOLE_NUMBERS` | fix | S | common | The sort by name skipped equal characters first, so a number started at its first digit that is different: `p-100` (`00`) came before `p-12` (`2`) |
+| `DROP_SHADOW_PROPERTY` | fix | S | common | The filter utilities had no `@property` rule for `--tw-drop-shadow` |
+| `DEFAULT_OUTLINE_WIDTH` | feature | S | rare | `outline` gave `outline-width: 1px`, also with `--default-outline-width` in the theme |
+| nested-utility-name (JS) | fix | S | rare | A nested rule of `addUtilities` with the name of the utility in its selector did not get the name of the candidate |
+
+No switch: the flag for `user-valid` and `user-invalid` was off in a
+release (`STATIC_VARIANTS_OF_4_1`, 4.1.0). The suggestions (fractions,
+`_` in a theme key) are for the editor tools. `escape` has the same
+result. The types of `tailwindcss/plugin` are not in the output.
+
+Before 4.0.7, the order of the names was not consistent (`p-[1]` before
+`p-[02]`, `p-[02]` before `p-[0a]`, `p-[0a]` before `p-[1]`). So the Rust
+compiler sorts with the algorithm of V8 (`utils/v8_sort.rs`) for these
+versions, and the result follows the sequence of the candidates, as in
+the official compiler.
+
+### 4.0.6 (1 switch, there; data changes with no switch)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `UNUSED_THEME_VARIABLES_KEPT` | form | S | each build | In 4.0.5, the theme variables with no use were removed (`UNUSED_THEME_VARIABLES_REMOVED_FIRST`) |
+
+Data, from the package: the line breaks of `--font-sans` and
+`--font-mono` in `theme.css`, and comments of `preflight.css`.
+
+### 4.0.5 (4 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `UNUSED_THEME_VARIABLES_REMOVED_FIRST` | form | M | each build | Each theme variable was in the output |
+| `THEME_KEYFRAMES_ALL_COLLECTED` | form | S | common | A `@keyframes` rule of the theme was in the output only when its name was a word in the value of an `--animate-*` variable of the theme, also a variable with no use |
+| `VALUE_PARSER_ESCAPES` | fix | S | edge | `\` was a normal character in the parser of values: `w-[a\(b]` gave `width: a\()b`, and `w-[var(--a\,_b)]` gave `var(--a\, b)` |
+| `THEME_OPTIONS_KEY_WITH_PREFIX` | form | S | plugins with a prefix | `getOptions` of the theme read the key as it is. Since 4.0.5 it removes the prefix from the key, but the plugin layer and `clearNamespace` give a key with no prefix. So, with a prefix, a configuration that replaces a namespace does not remove the default values, and `theme()` of a plugin does not prefer the value of the configuration |
+
+No switch: `@theme static` came in 4.0.5. Before, the word had no effect,
+and no variable was removed. A candidate that is a variable
+(`--color-red-500`) marks the variable as used: before 4.0.5 it was a
+candidate that is not valid, with the same output.
+The removal of 4.0.5 has three differences from the removal of 4.0.8.
+A variable in the value of a theme variable is a use (`--a: var(--b)`
+keeps `--b`, also when `--a` has no use). A custom property in an
+`@keyframes` rule of the theme is removed when it is not a theme variable
+in use. And only a rule of the theme at the top level is removed when it
+is empty: in `@layer theme`, the rule `:root, :host` stays with no
+declaration. In 4.0.5, a `@keyframes` rule of the theme stays when a
+declaration of `animation` in the output has its name, or an
+`--animate-*` variable in use has it.
+
+Before 4.0.5, `\)` with no open function stopped the parser of values
+with a JavaScript exception. The Rust compiler keeps the two characters
+there, as 4.0.5 does.
+
+### 4.0.4 (7 switches, all there; 2 changes in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `ORDER_FIRST_LAST_NUMBERS` | form | S | common | `order-first` gave `calc(-infinity)`, and `order-last` gave `calc(infinity)` |
+| `ANIMATE_NAMES_AT_WHITE_SPACE` | fix | S | rare | Only a space was between the words of an `--animate-*` value: a name next to a line break did not keep its `@keyframes` rule |
+| `VAR_NAME_UNESCAPES_UNDERSCORE` | fix | S | rare | `w-[var(--a\_b)]` gave `var(--a\_b)`: the first argument of `var()` and `theme()` stayed as it was |
+| `WALK_ENTERS_AT_ROOT` | fix | S | rare | `theme()` in an `@keyframes` rule of the theme stayed in the output, and an `@apply` rule there was removed with no error |
+| `AT_RULES_IN_MEDIA` | fix | S | rare | The compiler did not look in an `@media` rule that stays: `@tailwind utilities`, `@source`, and an `@utility` or `@custom-variant` with no body were ignored there, and `@media important` in an `@media` rule stayed an `@media` rule |
+| `CSS_UTILITY_RESULT_NOT_VISITED` | fix | S | edge | In a functional `@utility`, the walk visited the result of `--value(…)` again: `foo-[--modifier([*])]/[3]` gave the value `3` |
+| `AT_VARIANT_IN_IMPORT_ONCE` | fix | S | rare | In 4.0.2 and 4.0.3, an `@variant` rule in an import with options got its variant two times |
+| config-containers-key (JS) | fix | S | rare | The key `containers` of a JavaScript configuration did not go to the `--container-*` namespace |
+| null-theme-value (JS) | fix | S | edge | A `null` value in the theme of a JavaScript configuration stopped the compiler |
+
+No switch: the functions of a candidate (`theme()` in an arbitrary value)
+are replaced in the cache of the design system, with the same result.
+The walk of the selector parser of the plugin layer has the same change
+as the other walks.
+
+The walk of the tree changed in 4.0.4, and four of the switches come
+from that change. Before 4.0.4, the walk did not go into an at-root
+node (`WALK_ENTERS_AT_ROOT`), it visited the nodes that replace a node
+also when the visitor asked to skip (`CSS_UTILITY_RESULT_NOT_VISITED`,
+`AT_VARIANT_IN_IMPORT_ONCE`), and the visitor of `@media` asked to skip
+its nodes (`AT_RULES_IN_MEDIA`).
+
+Before 4.0.4, an at-rule of Tailwind CSS with a body (`@theme`,
+`@utility`, `@custom-variant`) in an `@media` rule stayed in the output,
+which is not valid CSS. There, the Rust compiler gives the result of
+4.0.4. Before 4.0.2, an at-rule with no body stayed in the output too
+(`@tailwind utilities;`, `@source "…";`): the same rule. The fuzzer knows
+this fault (`hasKnownFault`: a line of the official result that starts
+with one of these at-rules).
+
+Before 4.0.4, the walk also went into the body of an `@custom-variant`
+rule after its removal. So an `@variant` rule in that body got its
+variant (from 4.0.4 to 4.1.13 it stayed in the output, see 4.1.14), and
+each other at-rule of Tailwind CSS in that body was read (an `@media`
+with import options, a nested `@custom-variant` as an error). The Rust
+compiler replaces the `@variant` rule in each version, and does not read
+the other at-rules there.
+
+Before 4.0.4, where the result of `--value(…)` had a `--value(…)` that
+gives the same result again (`foo-[--value([*])]`), the official compiler
+did not stop. The Rust compiler gives the result of 4.0.4 there.
+
+In 4.0.2 and 4.0.3, an `@variant` rule that is the old form of
+`@custom-variant` (no body, or a body with `@slot`) had a fault in an
+import with options. With no body, the official compiler gave the error
+"Cannot use `@variant` with unknown variant". With `@slot`, it stopped
+with a stack overflow. The Rust compiler gives the result of 4.0.4 for
+the two.
+
+### 4.0.3 (1 switch, there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `EMPTY_IMPORT_STAYS` | fix | S | rare | In 4.0.2, `@import url(…);` was removed, as each other at-rule with no body |
+
+### 4.0.2 (7 switches, all there; 2 changes in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `EMPTY_RULES_REMOVED` | form | S | common | A rule with no declaration and an at-rule with no body stayed in the output: `.a {` and `}`, `@supports (display: grid);`, `@font-face ;` |
+| `DECLARATION_NEEDS_COLON` | fix | S | edge | A text with no `:` was a declaration: `foo;` gave `fo: foo`, and `foo` before `}` gave `foo: foo` |
+| `THEME_KEYS_UNESCAPED` | fix | M | rare | The keys of the theme were the text of the stylesheet with its escapes. A value with a `.` was read only with `_`: `p-1.5` read `--spacing-1_5`, not `--spacing-1\.5` |
+| `GRID_TRACKS_NOT_ZERO` | fix | S | rare | `grid-cols-0` gave `repeat(0, minmax(0, 1fr))` |
+| `GRADIENT_POSITION_NO_COMMA` | form | S | common | `--tw-gradient-position` had a comma at its end (`to right in oklab,`), and the stops had `var(--tw-gradient-position,) …`. The same for the old utilities `bg-gradient-to-*` |
+| `REFERENCE_THEME_NO_KEYFRAMES` | fix | S | rare | The `@keyframes` rules of `@theme reference` were in the output, as each other `@keyframes` rule of the theme |
+| `AT_VARIANT_IN_IMPORT_TWICE` | (fault of 4.0.2 and 4.0.3) | S | rare | An `@variant` rule in an import with options got its variant one time |
+| custom-property-case (JS) | fix | S | rare | The name of a custom property of a JavaScript plugin got `-` before each capital letter |
+| config-theme-keys (JS) | fix | S | edge | The keys of the theme of a JavaScript configuration had escapes |
+
+No switch: before 4.0.2, an `@variant` rule at the top level with no
+`@slot`, and an `@variant` rule in an `@media` rule, stayed in the
+output, which is not valid CSS (see 4.1.14 for the rule of the fuzzer).
+
+Before 4.0.2, a declaration with no `:` and with a property that is
+empty (`;;` gave `: ;`, and `a;` gave `: a;`) is not valid CSS. There,
+the Rust compiler gives the error of 4.0.2 ("Unexpected semicolon",
+"Invalid declaration"). The fuzzer knows this fault (`hasKnownFault`: a
+line of the official result that starts with `: `).
+
+### 4.0.1 (6 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `PAREN_MODIFIER_NEEDS_DASH` | fix | S | rare | The short form of a variable in a modifier and in the value of a variant had no check: `bg-red-500/(foo)` gave `var(foo)`, and `data-(foo):flex` gave `&[data-var(foo)]` |
+| `THEME_ROOT_AND_HOST` | form | S | each build | The rule of the theme was `:root`, not `:root, :host` |
+| `NO_MIN_SIZE_NONE` | fix | S | rare | `min-w-none` gave `min-width: none`, and `min-h-none` gave `min-height: none` |
+| `TEXT_MODIFIER_IS_LINE_HEIGHT` | fix | S | rare | A modifier of a font size with no line height was ignored: `text-sm/foo` and `text-sm/none` gave only the font size |
+| `NO_FORCE_VARIANT` | fix | S | edge | `force:flex` gave the rule of `flex` with no change |
+| `OPEN_VARIANT_OPEN_PSEUDO` | form | S | common | `open:*` gave `&:is([open], :popover-open)`, with no `:open` |
+
+No switch: before 4.0.1, an `@custom-variant` with an empty selector
+(`@custom-variant foo ();`, `(&:hover, , &:focus)`) gave a rule with an
+empty selector, which is not valid CSS. The Rust compiler gives the error
+of 4.0.1 ("selector is invalid"). The fuzzer knows this fault
+(`hasKnownFault`: a selector of the official result that is empty or has
+an empty part). The suggestions are for the editor tools.
+
 ## What the list shows
 
 - **56 changes** in the eleven releases from 4.2.0 to 4.3.5. 5 of them
@@ -759,9 +940,10 @@ keeps the `@keyframes` rules out of it.
 - **84 more switches** for the twenty releases from 4.1.0 to 4.2.0: 12
   for 4.2.0, 57 for 4.1.1 to 4.1.18, and 15 for 4.1.0.
 - **23 more switches** for the nine releases from 4.0.9 to 4.0.17 (three
-  of them have no change of the compiler). All the 158 switches are
-  there: the Rust compiler serves each version from 4.0.8
-  to 4.3.5.
+  of them have no change of the compiler).
+- **37 more switches** for the eight releases from 4.0.1 to 4.0.8. All
+  the 195 switches are there: the Rust compiler serves each version of
+  Tailwind CSS 4, from 4.0.0 to 4.3.5.
 - **Most of the changes are fixes** of faults in rare inputs. 9 change
   the form of valid output, 6 are new features, 4 are constants, and 1
   has no visible change.

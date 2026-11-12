@@ -26,7 +26,15 @@ pub fn register_legacy_utilities(design_system: &mut DesignSystem) {
     ] {
         utilities.r#static(format!("bg-gradient-to-{value}"), move |_, _| {
             Some(vec![
-                decl("--tw-gradient-position", format!("to {direction} in oklab")),
+                // (Before 4.0.2, the value had a comma at its end.)
+                decl(
+                    "--tw-gradient-position",
+                    if crate::switches::GRADIENT_POSITION_NO_COMMA.on() {
+                        format!("to {direction} in oklab")
+                    } else {
+                        format!("to {direction} in oklab,")
+                    },
+                ),
                 decl("background-image", "linear-gradient(var(--tw-gradient-stops))"),
             ])
         });

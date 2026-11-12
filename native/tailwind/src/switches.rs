@@ -925,6 +925,228 @@ pub const BOM_IS_SKIPPED: Switch = Switch::since(4, 0, 9, "a byte order mark at 
 /// `-webkit-…` did not get it.
 pub const IMPORTANT_DASH_PROPERTIES: Switch = Switch::since(4, 0, 9, "!important goes also on z-index and -webkit-* properties");
 
+// --- 4.0.8 ----------------------------------------------------------------
+
+/// A theme variable with no use is not in the output, and the `@keyframes`
+/// rules of the theme with no use are not in the output. A variable is in
+/// use when a variable that is in use has it in its value. Before, in
+/// 4.0.6 and 4.0.7: each variable and each `@keyframes` rule of the theme
+/// was in the output (not the ones of `@theme reference`).
+pub const UNUSED_THEME_VARIABLES_REMOVED: Switch = Switch::since(4, 0, 8, "theme variables with no use are not in the output");
+
+/// Only in 4.0.8 (the end is `REFERENCE_IMPORT_THEME`): an `@theme` in a
+/// reference import is a normal `@theme`, and each reference import gives
+/// a copy of the rule of the first `@theme`. Before: it was an `@theme
+/// reference`, and a reference import gave nothing.
+pub const REFERENCE_IMPORT_THEME_IS_NORMAL: Switch = Switch::since(4, 0, 8, "@theme in a reference import is a normal @theme");
+
+/// The rule of the theme (`:root, :host`) is at the place of the first
+/// `@theme`. Before: at the place of the first `@theme` that is not a
+/// reference.
+pub const THEME_RULE_AT_FIRST_THEME: Switch = Switch::since(4, 0, 8, "the rule of the theme is at the first @theme, also a reference");
+
+/// An import with `theme(…)` can have other rules than `@theme`. Only
+/// `theme(reference)` with a style rule or a declaration is an error.
+/// Before: each node that is not an at-rule was the error "Files imported
+/// with `@import "…" theme(…)` must only contain `@theme` blocks."
+pub const IMPORT_THEME_OPTION_WITH_RULES: Switch = Switch::since(4, 0, 8, "an import with theme(…) can have other rules");
+
+/// `!important` does not go on a custom property, nor on a property with
+/// `-` as its second character. (`IMPORTANT_DASH_PROPERTIES` and
+/// `IMPORTANT_CUSTOM_PROPERTIES` are the end of this.) Before: on each
+/// declaration.
+pub const IMPORTANT_SKIPS_DASH_PROPERTIES: Switch = Switch::since(4, 0, 8, "!important does not go on a custom property");
+
+/// The sort of two rules compares the first property that is different,
+/// and then the count of the declarations. Before: only the first
+/// property, and then the count of the different properties that have a
+/// place in the order.
+pub const SORT_BY_EACH_PROPERTY: Switch = Switch::since(4, 0, 8, "the sort compares each property and the count of declarations");
+
+/// `--tw-translate-z` has a place in the order of the properties, after
+/// `--tw-translate-y`. Before: it had none, so `translate-z-*` sorted only
+/// by `translate`.
+pub const TRANSLATE_Z_PROPERTY_ORDER: Switch = Switch::since(4, 0, 8, "--tw-translate-z has a place in the property order");
+
+/// `translate-z-px` and `-translate-z-px` give one rule each. Before: two
+/// equal rules each, because they were static utilities two times.
+pub const TRANSLATE_Z_PX_ONE_RULE: Switch = Switch::since(4, 0, 8, "translate-z-px gives one rule");
+
+// --- 4.0.7 ----------------------------------------------------------------
+
+/// The sort of the candidates by their names compares a number as a
+/// whole: `p-12` comes before `p-100`. Before: a number started at the
+/// first digit that is different, so `p-100` (`00`) came before `p-12`
+/// (`2`).
+pub const COMPARE_WHOLE_NUMBERS: Switch = Switch::since(4, 0, 7, "the sort by name compares a number from its first digit");
+
+/// The filter utilities have an `@property` rule for `--tw-drop-shadow`.
+/// Before: they had none, so the variable had no initial value.
+pub const DROP_SHADOW_PROPERTY: Switch = Switch::since(4, 0, 7, "--tw-drop-shadow has an @property rule");
+
+/// `outline` with no value reads `--default-outline-width` of the theme.
+/// Before: `outline-width: 1px`.
+pub const DEFAULT_OUTLINE_WIDTH: Switch = Switch::since(4, 0, 7, "outline reads --default-outline-width");
+
+// --- 4.0.6 ----------------------------------------------------------------
+
+/// Only in 4.0.6 and 4.0.7 (the end is `UNUSED_THEME_VARIABLES_REMOVED`):
+/// each theme variable and each `@keyframes` rule of the theme is in the
+/// output. Before, in 4.0.5: the ones with no use were removed
+/// (`UNUSED_THEME_VARIABLES_REMOVED_FIRST`).
+pub const UNUSED_THEME_VARIABLES_KEPT: Switch = Switch::since(4, 0, 6, "each theme variable is in the output again");
+
+// --- 4.0.5 ----------------------------------------------------------------
+
+/// Only in 4.0.5 (the end is `UNUSED_THEME_VARIABLES_KEPT`): a theme
+/// variable with no use is not in the output. This first form is not the
+/// form of 4.0.8: a variable in the value of a theme variable is a use, a
+/// custom property in an `@keyframes` rule of the theme is removed too,
+/// and an empty rule of the theme stays in an at-rule (`@layer theme`).
+/// Before: each theme variable was in the output.
+pub const UNUSED_THEME_VARIABLES_REMOVED_FIRST: Switch = Switch::since(4, 0, 5, "theme variables with no use are removed, first form");
+
+/// Each `@keyframes` rule of the theme goes to the tree, and the removal
+/// of the theme variables decides about it. Before: a `@keyframes` rule
+/// went to the tree only when its name was a word in the value of an
+/// `--animate-*` variable of the theme.
+pub const THEME_KEYFRAMES_ALL_COLLECTED: Switch = Switch::since(4, 0, 5, "each @keyframes rule of the theme goes to the tree");
+
+/// The parser of values keeps `\` and the next character together:
+/// `theme(--width-1\/2)` and `[--x:theme(--a\,b)]`. Before: `\` was a
+/// normal character, so the next character kept its function (`,` and `/`
+/// were separators, `(` started a function).
+pub const VALUE_PARSER_ESCAPES: Switch = Switch::since(4, 0, 5, "the parser of values knows a backslash escape");
+
+/// `getOptions` of the theme takes a key with the prefix of the theme and
+/// with escapes, and removes them. The plugin layer and `clearNamespace`
+/// give a key with no prefix. Thus, with a prefix, they find no options:
+/// a configuration that replaces a namespace does not remove the default
+/// values, and `theme()` of a plugin does not prefer the value of the
+/// configuration to a default value. Before: the key was the text as it
+/// is, and they found the options.
+pub const THEME_OPTIONS_KEY_WITH_PREFIX: Switch = Switch::since(4, 0, 5, "the options of a theme key are read with the prefix in the key");
+
+// --- 4.0.4 ----------------------------------------------------------------
+
+/// `order-first` gives `order: -9999` and `order-last` gives `order: 9999`.
+/// Before: `calc(-infinity)` and `calc(infinity)`.
+pub const ORDER_FIRST_LAST_NUMBERS: Switch = Switch::since(4, 0, 4, "order-first and order-last are -9999 and 9999");
+
+/// White space of each kind is between the words of an `--animate-*`
+/// value, for the `@keyframes` rules of the theme. Before: only a space,
+/// so a name next to a line break or a tab did not keep its `@keyframes`
+/// rule.
+pub const ANIMATE_NAMES_AT_WHITE_SPACE: Switch = Switch::since(4, 0, 4, "the words of an --animate-* value end at each white space");
+
+/// `\_` in the first argument of `var()` and `theme()` of an arbitrary
+/// value becomes `_`: `w-[var(--a\_b)]` gives `var(--a_b)`. Before: the
+/// first argument stayed as it was (`var(--a\_b)`).
+pub const VAR_NAME_UNESCAPES_UNDERSCORE: Switch = Switch::since(4, 0, 4, "an escaped underscore in a variable name is unescaped");
+
+/// The walks of the tree go into an at-root node. So `theme()` in an
+/// `@keyframes` rule of the theme is replaced, and `@apply` there is the
+/// error "You cannot use `@apply` inside `@keyframes`." Before: `theme()`
+/// stayed in the output, and the `@apply` rule was removed with no error.
+pub const WALK_ENTERS_AT_ROOT: Switch = Switch::since(4, 0, 4, "theme() and @apply are found in the @keyframes of the theme");
+
+/// The at-rules of Tailwind CSS in an `@media` rule are read as each other
+/// one. Before: the compiler did not look in an `@media` rule that stays
+/// in the output. `@tailwind utilities`, `@source`, and an `@utility` or
+/// `@custom-variant` with no body were ignored there, and an import
+/// option (`@media important`) stayed an `@media` rule. (An at-rule with a
+/// body stayed in the output, which is not valid CSS: there, the result is
+/// the result of 4.0.4.)
+pub const AT_RULES_IN_MEDIA: Switch = Switch::since(4, 0, 4, "the at-rules of Tailwind CSS are read in an @media rule");
+
+/// In a functional `@utility`, the result of `--value(…)` and of
+/// `--modifier(…)` is not read again. Before: the walk visited the nodes
+/// of the result, so a `--value(…)` in an arbitrary value of the candidate
+/// got a result too (`foo-[--modifier([*])]/[3]` gave the value `3`).
+pub const CSS_UTILITY_RESULT_NOT_VISITED: Switch = Switch::since(4, 0, 4, "the result of --value(…) is not read again");
+
+/// An `@variant` rule in an import with options (`@import "…" important`,
+/// `prefix(…)`, `theme(…)`, `source(…)`) gets its variant one time. Before,
+/// in 4.0.2 and 4.0.3 (`AT_VARIANT_IN_IMPORT_TWICE` is the start): two
+/// times, so `@variant hover` gave `&:hover` in `&:hover`.
+pub const AT_VARIANT_IN_IMPORT_ONCE: Switch = Switch::since(4, 0, 4, "@variant in an import with options is applied one time");
+
+// --- 4.0.3 ----------------------------------------------------------------
+
+/// An `@import` rule that stays in the stylesheet (`@import url(…);`) is
+/// in the output. Before, only in 4.0.2 (`EMPTY_RULES_REMOVED`): it was
+/// removed, as each other at-rule with no body.
+pub const EMPTY_IMPORT_STAYS: Switch = Switch::since(4, 0, 3, "@import url(…) stays in the output");
+
+// --- 4.0.2 ----------------------------------------------------------------
+
+/// A style rule with no declaration is not in the output, and an at-rule
+/// with no body is in the output only when it is `@layer`, `@charset`,
+/// `@custom-media` or `@namespace`. Before: each rule stayed (`.a {` and
+/// `}` with nothing between them, `@supports (display: grid);`).
+pub const EMPTY_RULES_REMOVED: Switch = Switch::since(4, 0, 2, "empty rules and at-rules are not in the output");
+
+/// A declaration needs a `:`. With none, the parser gives the error
+/// "Invalid declaration", "Invalid custom property, expected a value" or
+/// "Unexpected semicolon". Before: the text was a declaration: its
+/// property was the text with no last character, and its value was the
+/// text (`foo;` gave `fo: foo`).
+pub const DECLARATION_NEEDS_COLON: Switch = Switch::since(4, 0, 2, "a declaration with no colon is an error");
+
+/// The keys of the theme have no escapes: `--spacing-1\.5` is the key
+/// `--spacing-1.5`, and `p-1.5` reads it. A key with a `.` is read before
+/// the same key with `_`. Before: a key was the text of the stylesheet,
+/// and a value with a `.` was read only with `_` (`--spacing-1_5`).
+pub const THEME_KEYS_UNESCAPED: Switch = Switch::since(4, 0, 2, "the keys of the theme have no escapes");
+
+/// `grid-cols-0` and `grid-rows-0` give nothing. Before: `repeat(0,
+/// minmax(0, 1fr))`.
+pub const GRID_TRACKS_NOT_ZERO: Switch = Switch::since(4, 0, 2, "no grid-cols-0 and no grid-rows-0");
+
+/// `--tw-gradient-position` has no comma at its end, and the stops read
+/// `var(--tw-gradient-position), …`. Before: the value had the comma (`to
+/// right in oklab,`), and the stops read `var(--tw-gradient-position,) …`.
+pub const GRADIENT_POSITION_NO_COMMA: Switch = Switch::since(4, 0, 2, "--tw-gradient-position has no comma at its end");
+
+/// From 4.0.2 to 4.0.8 (the end is `REFERENCE_THEME_KEYFRAMES`): the
+/// `@keyframes` rules of `@theme reference` are not in the output. Before:
+/// they were as each other `@keyframes` rule of the theme.
+pub const REFERENCE_THEME_NO_KEYFRAMES: Switch = Switch::since(4, 0, 2, "no @keyframes of @theme reference in the output");
+
+/// Only in 4.0.2 and 4.0.3 (the end is `AT_VARIANT_IN_IMPORT_ONCE`): an
+/// `@variant` rule in an import with options gets its variant two times.
+/// Before: one time.
+pub const AT_VARIANT_IN_IMPORT_TWICE: Switch = Switch::since(4, 0, 2, "@variant in an import with options is applied two times");
+
+// --- 4.0.1 ----------------------------------------------------------------
+
+/// The short form of a variable in a modifier (`bg-red-500/(--x)`) and in
+/// the value of a variant (`supports-(--x):flex`) needs a `-` in its
+/// first two characters. Before: each text was valid, so
+/// `bg-red-500/(foo)` gave `var(foo)`.
+pub const PAREN_MODIFIER_NEEDS_DASH: Switch = Switch::since(4, 0, 1, "the short form of a variable in a modifier needs a dash");
+
+/// The rule of the theme has the selector `:root, :host`. Before: `:root`.
+pub const THEME_ROOT_AND_HOST: Switch = Switch::since(4, 0, 1, "the rule of the theme is :root, :host");
+
+/// No `min-w-none` and no `min-h-none`. Before: they gave `min-width:
+/// none` and `min-height: none`, which are not valid values.
+pub const NO_MIN_SIZE_NONE: Switch = Switch::since(4, 0, 1, "no min-w-none and no min-h-none");
+
+/// The modifier of a font size must give a line height, and `none` gives
+/// `line-height: 1`: `text-sm/none`. Before: a modifier with no line
+/// height was ignored, so `text-sm/foo` and `text-sm/none` gave only the
+/// font size.
+pub const TEXT_MODIFIER_IS_LINE_HEIGHT: Switch = Switch::since(4, 0, 1, "the modifier of a font size must be a line height");
+
+/// No `force` variant. Before: `force:flex` gave the rule of `flex` with
+/// no change.
+pub const NO_FORCE_VARIANT: Switch = Switch::since(4, 0, 1, "no force variant");
+
+/// `open:*` has `:open` in its selector: `&:is([open], :popover-open,
+/// :open)`. Before: `&:is([open], :popover-open)`.
+pub const OPEN_VARIANT_OPEN_PSEUDO: Switch = Switch::since(4, 0, 1, "the open variant has :open");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -1085,4 +1307,41 @@ pub const ALL: &[&Switch] = &[
     &THEME_KEYFRAMES_AT_THE_END,
     &BOM_IS_SKIPPED,
     &IMPORTANT_DASH_PROPERTIES,
+    &UNUSED_THEME_VARIABLES_REMOVED,
+    &REFERENCE_IMPORT_THEME_IS_NORMAL,
+    &THEME_RULE_AT_FIRST_THEME,
+    &IMPORT_THEME_OPTION_WITH_RULES,
+    &IMPORTANT_SKIPS_DASH_PROPERTIES,
+    &SORT_BY_EACH_PROPERTY,
+    &TRANSLATE_Z_PROPERTY_ORDER,
+    &TRANSLATE_Z_PX_ONE_RULE,
+    &COMPARE_WHOLE_NUMBERS,
+    &DROP_SHADOW_PROPERTY,
+    &DEFAULT_OUTLINE_WIDTH,
+    &UNUSED_THEME_VARIABLES_KEPT,
+    &UNUSED_THEME_VARIABLES_REMOVED_FIRST,
+    &THEME_KEYFRAMES_ALL_COLLECTED,
+    &VALUE_PARSER_ESCAPES,
+    &THEME_OPTIONS_KEY_WITH_PREFIX,
+    &ORDER_FIRST_LAST_NUMBERS,
+    &ANIMATE_NAMES_AT_WHITE_SPACE,
+    &VAR_NAME_UNESCAPES_UNDERSCORE,
+    &WALK_ENTERS_AT_ROOT,
+    &AT_RULES_IN_MEDIA,
+    &CSS_UTILITY_RESULT_NOT_VISITED,
+    &AT_VARIANT_IN_IMPORT_ONCE,
+    &EMPTY_IMPORT_STAYS,
+    &EMPTY_RULES_REMOVED,
+    &DECLARATION_NEEDS_COLON,
+    &THEME_KEYS_UNESCAPED,
+    &GRID_TRACKS_NOT_ZERO,
+    &GRADIENT_POSITION_NO_COMMA,
+    &REFERENCE_THEME_NO_KEYFRAMES,
+    &AT_VARIANT_IN_IMPORT_TWICE,
+    &PAREN_MODIFIER_NEEDS_DASH,
+    &THEME_ROOT_AND_HOST,
+    &NO_MIN_SIZE_NONE,
+    &TEXT_MODIFIER_IS_LINE_HEIGHT,
+    &NO_FORCE_VARIANT,
+    &OPEN_VARIANT_OPEN_PSEUDO,
 ];

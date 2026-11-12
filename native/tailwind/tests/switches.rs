@@ -176,6 +176,11 @@ const SEQUENCE_SHOWS: &[(&str, Version)] = &[
     // are the same variant for the sort, so their rules stay in the
     // sequence of the candidates.
     ("4.3.4 an empty extra modifier", Version(4, 3, 4)),
+    // Before 4.0.7, the order of the names is not consistent: `p-[1]` is
+    // before `p-[02]`, `p-[02]` is before `p-[0a]`, and `p-[0a]` is before
+    // `p-[1]`. So the result of the sort follows the sequence of the
+    // candidates.
+    ("4.0.7 the sort by name with numbers", Version(4, 0, 7)),
 ];
 
 /// The watch builds again when the source files have new candidates

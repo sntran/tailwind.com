@@ -192,12 +192,36 @@ struct Optimizer<'a> {
     /// The `@keyframes` rules of the theme.
     keyframes: Vec<(Id, String)>,
     used_keyframe_names: HashSet<String>,
-    /// Before 4.0.9 (`switches::REFERENCE_IMPORT_THEME`): the rule of the
-    /// first `@theme`, when the tree has one.
+    /// Only in 4.0.8 (`switches::REFERENCE_IMPORT_THEME_IS_NORMAL`): the
+    /// rule of the first `@theme`, when the tree has one.
     first_theme_rule: Option<AstNode>,
     property_fallbacks_root: Vec<AstNode>,
     property_fallbacks_universal: Vec<AstNode>,
     variable_dependencies: IndexMap<String, IndexSet<String>>,
+    removal: Removal,
+}
+
+/// How the theme variables with no use are removed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Removal {
+    /// Before 4.0.5, and in 4.0.6 and 4.0.7: each variable stays.
+    No,
+    /// In 4.0.5: see `switches::UNUSED_THEME_VARIABLES_REMOVED_FIRST`.
+    First,
+    /// From 4.0.8.
+    WithDependencies,
+}
+
+impl Removal {
+    fn now() -> Self {
+        if switches::UNUSED_THEME_VARIABLES_REMOVED.on() {
+            Removal::WithDependencies
+        } else if switches::UNUSED_THEME_VARIABLES_REMOVED_FIRST.on() && !switches::UNUSED_THEME_VARIABLES_KEPT.on() {
+            Removal::First
+        } else {
+            Removal::No
+        }
+    }
 }
 
 impl Optimizer<'_> {
@@ -218,7 +242,8 @@ impl Optimizer<'_> {
 
                 if value.contains("var(") {
                     // A variable that uses a variable is a dependency, not a use.
-                    if is_theme_variable {
+                    // (Before 4.0.8, it was a use.)
+                    if is_theme_variable && self.removal == Removal::WithDependencies {
                         for variable in extract_used_variables(value) {
                             self.variable_dependencies.entry(variable).or_default().insert(decl.property.clone());
                         }
@@ -240,7 +265,8 @@ impl Optimizer<'_> {
                     && value.contains("color-mix(");
 
                 let id = self.arena.add(Item::Node(node.clone()));
-                if is_theme_variable && !context.keyframes {
+                // (In 4.0.5, also a custom property in `@keyframes`.)
+                if is_theme_variable && (!context.keyframes || self.removal == Removal::First) {
                     self.css_theme_variables.entry(parent).or_default().push(id);
                 }
 
@@ -297,7 +323,8 @@ impl Optimizer<'_> {
                 }
                 // Before 4.1.13, equal declarations stayed in a rule.
                 if switches::NESTING_PASS.on() || !switches::EQUAL_DECLARATIONS_REMOVED.on() {
-                    if !self.arena.children(copy).is_empty() {
+                    // (Before 4.0.2, an empty rule stayed in the output.)
+                    if !self.arena.children(copy).is_empty() || !switches::EMPTY_RULES_REMOVED.on() {
                         self.arena.attach(parent, copy);
                     }
                 } else {
@@ -360,9 +387,13 @@ impl Optimizer<'_> {
                     self.keyframes.push((copy, rule.params.clone()));
                 }
 
+                // Before 4.0.2, each at-rule stayed in the output. Only in
+                // 4.0.2, an `@import` rule with no body was removed.
                 if !self.arena.children(copy).is_empty()
-                    || matches!(rule.name.as_str(), "@layer" | "@charset" | "@custom-media" | "@namespace" | "@import")
+                    || matches!(rule.name.as_str(), "@layer" | "@charset" | "@custom-media" | "@namespace")
+                    || (rule.name == "@import" && switches::EMPTY_IMPORT_STAYS.on())
                     || (rule.name == "@apply" && switches::APPLY_CSS_MIXINS.on())
+                    || !switches::EMPTY_RULES_REMOVED.on()
                 {
                     self.arena.attach(parent, copy);
                 }
@@ -382,11 +413,12 @@ impl Optimizer<'_> {
 
             AstNode::Context(node) => {
                 if node.context.get("reference").is_some_and(ContextValue::truthy) {
-                    // Before 4.0.9, a reference import gave the rule of
+                    // In 4.0.8, a reference import gave the rule of
                     // the first `@theme`, in the at-rules that are above
                     // that rule in the import. When the rule was not in
                     // the import, it was a copy with no at-rule.
-                    if !switches::REFERENCE_IMPORT_THEME.on() {
+                    // (Before 4.0.8, a reference import gave nothing.)
+                    if !switches::REFERENCE_IMPORT_THEME.on() && switches::REFERENCE_IMPORT_THEME_IS_NORMAL.on() {
                         if let Some(first_theme_rule) = self.first_theme_rule.clone() {
                             let mut at_rules = Vec::new();
                             find_at_rules_above(&node.nodes, &mut at_rules);
@@ -517,12 +549,16 @@ impl Optimizer<'_> {
         for (parent, declarations) in lists {
             for declaration in declarations {
                 let decl = self.declaration(declaration);
-                let used = is_variable_used(
-                    &decl.property,
-                    &self.design_system.theme,
-                    &self.variable_dependencies,
-                    &mut HashSet::new(),
-                );
+                let used = if self.removal == Removal::First {
+                    self.design_system.theme.get_options(&decl.property) & (theme::STATIC | theme::USED) != 0
+                } else {
+                    is_variable_used(
+                        &decl.property,
+                        &self.design_system.theme,
+                        &self.variable_dependencies,
+                        &mut HashSet::new(),
+                    )
+                };
                 if used {
                     if decl.property.starts_with(&animate_prefix) {
                         let names: Vec<String> =
@@ -551,7 +587,18 @@ impl Optimizer<'_> {
                 // rule in the tree, remove the rule, and each at-rule above
                 // it. Upstream does not examine the other children of these
                 // at-rules.
-                if matches!(self.arena.entries[parent].item, Item::Rule { .. }) && self.is_in_tree(parent, root) {
+                // (In 4.0.5, only a rule at the top level was removed: a
+                // rule in an at-rule stayed, with no declaration.)
+                if self.removal == Removal::First {
+                    if matches!(self.arena.entries[parent].item, Item::Rule { .. })
+                        && self.arena.entries[parent].parent == Some(root)
+                    {
+                        let list = self.arena.children_mut(root);
+                        if let Some(idx) = list.iter().position(|id| *id == parent) {
+                            list.remove(idx);
+                        }
+                    }
+                } else if matches!(self.arena.entries[parent].item, Item::Rule { .. }) && self.is_in_tree(parent, root) {
                     let mut node = parent;
                     while let Some(remove_from) = self.arena.entries[node].parent {
                         let is_root_or_at_rule =
@@ -633,7 +680,7 @@ impl Optimizer<'_> {
 /// whose one child is the context node of the theme.
 fn is_first_theme_rule(node: &AstNode) -> bool {
     let AstNode::Rule(rule) = node else { return false };
-    rule.selector == ":root, :host"
+    rule.selector == crate::index::theme_rule_selector()
         && matches!(&rule.nodes[..], [AstNode::Context(inner)]
             if inner.context.len() == 1 && inner.context.get("theme").is_some_and(ContextValue::truthy))
 }
@@ -692,22 +739,33 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
         color_mix_declarations: IndexMap::new(),
         keyframes: Vec::new(),
         used_keyframe_names: HashSet::new(),
-        first_theme_rule: if switches::REFERENCE_IMPORT_THEME.on() { None } else { find_first_theme_rule(ast).cloned() },
+        first_theme_rule: if switches::REFERENCE_IMPORT_THEME.on() || !switches::REFERENCE_IMPORT_THEME_IS_NORMAL.on() {
+            None
+        } else {
+            find_first_theme_rule(ast).cloned()
+        },
         property_fallbacks_root: Vec::new(),
         property_fallbacks_universal: Vec::new(),
         variable_dependencies: IndexMap::new(),
+        removal: Removal::now(),
     };
 
     for node in ast {
         optimizer.transform(node, root, Ctx::default(), 0);
     }
 
-    optimizer.remove_unused_theme_variables(root);
+    // In 4.0.6 and 4.0.7, and before 4.0.5, each theme variable and each
+    // `@keyframes` rule of the theme stayed in the output.
+    let remove_unused = optimizer.removal != Removal::No;
+    if remove_unused {
+        optimizer.remove_unused_theme_variables(root);
+    }
 
     // Remove the keyframes that have no use. A rule that is not in the
     // at-roots has the index -1 upstream: `splice(-1, 1)` removes the last
     // node of the at-roots.
-    for (keyframe, params) in std::mem::take(&mut optimizer.keyframes) {
+    let keyframes = if remove_unused { std::mem::take(&mut optimizer.keyframes) } else { Vec::new() };
+    for (keyframe, params) in keyframes {
         if !optimizer.used_keyframe_names.contains(&params) {
             let list = optimizer.arena.children_mut(at_roots);
             match list.iter().position(|id| *id == keyframe) {
@@ -826,10 +884,20 @@ fn is_variable_used(
     false
 }
 
+/// JavaScript `value.split(/\s+/)`.
+pub fn split_at_white_space(value: &str) -> Vec<&str> {
+    split_at(value, false)
+}
+
 /// JavaScript `value.split(/[\s,]+/)`.
 /// (Before 4.0.16, a comma was not a separator: `value.split(/\s+/)`.)
 fn extract_keyframe_names(value: &str) -> Vec<&str> {
-    let comma = crate::switches::KEYFRAME_NAMES_AFTER_COMMA.on();
+    split_at(value, crate::switches::KEYFRAME_NAMES_AFTER_COMMA.on())
+}
+
+/// The parts of the text between runs of white space (and of commas, with
+/// `comma`).
+fn split_at(value: &str, comma: bool) -> Vec<&str> {
     let is_separator = |c: char| (comma && c == ',') || is_js_whitespace(c);
     let mut names = Vec::new();
     let mut start = 0;

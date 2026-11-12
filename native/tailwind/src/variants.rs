@@ -877,6 +877,10 @@ pub fn create_variants(theme: &Theme) -> Variants {
     let at_rules = VariantOptions { compounds: Some(COMPOUNDS_AT_RULES), order: None };
     let never = VariantOptions { compounds: Some(COMPOUNDS_NEVER), order: None };
 
+    // Before 4.0.1, the `force` variant changed nothing.
+    if !switches::NO_FORCE_VARIANT.on() {
+        v.r#static("force", |_, _, _| Some(()), never);
+    }
     static_variant(v, "*", &[":is(& > *)"], Some(COMPOUNDS_NEVER));
     static_variant(v, "**", &[":is(& *)"], Some(COMPOUNDS_NEVER));
 
@@ -976,7 +980,12 @@ pub fn create_variants(theme: &Theme) -> Variants {
     // State
     static_variant(v, "visited", &["&:visited"], None);
     static_variant(v, "target", &["&:target"], None);
-    static_variant(v, "open", &["&:is([open], :popover-open, :open)"], None);
+    // (Before 4.0.1, the selector had no `:open`.)
+    if switches::OPEN_VARIANT_OPEN_PSEUDO.on() {
+        static_variant(v, "open", &["&:is([open], :popover-open, :open)"], None);
+    } else {
+        static_variant(v, "open", &["&:is([open], :popover-open)"], None);
+    }
 
     // Forms
     static_variant(v, "default", &["&:default"], None);

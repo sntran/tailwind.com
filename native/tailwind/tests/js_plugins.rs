@@ -576,3 +576,23 @@ fn an_error_has_its_chain_of_causes() {
     let error = compiler.unwrap().try_build(&["boom-[1px]".to_string()]).unwrap_err();
     assert_eq!((error.message.as_str(), error.causes.as_slice()), ("in a build", ["Error: the reason".to_string()].as_slice()));
 }
+
+/// Since 4.0.5, the theme removes the prefix from the key of
+/// `getOptions`, and the plugin layer gives a key with no prefix
+/// (`switches::THEME_OPTIONS_KEY_WITH_PREFIX`). Thus a configuration that
+/// replaces the colors does not remove the default colors of a theme with
+/// a prefix. Before, it removed them.
+#[test]
+fn a_configuration_removes_the_default_values_of_a_theme_with_a_prefix_before_4_0_5() {
+    let css = "@theme default prefix(tw) {\n  --color-blue: blue;\n}\n@tailwind utilities;\n@config './config.js';";
+    let files = [("/app/css/config.js", "module.exports = { theme: { colors: { only: 'red' } } }")];
+    let build = |version: Option<tailwind::Version>| {
+        let loader = Rc::new(MemoryLoader::new(&files));
+        let mut compiler = compile(css, CompileOptions { version, ..options(&loader) }).unwrap();
+        compiler.build(&["tw:bg-blue".to_string(), "tw:bg-only".to_string()])
+    };
+    let new = build(None);
+    assert!(new.contains(".tw\\:bg-blue {") && new.contains(".tw\\:bg-only {"), "{new}");
+    let old = build(Some(tailwind::Version(4, 0, 4)));
+    assert!(!old.contains(".tw\\:bg-blue {") && old.contains(".tw\\:bg-only {"), "{old}");
+}

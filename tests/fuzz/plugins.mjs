@@ -158,7 +158,8 @@ export function createGenerators(random) {
     const text = esm
       ? `import plugin from 'tailwindcss/plugin'\nexport default ${wrapped}\n`
       : `const plugin = require('tailwindcss/plugin')\nmodule.exports = ${wrapped}\n`
-    return { line: `@plugin "./${name}"${options};`, files: { [name]: text }, ...made }
+    // An at-rule with a block has no `;` after it.
+    return { line: `@plugin "./${name}"${options || ';'}`, files: { [name]: text }, ...made }
   }
 
   // A random config file.

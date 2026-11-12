@@ -142,9 +142,32 @@ function closesARuleEarly(css) {
   return false
 }
 
+// A known fault of Tailwind CSS before 4.0.4: the compiler did not read
+// its at-rules in an `@media` rule, so `@theme`, `@utility` and
+// `@custom-variant` stayed in the output there, which is not valid CSS.
+// Before 4.0.2, an at-rule with no body stayed too (`@tailwind`,
+// `@source`). This compiler reads them in each version (docs/SWITCHES.md).
+const KEEPS_AT_RULES_IN_MEDIA = major === 4 && minor === 0 && patch < 4
+const AT_RULES_IN_MEDIA = patch < 2 ? /^\s*@(theme|utility|custom-variant|tailwind|source)[ ;]/m : /^\s*@(theme|utility|custom-variant) /m
+
+// A known fault of Tailwind CSS before 4.0.2: a text with no `:` was a
+// declaration, and a text of one character or less gave a declaration
+// with no property (`;;` gave `: ;`), which is not valid CSS. This
+// compiler gives the error of 4.0.2 there (docs/SWITCHES.md).
+const DECLARATION_WITH_NO_PROPERTY = major === 4 && minor === 0 && patch < 2
+
+// A known fault of Tailwind CSS 4.0.0: an empty selector in
+// `@custom-variant` (`@custom-variant foo ();`, `(&:hover,)`) gave a rule
+// with an empty selector, which is not valid CSS. This compiler gives the
+// error of 4.0.1 there (docs/SWITCHES.md).
+const EMPTY_VARIANT_SELECTOR = major === 4 && minor === 0 && patch < 1
+
 function hasKnownFault(official) {
   if (official.css === undefined) return false
   if (KEEPS_AT_VARIANT && /^\s*@variant /m.test(official.css)) return true
+  if (KEEPS_AT_RULES_IN_MEDIA && AT_RULES_IN_MEDIA.test(official.css)) return true
+  if (DECLARATION_WITH_NO_PROPERTY && /^\s*: /m.test(official.css)) return true
+  if (EMPTY_VARIANT_SELECTOR && /^\s*((.*,\s*)?|.*,\s*,.*)\{$/m.test(official.css)) return true
   return CLOSES_A_RULE_EARLY && closesARuleEarly(official.css)
 }
 

@@ -23,7 +23,7 @@ impl Version {
     /// later change of Tailwind CSS it has a switch, and the fuzzer finds
     /// no difference from the official compiler of that version
     /// (docs/VERSIONS.md). An older version uses the script engine.
-    pub const OLDEST: Version = Version(4, 0, 8);
+    pub const OLDEST: Version = Version(4, 0, 0);
 
     /// The oldest version whose plugin layer the program has. The plugin
     /// layer (`compat/` of Tailwind CSS) is JavaScript: the program has
@@ -33,7 +33,7 @@ impl Version {
     /// does not compile a stylesheet with `@plugin` or `@config`: it
     /// gives the error `SCRIPT_ENGINE_NEEDED`, and the caller uses the
     /// script engine. When this is `OLDEST`, that does not occur.
-    pub const OLDEST_WITH_PLUGINS: Version = Version(4, 0, 8);
+    pub const OLDEST_WITH_PLUGINS: Version = Version(4, 0, 0);
 
     /// `4.3.5` as a version. A text with another form is `None`.
     pub fn parse(text: &str) -> Option<Version> {

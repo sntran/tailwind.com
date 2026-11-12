@@ -334,7 +334,7 @@ with the official packages of an older version
 (`sh tests/fuzz/install.sh DIR VERSION`) finds each behavior with no
 switch: the Rust compiler compiles as the version of the package that it
 compares with. The job `switches` of `.github/workflows/fuzz.yml` does
-this for each older version that the Rust compiler serves (4.0.8 to
+this for each older version that the Rust compiler serves (4.0.0 to
 4.3.4). About one third of its cases have JavaScript plugins or
 configs: they run the plugin layer of that version. Where an old
 version gives output that is not valid CSS, and the Rust compiler gives

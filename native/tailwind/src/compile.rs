@@ -145,7 +145,7 @@ pub fn compile_candidates(
         }
     }
 
-    sorted.sort_by(|a, z| {
+    let by_order = |a: &SortedNode, z: &SortedNode| {
         // First the variants.
         let by_variants = a.variants.cmp(&z.variants);
         if by_variants != Ordering::Equal {
@@ -153,13 +153,17 @@ pub fn compile_candidates(
         }
 
         // Then the first property order that is different.
+        // (Before 4.0.8, only the first property was compared.)
         let (a_order, z_order) = (&a.properties.order, &z.properties.order);
         let mut offset = 0;
-        while offset < a_order.len() && offset < z_order.len() && a_order[offset] == z_order[offset] {
-            offset += 1;
+        if crate::switches::SORT_BY_EACH_PROPERTY.on() {
+            while offset < a_order.len() && offset < z_order.len() && a_order[offset] == z_order[offset] {
+                offset += 1;
+            }
         }
         match (a_order.get(offset), z_order.get(offset)) {
-            (Some(a), Some(z)) => return a.cmp(z),
+            (Some(a), Some(z)) if a != z => return a.cmp(z),
+            (Some(_), Some(_)) => {}
             (Some(_), None) => return Ordering::Less,
             (None, Some(_)) => return Ordering::Greater,
             (None, None) => {}
@@ -167,7 +171,15 @@ pub fn compile_candidates(
 
         // Then the count of properties (more comes first), then the name.
         z.properties.count.cmp(&a.properties.count).then_with(|| compare(&a.candidate, &z.candidate))
-    });
+    };
+    if crate::switches::COMPARE_WHOLE_NUMBERS.on() {
+        sorted.sort_by(by_order);
+    } else {
+        // Before 4.0.7, the order of the names was not consistent (`p-1`
+        // before `p-02`, `p-02` before `p-0a`, `p-0a` before `p-1`). So the
+        // result is the result of the algorithm of V8.
+        crate::utils::v8_sort::sort(&mut sorted, |a, z| by_order(a, z) as i64);
+    }
 
     // Only in 4.1.14: a declaration of a fixed value is `!important` in
     // each rule when one candidate made it so.
@@ -414,13 +426,16 @@ fn apply_important(ast: &mut [AstNode]) {
             AstNode::Declaration(d) => {
                 let mut property = d.property.chars();
                 let (first, second) = (property.next(), property.next());
-                let important = if crate::switches::IMPORTANT_CUSTOM_PROPERTIES.on() {
+                let important = if crate::switches::IMPORTANT_CUSTOM_PROPERTIES.on()
+                    || !crate::switches::IMPORTANT_SKIPS_DASH_PROPERTIES.on()
+                {
+                    // Before 4.0.8 and from 4.0.10: each declaration.
                     true
                 } else if crate::switches::IMPORTANT_DASH_PROPERTIES.on() {
                     // Before 4.0.10: not a custom property.
                     !(first == Some('-') && second == Some('-'))
                 } else {
-                    // Before 4.0.9: not a property with `-` as its first
+                    // Only in 4.0.8: not a property with `-` as its first
                     // or its second character (`-webkit-…`, `z-index`).
                     first != Some('-') && second != Some('-')
                 };
@@ -480,5 +495,10 @@ fn get_property_sort(nodes: &[AstNode]) -> PropertySort {
     }
 
     order.sort_unstable();
+    // Before 4.0.8, the count was the count of the different properties
+    // that have a place in the order.
+    if !crate::switches::SORT_BY_EACH_PROPERTY.on() {
+        count = order.len();
+    }
     PropertySort { order, count }
 }
