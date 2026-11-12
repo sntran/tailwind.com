@@ -871,8 +871,8 @@ pub const NOT_KEEPS_IS: Switch = Switch::since(4, 0, 10, "not-* keeps a wrapping
 pub const ANIMATE_KEYFRAMES_WITH_PREFIX: Switch = Switch::since(4, 0, 10, "the keyframes of --animate-* stay with a prefix");
 
 /// `!important` goes on each declaration of a utility, also on a custom
-/// property: `--tw-ease: var(--ease-out) !important`. Before (4.0.9): not
-/// on a custom property.
+/// property: `--tw-ease: var(--ease-out) !important`. Before: not on a
+/// custom property.
 pub const IMPORTANT_CUSTOM_PROPERTIES: Switch = Switch::since(4, 0, 10, "!important goes also on a custom property");
 
 /// `col-2`, `row-3`, `-col-2` and `-row-[2]`: `col-*` and `row-*` take an
@@ -907,9 +907,9 @@ pub const REFERENCE_IMPORT_THEME: Switch = Switch::since(4, 0, 9, "@theme in a r
 pub const REFERENCE_THEME_KEYFRAMES: Switch = Switch::since(4, 0, 9, "@keyframes of @theme reference are in the output");
 
 /// The `@keyframes` rules of the theme are at the end of the tree: in the
-/// output, they are after the `@property` rules. Before: they were in the
-/// rule of the first `@theme`, so they were before the `@property` rules,
-/// and a reference import removed them with that rule.
+/// output, they are after the `@property` rules, and a reference import
+/// does not remove them. Before: they were in the rule of the first
+/// `@theme`, so they were before the `@property` rules.
 pub const THEME_KEYFRAMES_AT_THE_END: Switch = Switch::since(4, 0, 9, "the @keyframes of the theme are at the end of the tree");
 
 /// A byte order mark at the start of the stylesheet is skipped. Before: it
