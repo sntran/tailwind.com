@@ -155,8 +155,12 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+      - name: The programs of the releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh scripts/releases.sh build/releases
       - name: Build the site
-        run: node site/build.mjs --wasm build/tailwind.wasm
+        run: node site/build.mjs --wasm build/tailwind.wasm --releases build/releases
       - name: Playwright with Chromium
         run: |
           npm install --no-save --prefix "$RUNNER_TEMP/playwright" playwright@1.63.0
@@ -176,7 +180,9 @@ jobs:
         with:
           name: site
           path: build/site
-          retention-days: 7
+          # pages.yml run by hand deploys the site of the newest run on
+          # main.
+          retention-days: 90
 
   tlc:
     name: The TLA+ models
@@ -515,6 +521,7 @@ jobs:
       id-token: write
       attestations: write
       packages: write
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -598,18 +605,24 @@ jobs:
           grep -q "\"name\": \"@$owner/tailwind.com\"" package.json
           printf '@%s:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$owner" "$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/ghp/npmrc"
           npm publish --userconfig "$RUNNER_TEMP/ghp/npmrc" --registry https://npm.pkg.github.com
+      # The site has the program of each release: deploy it again, with
+      # this release in the list. The token of a workflow can start a run
+      # of workflow_dispatch, and no other event.
+      - name: The site with this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main
 
-  # The site on GitHub Pages, with tailwind.wasm of this release. A
-  # release that the token of a workflow makes starts no other workflow,
-  # so this job calls pages.yml.
+  # The site on GitHub Pages (docs/SITE.md), after each push to main
+  # that passes the gates of a release: the site that the job "site" built
+  # and tested, with tailwind.wasm of this commit.
   pages:
     name: The site on GitHub Pages
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, standalone, wasm, site, tlc, systems, bsd, mix, npm]
     permissions:
       contents: read
+      actions: read
       pages: write
       id-token: write
     uses: ./.github/workflows/pages.yml
-    with:
-      tag: ${{ github.ref_name }}

@@ -13,6 +13,7 @@ const controls = {
   versionB: $('version-b'),
   versionBField: $('version-b-field'),
   minify: $('minify'),
+  program: $('program'),
   markup: $('markup'),
   css: $('css'),
 }
@@ -74,6 +75,10 @@ function builds() {
   return [{ version: a, engine: 'native' }]
 }
 
+// The selected program: the build of the site, or a release.
+const program = () => data.programs.find((p) => p.wasm === controls.program.value) ?? data.programs[0]
+const loaded = new Set()
+
 async function build() {
   if (!ready) return
   const id = ++current
@@ -81,9 +86,13 @@ async function build() {
   const css = controls.css.value
   const minify = controls.minify.checked
   const list = builds()
-  $('status').textContent = 'Building …'
+  const p = program()
+  const wasm = new URL(p.wasm, location.href).href
+  // The first build with a program downloads it.
+  $('status').textContent = loaded.has(wasm) ? 'Building …' : `Loading the program ${p.name} (about 9 MB) …`
   const out = []
-  for (const b of list) out.push({ ...b, ...(await send({ type: 'build', markup, css, minify, ...b })) })
+  for (const b of list) out.push({ ...b, ...(await send({ type: 'build', wasm, markup, css, minify, ...b })) })
+  loaded.add(wasm)
   // A newer build started during this one: show only that one.
   if (id !== current) return
   results = out
@@ -131,7 +140,10 @@ function render() {
 }
 
 // The text of a result: the CSS, or the message of a failed build.
-const textOf = (r) => (r.status === 0 ? r.css : `The build failed (status ${r.status}).\n${r.messages}`)
+const textOf = (r) => {
+  if (r.missing) return `The program ${program().name} does not have Tailwind CSS ${r.version} with the ${ENGINE_NAMES[r.engine]}. Its version line is:\n${r.missing}`
+  return r.status === 0 ? r.css : `The build failed (status ${r.status}).\n${r.messages}`
+}
 
 function showCss(i) {
   $('output').textContent = textOf(results[i])
@@ -218,10 +230,12 @@ function renderPreviews() {
 
 function renderStatus() {
   const ms = (r) => `${Math.round(r.ms)} ms`
-  $('status').textContent = results.map((r) => `${r.version}, ${ENGINE_NAMES[r.engine]}: ${r.status === 0 ? ms(r) : 'error'}`).join(' · ')
+  const result = (r) => (r.missing ? 'not in this program' : r.status === 0 ? ms(r) : 'error')
+  const name = program() === data.programs[0] ? '' : `${program().name}: `
+  $('status').textContent = name + results.map((r) => `${r.version}, ${ENGINE_NAMES[r.engine]}: ${result(r)}`).join(' · ')
   const messages = results
-    .filter((r) => r.messages)
-    .map((r) => (results.length === 2 ? `${label(r)}:\n${r.messages}` : r.messages))
+    .filter((r) => r.messages || r.missing)
+    .map((r) => (r.missing ? textOf(r) : results.length === 2 ? `${label(r)}:\n${r.messages}` : r.messages))
     .join('\n\n')
   $('messages').hidden = !messages
   $('messages').textContent = messages
@@ -235,10 +249,11 @@ function updateControls() {
   controls.versionALabel.textContent = m === 'two' ? 'First version' : 'Version'
 }
 
-function open({ markup, css, mode: m = 'one', a, b }) {
+function open({ markup, css, mode: m = 'one', a, b, program: p }) {
   controls.markup.value = markup
   controls.css.value = css
   setMode(m)
+  if (p && data.programs.some((x) => x.wasm === p)) controls.program.value = p
   if (a) controls.versionA.value = a
   if (b) controls.versionB.value = b
   tab = m === 'one' ? 0 : 2
@@ -249,6 +264,9 @@ function open({ markup, css, mode: m = 'one', a, b }) {
 // The state of the page in the address: a link opens the same state.
 function saveHash() {
   const state = { m: controls.markup.value, c: controls.css.value, o: mode(), a: controls.versionA.value, b: controls.versionB.value, x: controls.minify.checked ? 1 : 0 }
+  // The build of the site is the default: a link has a release only when
+  // the viewer selected one.
+  if (program() !== data.programs[0]) state.p = program().wasm
   const bytes = new TextEncoder().encode(JSON.stringify(state))
   let binary = ''
   for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
@@ -262,7 +280,7 @@ function readHash() {
     const text = atob(location.hash.slice(1).replaceAll('-', '+').replaceAll('_', '/'))
     const state = JSON.parse(new TextDecoder().decode(Uint8Array.from(text, (c) => c.charCodeAt(0))))
     controls.minify.checked = Boolean(state.x)
-    return { markup: state.m, css: state.c, mode: state.o, a: state.a, b: state.b }
+    return { markup: state.m, css: state.c, mode: state.o, a: state.a, b: state.b, program: state.p }
   } catch {
     return null
   }
@@ -326,6 +344,7 @@ async function main() {
     select.replaceChildren(...data.versions.map((v) => new Option(v === data.upstream ? `${v} (newest)` : v, v)))
   }
   controls.example.replaceChildren(new Option('(your own)', ''), ...data.examples.map((e, i) => new Option(e.name, String(i))))
+  controls.program.replaceChildren(...data.programs.map((p, i) => new Option(i === 0 ? `${p.name}, this site` : `${p.name}, a release`, p.wasm)))
   renderReleases()
 
   for (const input of [controls.markup, controls.css]) {
@@ -334,7 +353,7 @@ async function main() {
       later()
     })
   }
-  for (const input of [controls.versionA, controls.versionB, controls.minify]) input.addEventListener('change', build)
+  for (const input of [controls.versionA, controls.versionB, controls.minify, controls.program]) input.addEventListener('change', build)
   for (const radio of document.querySelectorAll('input[name="mode"]')) {
     radio.addEventListener('change', () => {
       tab = mode() === 'one' ? 0 : 2
