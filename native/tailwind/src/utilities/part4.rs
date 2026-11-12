@@ -652,7 +652,12 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                     if candidate.modifier.is_some() {
                         return None;
                     }
-                    let value = theme.get(&["--default-outline-width"]).unwrap_or_else(|| "1px".to_string());
+                    // Before 4.0.7, the width was always `1px`.
+                    let value = if crate::switches::DEFAULT_OUTLINE_WIDTH.on() {
+                        theme.get(&["--default-outline-width"]).unwrap_or_else(|| "1px".to_string())
+                    } else {
+                        "1px".to_string()
+                    };
                     return Some(outline_width(value));
                 }
                 Some(UtilityValue::Arbitrary { data_type, value }) => {

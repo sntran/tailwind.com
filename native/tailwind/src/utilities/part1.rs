@@ -894,6 +894,18 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         },
         negative(),
     );
+    // Before 4.0.8, `translate-z-px` and `-translate-z-px` were static
+    // utilities two times: each gave two equal rules.
+    if !crate::switches::TRANSLATE_Z_PX_ONE_RULE.on() {
+        for (name, value) in [("-translate-z-px", "-1px"), ("translate-z-px", "1px")] {
+            st_with(
+                u,
+                name,
+                translate_properties,
+                &[("--tw-translate-z", value), ("translate", "var(--tw-translate-x) var(--tw-translate-y) var(--tw-translate-z)")],
+            );
+        }
+    }
 
     st_with(
         u,

@@ -742,6 +742,81 @@ its `@keyframes` rules, so each copy of the rule gave them again. From
 4.0.9, that rule is not in the output, and `THEME_KEYFRAMES_AT_THE_END`
 keeps the `@keyframes` rules out of it.
 
+### 4.0.8 (8 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `UNUSED_THEME_VARIABLES_REMOVED` | form | M | each build | In 4.0.6 and 4.0.7, each theme variable and each `@keyframes` rule of the theme was in the output |
+| `REFERENCE_IMPORT_THEME_IS_NORMAL` | form | S | common | An `@theme` in a reference import was an `@theme reference`, and a reference import gave nothing (as from 4.0.9: `REFERENCE_IMPORT_THEME` is the end) |
+| `THEME_RULE_AT_FIRST_THEME` | form | S | rare | The rule of the theme was at the place of the first `@theme` that is not a reference |
+| `IMPORT_THEME_OPTION_WITH_RULES` | feature | S | rare | An import with `theme(…)` and a style rule or a declaration was the error "Files imported with `@import "…" theme(…)` must only contain `@theme` blocks." |
+| `IMPORTANT_SKIPS_DASH_PROPERTIES` | form | S | common | `!important` went on each declaration (as from 4.0.10: `IMPORTANT_DASH_PROPERTIES` and `IMPORTANT_CUSTOM_PROPERTIES` are the end) |
+| `SORT_BY_EACH_PROPERTY` | fix | S | common | The sort compared only the first property of two rules, and then the count of the different properties with a place in the order (not the count of the declarations) |
+| `TRANSLATE_Z_PROPERTY_ORDER` | data | S | rare | `--tw-translate-z` had no place in the order of the properties |
+| `TRANSLATE_Z_PX_ONE_RULE` | fix | S | rare | `translate-z-px` and `-translate-z-px` gave two equal rules each |
+
+No switch: `extractUsedVariables` is the same code in a new file.
+
+The removal of 4.0.8 is not the removal of 4.0.5: see 4.0.5.
+
+### 4.0.7 (3 switches, all there; 1 change in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `COMPARE_WHOLE_NUMBERS` | fix | S | common | The sort by name skipped equal characters first, so a number started at its first digit that is different: `p-100` (`00`) came before `p-12` (`2`) |
+| `DROP_SHADOW_PROPERTY` | fix | S | common | The filter utilities had no `@property` rule for `--tw-drop-shadow` |
+| `DEFAULT_OUTLINE_WIDTH` | feature | S | rare | `outline` gave `outline-width: 1px`, also with `--default-outline-width` in the theme |
+| nested-utility-name (JS) | fix | S | rare | A nested rule of `addUtilities` with the name of the utility in its selector did not get the name of the candidate |
+
+No switch: the flag for `user-valid` and `user-invalid` was off in a
+release (`STATIC_VARIANTS_OF_4_1`, 4.1.0). The suggestions (fractions,
+`_` in a theme key) are for the editor tools. `escape` has the same
+result. The types of `tailwindcss/plugin` are not in the output.
+
+Before 4.0.7, the order of the names was not consistent (`p-[1]` before
+`p-[02]`, `p-[02]` before `p-[0a]`, `p-[0a]` before `p-[1]`). So the Rust
+compiler sorts with the algorithm of V8 (`utils/v8_sort.rs`) for these
+versions, and the result follows the sequence of the candidates, as in
+the official compiler.
+
+### 4.0.6 (1 switch, there; data changes with no switch)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `UNUSED_THEME_VARIABLES_KEPT` | form | S | each build | In 4.0.5, the theme variables with no use were removed (`UNUSED_THEME_VARIABLES_REMOVED_FIRST`) |
+
+Data, from the package: the line breaks of `--font-sans` and
+`--font-mono` in `theme.css`, and comments of `preflight.css`.
+
+### 4.0.5 (3 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `UNUSED_THEME_VARIABLES_REMOVED_FIRST` | form | M | each build | Each theme variable was in the output |
+| `THEME_KEYFRAMES_ALL_COLLECTED` | form | S | common | A `@keyframes` rule of the theme was in the output only when its name was a word in the value of an `--animate-*` variable of the theme, also a variable with no use |
+| `VALUE_PARSER_ESCAPES` | fix | S | edge | `\` was a normal character in the parser of values: `w-[a\(b]` gave `width: a\()b`, and `w-[var(--a\,_b)]` gave `var(--a\, b)` |
+
+No switch: `@theme static` came in 4.0.5. Before, the word had no effect,
+and no variable was removed. A candidate that is a variable
+(`--color-red-500`) marks the variable as used: before 4.0.5 it was a
+candidate that is not valid, with the same output. `getOptions` of the
+theme reads a key with a prefix: only the removal and the plugin layer
+call it.
+
+The removal of 4.0.5 has three differences from the removal of 4.0.8.
+A variable in the value of a theme variable is a use (`--a: var(--b)`
+keeps `--b`, also when `--a` has no use). A custom property in an
+`@keyframes` rule of the theme is removed when it is not a theme variable
+in use. And only a rule of the theme at the top level is removed when it
+is empty: in `@layer theme`, the rule `:root, :host` stays with no
+declaration. In 4.0.5, a `@keyframes` rule of the theme stays when a
+declaration of `animation` in the output has its name, or an
+`--animate-*` variable in use has it.
+
+Before 4.0.5, `\)` with no open function stopped the parser of values
+with a JavaScript exception. The Rust compiler keeps the two characters
+there, as 4.0.5 does.
+
 ## What the list shows
 
 - **56 changes** in the eleven releases from 4.2.0 to 4.3.5. 5 of them

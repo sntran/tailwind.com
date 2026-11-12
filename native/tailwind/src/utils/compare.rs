@@ -10,10 +10,19 @@ pub fn compare(a: &str, z: &str) -> Ordering {
     let (ab, zb) = (a.as_bytes(), z.as_bytes());
     let min_len = ab.len().min(zb.len());
 
+    // Before 4.0.7, equal characters were skipped first, so a number
+    // started at its first digit that is different.
+    let whole_numbers = crate::switches::COMPARE_WHOLE_NUMBERS.on();
+
     let mut i = 0;
     while i < min_len {
         let a_code = ab[i];
         let z_code = zb[i];
+
+        if !whole_numbers && a_code == z_code {
+            i += 1;
+            continue;
+        }
 
         // Two numbers compare as numbers.
         if a_code.is_ascii_digit() && z_code.is_ascii_digit() {

@@ -925,6 +925,99 @@ pub const BOM_IS_SKIPPED: Switch = Switch::since(4, 0, 9, "a byte order mark at 
 /// `-webkit-…` did not get it.
 pub const IMPORTANT_DASH_PROPERTIES: Switch = Switch::since(4, 0, 9, "!important goes also on z-index and -webkit-* properties");
 
+// --- 4.0.8 ----------------------------------------------------------------
+
+/// A theme variable with no use is not in the output, and the `@keyframes`
+/// rules of the theme with no use are not in the output. A variable is in
+/// use when a variable that is in use has it in its value. Before, in
+/// 4.0.6 and 4.0.7: each variable and each `@keyframes` rule of the theme
+/// was in the output (not the ones of `@theme reference`).
+pub const UNUSED_THEME_VARIABLES_REMOVED: Switch = Switch::since(4, 0, 8, "theme variables with no use are not in the output");
+
+/// Only in 4.0.8 (the end is `REFERENCE_IMPORT_THEME`): an `@theme` in a
+/// reference import is a normal `@theme`, and each reference import gives
+/// a copy of the rule of the first `@theme`. Before: it was an `@theme
+/// reference`, and a reference import gave nothing.
+pub const REFERENCE_IMPORT_THEME_IS_NORMAL: Switch = Switch::since(4, 0, 8, "@theme in a reference import is a normal @theme");
+
+/// The rule of the theme (`:root, :host`) is at the place of the first
+/// `@theme`. Before: at the place of the first `@theme` that is not a
+/// reference.
+pub const THEME_RULE_AT_FIRST_THEME: Switch = Switch::since(4, 0, 8, "the rule of the theme is at the first @theme, also a reference");
+
+/// An import with `theme(…)` can have other rules than `@theme`. Only
+/// `theme(reference)` with a style rule or a declaration is an error.
+/// Before: each node that is not an at-rule was the error "Files imported
+/// with `@import "…" theme(…)` must only contain `@theme` blocks."
+pub const IMPORT_THEME_OPTION_WITH_RULES: Switch = Switch::since(4, 0, 8, "an import with theme(…) can have other rules");
+
+/// `!important` does not go on a custom property, nor on a property with
+/// `-` as its second character. (`IMPORTANT_DASH_PROPERTIES` and
+/// `IMPORTANT_CUSTOM_PROPERTIES` are the end of this.) Before: on each
+/// declaration.
+pub const IMPORTANT_SKIPS_DASH_PROPERTIES: Switch = Switch::since(4, 0, 8, "!important does not go on a custom property");
+
+/// The sort of two rules compares the first property that is different,
+/// and then the count of the declarations. Before: only the first
+/// property, and then the count of the different properties that have a
+/// place in the order.
+pub const SORT_BY_EACH_PROPERTY: Switch = Switch::since(4, 0, 8, "the sort compares each property and the count of declarations");
+
+/// `--tw-translate-z` has a place in the order of the properties, after
+/// `--tw-translate-y`. Before: it had none, so `translate-z-*` sorted only
+/// by `translate`.
+pub const TRANSLATE_Z_PROPERTY_ORDER: Switch = Switch::since(4, 0, 8, "--tw-translate-z has a place in the property order");
+
+/// `translate-z-px` and `-translate-z-px` give one rule each. Before: two
+/// equal rules each, because they were static utilities two times.
+pub const TRANSLATE_Z_PX_ONE_RULE: Switch = Switch::since(4, 0, 8, "translate-z-px gives one rule");
+
+// --- 4.0.7 ----------------------------------------------------------------
+
+/// The sort of the candidates by their names compares a number as a
+/// whole: `p-12` comes before `p-100`. Before: a number started at the
+/// first digit that is different, so `p-100` (`00`) came before `p-12`
+/// (`2`).
+pub const COMPARE_WHOLE_NUMBERS: Switch = Switch::since(4, 0, 7, "the sort by name compares a number from its first digit");
+
+/// The filter utilities have an `@property` rule for `--tw-drop-shadow`.
+/// Before: they had none, so the variable had no initial value.
+pub const DROP_SHADOW_PROPERTY: Switch = Switch::since(4, 0, 7, "--tw-drop-shadow has an @property rule");
+
+/// `outline` with no value reads `--default-outline-width` of the theme.
+/// Before: `outline-width: 1px`.
+pub const DEFAULT_OUTLINE_WIDTH: Switch = Switch::since(4, 0, 7, "outline reads --default-outline-width");
+
+// --- 4.0.6 ----------------------------------------------------------------
+
+/// Only in 4.0.6 and 4.0.7 (the end is `UNUSED_THEME_VARIABLES_REMOVED`):
+/// each theme variable and each `@keyframes` rule of the theme is in the
+/// output. Before, in 4.0.5: the ones with no use were removed
+/// (`UNUSED_THEME_VARIABLES_REMOVED_FIRST`).
+pub const UNUSED_THEME_VARIABLES_KEPT: Switch = Switch::since(4, 0, 6, "each theme variable is in the output again");
+
+// --- 4.0.5 ----------------------------------------------------------------
+
+/// Only in 4.0.5 (the end is `UNUSED_THEME_VARIABLES_KEPT`): a theme
+/// variable with no use is not in the output. This first form is not the
+/// form of 4.0.8: a variable in the value of a theme variable is a use, a
+/// custom property in an `@keyframes` rule of the theme is removed too,
+/// and an empty rule of the theme stays in an at-rule (`@layer theme`).
+/// Before: each theme variable was in the output.
+pub const UNUSED_THEME_VARIABLES_REMOVED_FIRST: Switch = Switch::since(4, 0, 5, "theme variables with no use are removed, first form");
+
+/// Each `@keyframes` rule of the theme goes to the tree, and the removal
+/// of the theme variables decides about it. Before: a `@keyframes` rule
+/// went to the tree only when its name was a word in the value of an
+/// `--animate-*` variable of the theme.
+pub const THEME_KEYFRAMES_ALL_COLLECTED: Switch = Switch::since(4, 0, 5, "each @keyframes rule of the theme goes to the tree");
+
+/// The parser of values keeps `\` and the next character together:
+/// `theme(--width-1\/2)` and `[--x:theme(--a\,b)]`. Before: `\` was a
+/// normal character, so the next character kept its function (`,` and `/`
+/// were separators, `(` started a function).
+pub const VALUE_PARSER_ESCAPES: Switch = Switch::since(4, 0, 5, "the parser of values knows a backslash escape");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -1085,4 +1178,19 @@ pub const ALL: &[&Switch] = &[
     &THEME_KEYFRAMES_AT_THE_END,
     &BOM_IS_SKIPPED,
     &IMPORTANT_DASH_PROPERTIES,
+    &UNUSED_THEME_VARIABLES_REMOVED,
+    &REFERENCE_IMPORT_THEME_IS_NORMAL,
+    &THEME_RULE_AT_FIRST_THEME,
+    &IMPORT_THEME_OPTION_WITH_RULES,
+    &IMPORTANT_SKIPS_DASH_PROPERTIES,
+    &SORT_BY_EACH_PROPERTY,
+    &TRANSLATE_Z_PROPERTY_ORDER,
+    &TRANSLATE_Z_PX_ONE_RULE,
+    &COMPARE_WHOLE_NUMBERS,
+    &DROP_SHADOW_PROPERTY,
+    &DEFAULT_OUTLINE_WIDTH,
+    &UNUSED_THEME_VARIABLES_KEPT,
+    &UNUSED_THEME_VARIABLES_REMOVED_FIRST,
+    &THEME_KEYFRAMES_ALL_COLLECTED,
+    &VALUE_PARSER_ESCAPES,
 ];

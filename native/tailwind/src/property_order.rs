@@ -393,6 +393,10 @@ pub fn property_index(property: &str) -> Option<usize> {
     if (property.starts_with("mask-") || property.starts_with("--tw-mask-")) && !crate::switches::MASK_UTILITIES.on() {
         return None;
     }
+    // Before 4.0.8, the same for this property.
+    if property == "--tw-translate-z" && !crate::switches::TRANSLATE_Z_PROPERTY_ORDER.on() {
+        return None;
+    }
     static INDEX: OnceLock<HashMap<&str, usize>> = OnceLock::new();
     INDEX
         .get_or_init(|| {

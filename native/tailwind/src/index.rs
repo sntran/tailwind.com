@@ -629,7 +629,17 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
         // the top level of the tree, so that a `@reference` cannot remove
         // them.
         // (Before 4.0.9, they were in the rule of the first `@theme`.)
+        // Before 4.0.5, a `@keyframes` rule was in the tree only when its
+        // name was a word in the value of an `--animate-*` variable
+        // (`animation.split(/\s+/)`).
+        let animation_parts: Option<Vec<String>> = (!crate::switches::THEME_KEYFRAMES_ALL_COLLECTED.on()).then(|| {
+            let animations = design_system.theme.namespace("--animate");
+            animations.values().flat_map(|animation| crate::optimize::split_at_white_space(animation)).map(String::from).collect()
+        });
         for keyframes in design_system.theme.get_keyframes() {
+            if animation_parts.as_ref().is_some_and(|parts| !parts.contains(&keyframes.params)) {
+                continue;
+            }
             if crate::switches::THEME_KEYFRAMES_AT_THE_END.on() {
                 ast.push(context(context_with("theme", true.into()), vec![at_root(vec![AstNode::AtRule(keyframes)])]));
             } else {
@@ -1027,7 +1037,10 @@ impl Collector {
                 // `@media theme(…)`: `@import "…" theme(reference)` imports
                 // a theme file as a reference.
                 let theme_params = slice(param, 6);
-                let has_reference = theme_params.contains("reference");
+                // Before 4.0.8, each node that is not an at-rule was an
+                // error, with each option.
+                let with_rules = crate::switches::IMPORT_THEME_OPTION_WITH_RULES.on();
+                let has_reference = theme_params.contains("reference") || !with_rules;
                 let mut invalid = false;
 
                 walk(&mut at.nodes, |child, _| match child {
@@ -1050,9 +1063,11 @@ impl Collector {
                 });
 
                 if invalid {
-                    return Err(Error::new(
-                        "Files imported with `@import \"…\" theme(reference)` must only contain `@theme` blocks.\nUse `@reference \"…\";` instead.",
-                    ));
+                    return Err(Error::new(if with_rules {
+                        "Files imported with `@import \"…\" theme(reference)` must only contain `@theme` blocks.\nUse `@reference \"…\";` instead."
+                    } else {
+                        "Files imported with `@import \"…\" theme(…)` must only contain `@theme` blocks."
+                    }));
                 }
             } else if param.starts_with("prefix(") {
                 // `@media prefix(…)`: `@import "…" prefix(ident)` sets the
@@ -1097,9 +1112,11 @@ impl Collector {
             self.features |= FEATURES_AT_THEME;
         }
 
-        // Before 4.0.9, an `@theme` in a reference import was as each
+        // Only in 4.0.8, an `@theme` in a reference import was as each
         // other `@theme`: see `optimize.rs` for its place in the output.
-        if css_context(ancestors).get("reference").is_some_and(|v| v.truthy()) && crate::switches::REFERENCE_IMPORT_THEME.on() {
+        if css_context(ancestors).get("reference").is_some_and(|v| v.truthy())
+            && (crate::switches::REFERENCE_IMPORT_THEME.on() || !crate::switches::REFERENCE_IMPORT_THEME_IS_NORMAL.on())
+        {
             theme_options |= theme::REFERENCE;
         }
 
@@ -1165,7 +1182,10 @@ impl Collector {
 
         // The first `@theme` rule becomes the rule that gets the complete
         // theme later. The other `@theme` rules go away.
-        if !self.has_first_theme_rule {
+        // (Before 4.0.8, an `@theme reference` was not the first rule.)
+        if !self.has_first_theme_rule
+            && (theme_options & theme::REFERENCE == 0 || crate::switches::THEME_RULE_AT_FIRST_THEME.on())
+        {
             self.has_first_theme_rule = true;
             let marker = context(context_with("theme", true.into()), Vec::new());
             Ok(WalkAction::ReplaceSkip(vec![style_rule(":root, :host", vec![marker]).with_src(at.loc.src())]))
