@@ -20,7 +20,7 @@ The program has two compilers.
 | | The native engine | The script engine |
 |---|---|---|
 | What | The Rust compiler of this repository | The official compiler of the npm package `tailwindcss` (`dist/lib.js`), with no change, in the QuickJS of the program |
-| Versions | The version of the file `UPSTREAM` (4.3.5), and each older version that has all its switches: now 4.0.17 to 4.3.4 ([`SWITCHES.md`](SWITCHES.md)) | Each version whose package the program can find |
+| Versions | The version of the file `UPSTREAM` (4.3.5), and each older version that has all its switches: now 4.0.8 to 4.3.4 ([`SWITCHES.md`](SWITCHES.md)) | Each version whose package the program can find |
 | A new version of Tailwind CSS needs | A port of the changes to Rust (`docs/SYNC.md`) | One line in the file `PACKAGES` |
 | Speed, Phoenix project | 10 ms | 69 ms |
 | Speed, 1000 HTML files | 224 ms | 1.31 s |

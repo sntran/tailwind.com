@@ -95,13 +95,14 @@ echo "versions.sh: $native: the script engine gives the output of the native eng
 # Each version of PACKAGES.
 count=0
 native_versions=
+script_version=
 for version in $(grep -v '^#' "$root/PACKAGES" | cut -d' ' -f1); do
     [ "$version" = "$native" ] && continue
     line=$(choose "$version" "" --version) || fail "$version is not in the program"
     # The Rust compiler has some of the older versions (its switches),
     # and the script engine has the other ones.
     case "$line" in
-        *"(tailwindcss v$version, script engine)") ;;
+        *"(tailwindcss v$version, script engine)") script_version=$version ;;
         *"(tailwindcss v$version)") native_versions="$native_versions $version" ;;
         *) fail "$version: --version gives: $line" ;;
     esac
@@ -134,8 +135,13 @@ if choose 4.999.0 "" -i app.css -o out.css 2> out.log; then
     fail "the version 4.999.0 gave no error"
 fi
 grep -q 'Tailwind CSS v4.999.0 is not in this program' out.log || { cat out.log >&2; fail "the message for 4.999.0"; }
-if choose 4.0.0 native -i app.css -o out.css 2> out.log; then
-    fail "the native engine with 4.0.0 gave no error"
+# The native engine for a version that only the script engine has. (When
+# the Rust compiler has each version of PACKAGES, there is no such
+# version.)
+if [ -n "$script_version" ]; then
+    if choose "$script_version" native -i app.css -o out.css 2> out.log; then
+        fail "the native engine with $script_version gave no error"
+    fi
+    grep -q 'needs the script engine' out.log || { cat out.log >&2; fail "the message for the native engine"; }
 fi
-grep -q 'needs the script engine' out.log || { cat out.log >&2; fail "the message for the native engine"; }
 echo "versions.sh: a version that is not there, and the wrong engine, are errors: pass"

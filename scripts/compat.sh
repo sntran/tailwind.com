@@ -52,13 +52,24 @@ case "$versions" in
     *) log "the version $newest of UPSTREAM is not in PACKAGES"; exit 1 ;;
 esac
 
+# Get the tags that are not in the clone, in one fetch. (One fetch for
+# each tag makes many packs in a shallow clone, and the automatic
+# clean-up of git can then stop a later fetch: "shallow file has changed
+# since we read it".)
+missing=
+for version in $versions; do
+    git -C "$clone" rev-parse -q --verify "refs/tags/v$version" > /dev/null || missing="$missing tag v$version"
+done
+if [ -n "$missing" ]; then
+    # shellcheck disable=SC2086
+    git -C "$clone" -c gc.auto=0 -c maintenance.auto=false fetch -q --depth 1 origin $missing
+fi
+
 work=$root/build/compat
 rm -rf "$work"
 mkdir -p "$work/source" "$work/bundles"
 for version in $versions; do
     tag=v$version
-    git -C "$clone" rev-parse -q --verify "refs/tags/$tag" > /dev/null ||
-        git -C "$clone" fetch -q --depth 1 origin tag "$tag"
     mkdir -p "$work/source/$version" "$work/bundles/$version"
     git -C "$clone" archive "$tag" packages/tailwindcss/src packages/tailwindcss/package.json |
         tar -x -C "$work/source/$version"

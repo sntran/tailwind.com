@@ -58,9 +58,18 @@ nothing wrong: that version is only slower.
 | 4.1.1 | Rust compiler | 5 more |
 | 4.1.0 | Rust compiler | 2 more |
 | 4.0.17 | Rust compiler | 15 more |
-| 4.0.0 to 4.0.16 | script engine | not counted |
+| 4.0.16 | Rust compiler | 0 more |
+| 4.0.15 | Rust compiler | 3 more |
+| 4.0.14 | Rust compiler | 6 more |
+| 4.0.13 | Rust compiler | 0 more |
+| 4.0.12 | Rust compiler | 0 more |
+| 4.0.11 | Rust compiler | 1 more |
+| 4.0.10 | Rust compiler | 0 more |
+| 4.0.9 | Rust compiler | 7 more |
+| 4.0.8 | Rust compiler | 6 more |
+| 4.0.0 to 4.0.7 | script engine | not counted |
 
-All the 135 switches of Tailwind CSS 4.1.0 to 4.3.5 are there. Each of
+All the 158 switches of Tailwind CSS 4.0.9 to 4.3.5 are there. Each of
 these versions uses the Rust compiler also for a stylesheet with
 `@plugin` or `@config`: see "The plugin layer" below.
 
@@ -748,8 +757,10 @@ keeps the `@keyframes` rules out of it.
   are only in the JavaScript of the plugin layer and need no switch. So
   there are **51 switches** for these releases.
 - **84 more switches** for the twenty releases from 4.1.0 to 4.2.0: 12
-  for 4.2.0, 57 for 4.1.1 to 4.1.18, and 15 for 4.1.0. All the 135
-  switches are there: the Rust compiler serves each version from 4.0.17
+  for 4.2.0, 57 for 4.1.1 to 4.1.18, and 15 for 4.1.0.
+- **23 more switches** for the nine releases from 4.0.9 to 4.0.17 (three
+  of them have no change of the compiler). All the 158 switches are
+  there: the Rust compiler serves each version from 4.0.8
   to 4.3.5.
 - **Most of the changes are fixes** of faults in rare inputs. 9 change
   the form of valid output, 6 are new features, 4 are constants, and 1
