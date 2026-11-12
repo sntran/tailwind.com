@@ -911,8 +911,12 @@ output, which is not valid CSS (see 4.1.14 for the rule of the fuzzer).
 Before 4.0.2, a declaration with no `:` and with a property that is
 empty (`;;` gave `: ;`, and `a;` gave `: a;`) is not valid CSS. There,
 the Rust compiler gives the error of 4.0.2 ("Unexpected semicolon",
-"Invalid declaration"). The fuzzer knows this fault (`hasKnownFault`: a
-line of the official result that starts with `: `).
+"Invalid declaration", "Invalid custom property, expected a value").
+The fuzzer knows this fault in two forms. `hasKnownFault`: a line of
+the official result starts with `: `. `oursShowsKnownFault`: the Rust
+compiler gives one of these errors. That second rule is for a stylesheet
+where the official compiler goes on after the fault, then stops at
+another fault or gives other output.
 
 ### 4.0.1 (6 switches, all there)
 

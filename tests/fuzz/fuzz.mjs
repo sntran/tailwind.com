@@ -156,6 +156,17 @@ const AT_RULES_IN_MEDIA = patch < 2 ? /^\s*@(theme|utility|custom-variant|tailwi
 // compiler gives the error of 4.0.2 there (docs/SWITCHES.md).
 const DECLARATION_WITH_NO_PROPERTY = major === 4 && minor === 0 && patch < 2
 
+// The same fault when the official compiler goes on after it, and then
+// stops at another fault of the stylesheet or gives other output: the
+// Rust compiler gives an error of the 4.0.2 parser there. The result of
+// the official compiler does not show the fault, so the rule reads the
+// result of this compiler.
+const NO_PROPERTY_ERROR = /^(Unexpected semicolon|Invalid declaration|Invalid custom property, expected a value)/
+
+function oursShowsKnownFault(ours) {
+  return DECLARATION_WITH_NO_PROPERTY && ours.error !== undefined && NO_PROPERTY_ERROR.test(ours.error)
+}
+
 // A known fault of Tailwind CSS 4.0.0: an empty selector in
 // `@custom-variant` (`@custom-variant foo ();`, `(&:hover,)`) gave a rule
 // with an empty selector, which is not valid CSS. This compiler gives the
@@ -398,7 +409,7 @@ function compilerCase() {
 async function differs(c) {
   const [ours] = ourResults([c])
   const theirs = await officialResult(c)
-  return !same(ours, theirs) && !hasKnownFault(theirs)
+  return !same(ours, theirs) && !hasKnownFault(theirs) && !oursShowsKnownFault(ours)
 }
 
 // The smallest part of the case that still differs: first the
@@ -511,6 +522,11 @@ for (let done = 0; done < opts.cases && Date.now() < compilerDeadline; done += B
       stats.cssBytes += theirs.css.length
     }
     if (same(ours[i], theirs)) continue
+    if (oursShowsKnownFault(ours[i])) {
+      stats.knownFaults++
+      stats.knownFaultsOnly++
+      continue
+    }
     if (hasKnownFault(theirs)) {
       stats.knownFaults++
       const rest = await withoutKnownFault(cases[i])
