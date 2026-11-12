@@ -134,6 +134,29 @@ try {
   if (different.length) problems.push(`Rust and official: different output for ${different.join(', ')}`)
   log(`Rust and official, the first example, ${versions.length} versions: ${different.length} different`)
 
+  // The programs of the releases (site/releases.mjs). Each one builds the
+  // first example, or says that it does not have the selection: an older
+  // program can ignore TAILWINDCSS_VERSION, and the page must not show
+  // its output as the output of that version.
+  await after(() => page.selectOption('#example', '0'))
+  for (const program of data.programs.slice(1)) {
+    for (const version of [data.upstream, '4.0.0']) {
+      await after(() => page.selectOption('#version-a', version))
+      const result = await after(() => page.selectOption('#program', program.wasm))
+      if (/error/.test(result.status)) problems.push(`${program.name}, ${version}: ${result.status}\n${result.messages}`)
+      log(`${program.name}, ${version}: ${result.status}`)
+      await after(() => page.selectOption('#program', data.programs[0].wasm))
+    }
+  }
+  // v0.1.0 has only 4.3.5, and builds it for each value of the variable.
+  if (data.programs.some((p) => p.name === 'v0.1.0')) {
+    await after(() => page.selectOption('#version-a', '4.0.0'))
+    const result = await after(() => page.selectOption('#program', 'releases/v0.1.0/tailwind.wasm'))
+    if (!/not in this program/.test(result.status)) problems.push(`v0.1.0 as 4.0.0: ${result.status}: the page must say that the program does not have 4.0.0`)
+    await after(() => page.selectOption('#program', data.programs[0].wasm))
+    await after(() => page.selectOption('#version-a', data.upstream))
+  }
+
   // The recorded cases.
   const cases = await page.$$('#releases button')
   const count = opts.cases === 'all' ? cases.length : Math.min(cases.length, Number(opts.cases))

@@ -50,7 +50,8 @@ Each version of Tailwind CSS 4, from 4.0.0 to 4.3.5, in one file.
   compiler with the official compiler of one version, and opens the
   recorded case of each switch. A WASI host in JavaScript
   (`site/wasi.mjs`) runs the program with a file system in memory. The
-  job `pages` deploys the site after each release.
+  site deploys from `main`, and a viewer can also select the
+  `tailwind.wasm` of a release.
 - The program has the plugin layer of Tailwind CSS (the JavaScript for
   `@plugin` and `@config`) of each version that the Rust compiler
   serves, made from the source of that version with no change

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Build the site of tailwind.com: a static directory for GitHub Pages.
 //
-// Usage: node site/build.mjs --wasm FILE [--packages DIR] [--out DIR]
+// Usage: node site/build.mjs --wasm FILE [--packages DIR] [--releases DIR] [--out DIR]
 //
 //   --wasm FILE      tailwind.wasm, built with WASI_SDK_PATH (make wasm), so
 //                    that it has the JavaScript engine for @plugin
@@ -9,6 +9,8 @@
 //                    tailwind.com (default: build/site-packages, made with
 //                    scripts/packages.sh and tools/twpatch, as
 //                    scripts/build.sh does)
+//   --releases DIR   tailwind.wasm of the releases (scripts/releases.sh):
+//                    a viewer can select one of them (site/releases.mjs)
 //   --out DIR        the site (default build/site)
 //
 // tailwind.wasm also builds the CSS of the page, in Node.js, with the WASI
@@ -17,16 +19,19 @@
 // The site has:
 //   index.html, app.mjs, worker.mjs, wasi.mjs, diff.mjs  the page
 //   style.css        the CSS of the page, built with tailwind.wasm
-//   tailwind.wasm    the program
+//   tailwind.wasm    the program, built from this commit
+//   releases/TAG/tailwind.wasm  the program of each release
 //   packages.bin     the packages of each version of Tailwind CSS
 //   data.json        the versions, the examples, the switches of each
 //                    release (native/tailwind/src/switches.rs) and the
-//                    recorded cases (tests/upstream/switches.jsonl)
+//                    recorded cases (tests/upstream/switches.jsonl), and
+//                    the programs
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { examples } from './examples.mjs'
+import { programs } from './releases.mjs'
 import { Files, run } from './wasi.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -39,6 +44,7 @@ for (let i = 0; i < args.length; i++) {
   switch (args[i]) {
     case '--wasm': opts.wasm = value(); break
     case '--packages': opts.packages = value(); break
+    case '--releases': opts.releases = value(); break
     case '--out': opts.out = value(); break
     default: throw new Error(`unknown argument: ${args[i]}`)
   }
@@ -180,7 +186,7 @@ fs.mkdirSync(opts.out, { recursive: true })
 for (const name of ['index.html', 'app.mjs', 'worker.mjs', 'wasi.mjs', 'diff.mjs']) fs.copyFileSync(path.join(here, name), path.join(opts.out, name))
 fs.copyFileSync(opts.wasm, path.join(opts.out, 'tailwind.wasm'))
 fs.writeFileSync(path.join(opts.out, 'packages.bin'), pack(store))
-const data = { upstream, versions, examples, releases: await releases() }
+const data = { upstream, versions, examples, releases: await releases(), programs: programs(opts.out, opts.releases) }
 fs.writeFileSync(path.join(opts.out, 'data.json'), JSON.stringify(data))
 
 // The CSS of the page, with tailwind.wasm.
@@ -192,4 +198,4 @@ fs.writeFileSync(path.join(opts.out, 'style.css'), files.read('/site/out.css'))
 const size = (name) => `${(fs.statSync(path.join(opts.out, name)).size / 1e6).toFixed(2)} MB`
 const count = data.releases.reduce((n, r) => n + r.switches.length, 0)
 const all = data.releases.flatMap((r) => r.cases)
-log(`wrote ${opts.out}: tailwind.wasm ${size('tailwind.wasm')}, packages.bin ${size('packages.bin')} (${versions.length} versions), ${count} switches, ${all.filter((c) => c.shows).length} of ${all.length} cases on the page`)
+log(`wrote ${opts.out}: tailwind.wasm ${size('tailwind.wasm')}, ${data.programs.length - 1} release${data.programs.length === 2 ? '' : 's'}, packages.bin ${size('packages.bin')} (${versions.length} versions), ${count} switches, ${all.filter((c) => c.shows).length} of ${all.length} cases on the page`)

@@ -28,7 +28,8 @@
           This page runs <code class="font-mono text-sm">tailwind.wasm</code>, the WebAssembly form of
           <code class="font-mono text-sm">tailwind.com</code>, in your browser. Write markup and CSS, select a version
           from 4.0.0 to the newest, and see the output. Compare two versions, or compare the Rust compiler with the official
-          compiler of one version. Nothing goes to a server.
+          compiler of one version. The program is the newest build of
+          <code class="font-mono text-sm">main</code>, or the <code class="font-mono text-sm">tailwind.wasm</code> of a release. Nothing goes to a server.
         </p>
       </section>
 
@@ -52,6 +53,10 @@
         <label id="version-b-field" class="grid gap-1 text-sm font-medium" hidden>
           Second version
           <select id="version-b" class="rounded-md border border-slate-300 bg-white px-2 py-1.5 font-mono font-normal dark:border-slate-700 dark:bg-slate-800"></select>
+        </label>
+        <label class="grid gap-1 text-sm font-medium">
+          Program
+          <select id="program" class="rounded-md border border-slate-300 bg-white px-2 py-1.5 font-mono font-normal dark:border-slate-700 dark:bg-slate-800" title="The build of tailwind.wasm of this site, or the tailwind.wasm of a release"></select>
         </label>
         <label class="flex items-center gap-1.5 pb-1.5 text-sm"><input type="checkbox" id="minify"> <code class="font-mono">--minify</code></label>
         <button type="button" id="copy-link" class="ml-auto rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">Copy a link to this page</button>

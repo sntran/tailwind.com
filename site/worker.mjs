@@ -3,15 +3,23 @@
 //
 // Messages to the worker:
 //   { type: 'start', wasm: URL, packages: URL }
-//   { type: 'build', id, markup, css, version, engine: 'native' | 'script', minify }
+//   { type: 'build', id, wasm: URL, markup, css, version, engine: 'native' | 'script', minify }
 // Messages from the worker:
 //   { type: 'ready' }
-//   { type: 'result', id, status, css, messages, ms }
+//   { type: 'result', id, status, css, messages, ms, missing }
 //   { type: 'failure', id, message }
+//
+// `wasm` of a build selects the program: the build of the site, or the
+// tailwind.wasm of a release. The worker compiles each program one time,
+// when a build first asks for it. `missing` is the version line of a
+// program that does not have the selected version or engine: an older
+// program can ignore TAILWINDCSS_VERSION and TAILWIND_COM_ENGINE, and then
+// build its own version.
 import { Files, run } from './wasi.mjs'
 
-let module
 const files = new Files()
+const modules = new Map()
+const checked = new Map()
 
 // packages.bin of site/build.mjs.
 function unpack(buffer) {
@@ -25,28 +33,61 @@ function unpack(buffer) {
   }
 }
 
+function program(url) {
+  if (!modules.has(url)) {
+    const compiled = WebAssembly.compileStreaming(fetch(url))
+    // A failed download can be tried again.
+    compiled.catch(() => modules.delete(url))
+    modules.set(url, compiled)
+  }
+  return modules.get(url)
+}
+
 async function start(message) {
-  const [compiled, packages] = await Promise.all([
-    WebAssembly.compileStreaming(fetch(message.wasm)),
+  const [, packages] = await Promise.all([
+    program(message.wasm),
     fetch(message.packages).then((response) => {
       if (!response.ok) throw new Error(`${message.packages}: ${response.status}`)
       return response.arrayBuffer()
     }),
   ])
-  module = compiled
   unpack(packages)
 }
 
+const environment = (message) => ({
+  TAILWIND_COM_PACKAGES: '/packages',
+  TAILWINDCSS_VERSION: message.version,
+  TAILWIND_COM_ENGINE: message.engine,
+  NO_COLOR: '1',
+})
+const preopens = { '/': '/project', '/packages': '/packages' }
+
+// The version line of the program for the selection, and whether it is
+// the selection: "tailwind.com v0.2.0 (tailwindcss v4.1.0, script engine)".
+async function check(module, message) {
+  const key = `${message.wasm} ${message.version} ${message.engine}`
+  if (!checked.has(key)) {
+    const result = await run(module, { args: ['--version'], env: environment(message), files, preopens })
+    const line = (result.stdout + result.stderr).trim()
+    const found = line.match(/\(tailwindcss v([^,)]+)(, script engine)?\)/)
+    const same = result.status === 0 && found?.[1] === message.version && Boolean(found[2]) === (message.engine === 'script')
+    checked.set(key, { same, line })
+  }
+  return checked.get(key)
+}
+
 async function build(message) {
+  const module = await program(message.wasm)
   // A new project for each build: the markup and the input CSS only.
   if (files.exists('/project')) files.remove('/project')
   files.write('/project/index.html', message.markup)
   files.write('/project/app.css', message.css)
+  const selection = await check(module, message)
+  if (!selection.same) return { status: -2, css: '', messages: '', ms: 0, missing: selection.line }
   const args = ['-i', 'app.css', '-o', 'out.css']
   if (message.minify) args.push('--minify')
-  const env = { TAILWIND_COM_PACKAGES: '/packages', TAILWINDCSS_VERSION: message.version, TAILWIND_COM_ENGINE: message.engine, NO_COLOR: '1' }
   const start = performance.now()
-  const result = await run(module, { args, env, files, preopens: { '/': '/project', '/packages': '/packages' } })
+  const result = await run(module, { args, env: environment(message), files, preopens })
   const ms = performance.now() - start
   const css = result.status === 0 && files.exists('/project/out.css') ? files.readText('/project/out.css') : ''
   // The program writes its version line and its time to stderr. The page
