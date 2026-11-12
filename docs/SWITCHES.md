@@ -836,7 +836,7 @@ are replaced in the cache of the design system, with the same result.
 The walk of the selector parser of the plugin layer has the same change
 as the other walks.
 
-The walk of the tree changed in 4.0.4, and three of the switches come
+The walk of the tree changed in 4.0.4, and four of the switches come
 from that change. Before 4.0.4, the walk did not go into an at-root
 node (`WALK_ENTERS_AT_ROOT`), it visited the nodes that replace a node
 also when the visitor asked to skip (`CSS_UTILITY_RESULT_NOT_VISITED`,
