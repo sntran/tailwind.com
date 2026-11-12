@@ -50,9 +50,9 @@ runs the official compiler of that version too.
 
 ```
 $ TAILWINDCSS_VERSION=4.1.0 sh tailwind.com --version
-tailwind.com v0.1.0 (tailwindcss v4.1.0)
+tailwind.com v0.2.0 (tailwindcss v4.1.0)
 $ TAILWIND_COM_ENGINE=script TAILWINDCSS_VERSION=4.1.0 sh tailwind.com --version
-tailwind.com v0.1.0 (tailwindcss v4.1.0, script engine)
+tailwind.com v0.2.0 (tailwindcss v4.1.0, script engine)
 ```
 
 Why this works: the compiler of Tailwind CSS 4 is one JavaScript file

@@ -167,18 +167,25 @@ The packages have one version of their own: `package.json`, `mix.exs`,
 compares them). The version of Tailwind CSS that the compiler follows is
 in `UPSTREAM`. `tailwind.com --version` prints the two.
 
-A tag `vX.Y.Z` with the version of the packages starts the release job
-of CI. The job:
+Before the tag, set the new version in these four files, the `tag` of
+the Phoenix example in `README.md`, and the title of the section
+"Unreleased" of `CHANGELOG.md`. A tag `vX.Y.Z` with the version of the
+packages starts the release job of CI. The job:
 
 1. Publishes the GitHub release `vX.Y.Z` with `tailwind.com`,
    `tailwind.wasm`, the file of the npm package and `SHA256SUMS`, with a
-   signed provenance.
-2. Makes the release with the version of Tailwind CSS again (for example
-   `v4.3.5`), with the same files. The Erlang and Elixir modules download
-   from this release, so the `version` of a Phoenix configuration gives
-   the newest file for that version of Tailwind CSS.
-3. Publishes the npm package `tailwind.com` to npm, when the repository
+   signed provenance. The Erlang and Elixir modules and the npm package
+   of version X.Y.Z download from this release. One file has each version
+   of Tailwind CSS, so the version of tailwind.com is not the version of
+   Tailwind CSS.
+2. Publishes the npm package `tailwind.com` to npm, when the repository
    has the secret `NPM_TOKEN`.
-4. Publishes the same package to GitHub Packages, with the name
+3. Publishes the same package to GitHub Packages, with the name
    `@OWNER/tailwind.com` (GitHub Packages accepts only a name with the
    scope of the owner).
+4. Starts `.github/workflows/pages.yml`, so the site has the program of
+   the new release ([`SITE.md`](SITE.md)).
+
+The release `v4.3.5` has the files of 0.1.0. The modules of 0.1.0
+downloaded from the release with the version of Tailwind CSS, and they
+can use only 4.3.5. That release stays as it is.

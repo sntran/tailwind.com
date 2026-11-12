@@ -505,10 +505,10 @@ jobs:
           if-no-files-found: error
 
   # A tag vX.Y.Z with the version of the packages (package.json, mix.exs,
-  # the crate) makes the release vX.Y.Z. The job also makes the release
-  # with the version of Tailwind CSS (for example v4.3.5) again, with the
-  # same files: the Erlang and Elixir modules download from it, by the
-  # `version` of the configuration of a project.
+  # the crate) makes the release vX.Y.Z. The Erlang and Elixir modules and
+  # the npm package download from the release of their own version. (The
+  # release v4.3.5 is for the modules of 0.1.0, which downloaded by the
+  # version of Tailwind CSS: it stays, and no new release replaces it.)
   release:
     name: Release
     if: startsWith(github.ref, 'refs/tags/v')
@@ -562,6 +562,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           . ./UPSTREAM
+          oldest=$(grep -v '^#' PACKAGES | cut -d' ' -f1 | sort -t. -k1,1n -k2,2n -k3,3n | head -n 1)
           cd dist
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             # A re-run can reach this step after a later publication failed.
@@ -570,16 +571,8 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz SHA256SUMS \
               --repo "$GITHUB_REPOSITORY" --generate-notes \
-              --title "$GITHUB_REF_NAME (Tailwind CSS $TAILWINDCSS_VERSION)"
+              --title "$GITHUB_REF_NAME (Tailwind CSS $oldest to $TAILWINDCSS_VERSION)"
           fi
-          # The release with the version of Tailwind CSS: the newest files
-          # for that version.
-          moving="v$TAILWINDCSS_VERSION"
-          gh release delete "$moving" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2> /dev/null || true
-          gh release create "$moving" tailwind.com tailwind.wasm SHA256SUMS \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
-            --title "Tailwind CSS $TAILWINDCSS_VERSION" \
-            --notes "The files of the release $GITHUB_REF_NAME, for Tailwind CSS $TAILWINDCSS_VERSION. A newer release for the same version of Tailwind CSS replaces these files."
       # npm: trusted publishing (OIDC) needs no stored token. A token is
       # accepted only to bootstrap this new package, then can be removed.
       - name: Publish to npm
