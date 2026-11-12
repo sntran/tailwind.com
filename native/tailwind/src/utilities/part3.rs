@@ -7,7 +7,7 @@ use super::{
     static_decls, static_utility, with_alpha, NamedValue, SpacingOptions, StaticPart, Utilities, UtilityDescription,
 };
 use crate::ast::{at_root, decl, decl_full, rule, style_rule, AstNode};
-use crate::candidate::{UtilityValue, ValueKind};
+use crate::candidate::{FunctionalCandidate, UtilityValue, ValueKind};
 use crate::design_system::DesignSystem;
 use crate::theme::Theme;
 use crate::utils::infer_data_type::{
@@ -167,7 +167,7 @@ fn integer_with_unit(unit: &'static str) -> impl Fn(&NamedValue, &DesignSystem) 
 }
 
 fn filter_properties() -> AstNode {
-    at_root(vec![
+    let mut properties = vec![
         property("--tw-blur", None, None),
         property("--tw-brightness", None, None),
         property("--tw-contrast", None, None),
@@ -178,10 +178,16 @@ fn filter_properties() -> AstNode {
         property("--tw-saturate", None, None),
         property("--tw-sepia", None, None),
         property("--tw-drop-shadow", None, None),
-        property("--tw-drop-shadow-color", None, None),
-        property("--tw-drop-shadow-alpha", Some("100%"), Some("<percentage>")),
-        property("--tw-drop-shadow-size", None, None),
-    ])
+    ];
+    // Before 4.1.0, a drop shadow had no color, alpha or size variable.
+    if crate::switches::DROP_SHADOW_COLOR.on() {
+        properties.extend([
+            property("--tw-drop-shadow-color", None, None),
+            property("--tw-drop-shadow-alpha", Some("100%"), Some("<percentage>")),
+            property("--tw-drop-shadow-size", None, None),
+        ]);
+    }
+    at_root(properties)
 }
 
 fn backdrop_filter_properties() -> AstNode {
@@ -315,6 +321,16 @@ fn drop_shadow_size_nodes(value: &str, alpha: Option<&str>, drop_shadow: String)
 
 /// Register the utilities of this part.
 pub fn register(utilities: &mut Utilities, _theme: &Theme) {
+    // The utilities of 4.1.0 (`switches::MASK_UTILITIES`).
+    if crate::switches::MASK_UTILITIES.on() {
+        register_gradient_masks(utilities);
+    }
+    register_after_masks(utilities);
+}
+
+/// Register the masks with a gradient: `mask-t-from-*`, `mask-linear-*`,
+/// `mask-radial-*` and `mask-conic-*`.
+fn register_gradient_masks(utilities: &mut Utilities) {
     // Edge masks. The edges are: top, right, bottom, left.
     mask_edge_utility(utilities, "mask-x-from", "from", [false, true, false, true]);
     mask_edge_utility(utilities, "mask-x-to", "to", [false, true, false, true]);
@@ -409,7 +425,10 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         .negative_bare(|v, _| mask_angle(v, true)),
     );
     mask_gradient_stop_utilities(utilities, "conic");
+}
 
+/// Register the utilities from `box-decoration-break` to the filters.
+fn register_after_masks(utilities: &mut Utilities) {
     // `box-decoration-break`
     static_decls(
         utilities,
@@ -526,17 +545,25 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         "object",
         UtilityDescription::new(|value, _, _| Some(vec![decl("object-position", value)]))
             .theme_keys(&["--object-position"])
-            .static_values(vec![
-                ("top", vec![decl("object-position", "top")]),
-                ("top-left", vec![decl("object-position", "left top")]),
-                ("top-right", vec![decl("object-position", "right top")]),
-                ("bottom", vec![decl("object-position", "bottom")]),
-                ("bottom-left", vec![decl("object-position", "left bottom")]),
-                ("bottom-right", vec![decl("object-position", "right bottom")]),
-                ("left", vec![decl("object-position", "left")]),
-                ("right", vec![decl("object-position", "right")]),
-                ("center", vec![decl("object-position", "center")]),
-            ]),
+            .static_values(
+                [
+                    ("top", "top"),
+                    ("top-left", "left top"),
+                    ("top-right", "right top"),
+                    ("bottom", "bottom"),
+                    ("bottom-left", "left bottom"),
+                    ("bottom-right", "right bottom"),
+                    ("left", "left"),
+                    ("right", "right"),
+                    ("center", "center"),
+                ]
+                .into_iter()
+                // Before 4.1.0, a corner had only the names of the old
+                // utilities: `object-left-top`.
+                .filter(|(name, _)| !name.contains('-') || crate::switches::CORNER_POSITION_NAMES.on())
+                .map(|(name, value)| (name, vec![decl("object-position", value)]))
+                .collect(),
+            ),
     );
 
     for (name, property) in [
@@ -837,7 +864,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ],
     );
 
-    utilities.functional("drop-shadow", |candidate, ds| {
+    fn drop_shadow(candidate: &FunctionalCandidate, ds: &DesignSystem) -> Option<Vec<AstNode>> {
         let theme = &ds.theme;
         let mut alpha: Option<String> = None;
         if let Some(modifier) = &candidate.modifier {
@@ -904,7 +931,26 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             return Some(color_nodes("inherit".to_string()));
         }
         Some(color_nodes(with_alpha(&value, "var(--tw-drop-shadow-alpha)")))
-    });
+    }
+    if crate::switches::DROP_SHADOW_COLOR.on() {
+        utilities.functional("drop-shadow", drop_shadow);
+    } else {
+        // Before 4.1.0, `drop-shadow-*` took only a theme value or an
+        // arbitrary value, with one `drop-shadow(…)` for each shadow.
+        functional_utility(
+            utilities,
+            "drop-shadow",
+            UtilityDescription::new(|value, _, _| {
+                let shadows = segment(value, b',').into_iter().map(|v| format!("drop-shadow({v})")).collect::<Vec<_>>();
+                Some(vec![
+                    filter_properties(),
+                    decl("--tw-drop-shadow", shadows.join(" ")),
+                    decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE)),
+                ])
+            })
+            .theme_keys(&["--drop-shadow"]),
+        );
+    }
 
     functional_utility(
         utilities,

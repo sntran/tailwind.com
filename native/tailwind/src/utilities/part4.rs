@@ -122,13 +122,22 @@ fn text_shadow_properties() -> AstNode {
 }
 
 fn box_shadow_properties() -> AstNode {
-    at_root(vec![
-        property("--tw-shadow", Some(NULL_SHADOW), None),
-        prop("--tw-shadow-color"),
-        property("--tw-shadow-alpha", Some("100%"), Some("<percentage>")),
-        property("--tw-inset-shadow", Some(NULL_SHADOW), None),
-        prop("--tw-inset-shadow-color"),
-        property("--tw-inset-shadow-alpha", Some("100%"), Some("<percentage>")),
+    // Before 4.1.0, a shadow had no alpha variable.
+    let alpha = |ident: &str| crate::switches::SHADOW_ALPHA.on().then(|| property(ident, Some("100%"), Some("<percentage>")));
+    let properties = [
+        Some(property("--tw-shadow", Some(NULL_SHADOW), None)),
+        Some(prop("--tw-shadow-color")),
+        alpha("--tw-shadow-alpha"),
+        Some(property("--tw-inset-shadow", Some(NULL_SHADOW), None)),
+        Some(prop("--tw-inset-shadow-color")),
+        alpha("--tw-inset-shadow-alpha"),
+    ];
+    at_root(properties.into_iter().flatten().chain(ring_properties()).collect())
+}
+
+/// The `@property` rules of the rings, which follow these of the shadows.
+fn ring_properties() -> Vec<AstNode> {
+    vec![
         prop("--tw-ring-color"),
         property("--tw-ring-shadow", Some(NULL_SHADOW), None),
         prop("--tw-inset-ring-color"),
@@ -138,7 +147,7 @@ fn box_shadow_properties() -> AstNode {
         property("--tw-ring-offset-width", Some("0px"), Some("<length>")),
         property("--tw-ring-offset-color", Some("#fff"), None),
         property("--tw-ring-offset-shadow", Some(NULL_SHADOW), None),
-    ])
+    ]
 }
 
 /// The data of one shadow utility (`text-shadow`, `shadow`, `inset-shadow`).
@@ -179,6 +188,10 @@ impl ShadowUtility {
 
     /// The rules of a shadow color.
     fn color(&self, value: &str) -> Vec<AstNode> {
+        // Before 4.1.0, the color had no alpha variable.
+        if !crate::switches::SHADOW_ALPHA.on() {
+            return vec![(self.properties)(), decl(self.color_property, value)];
+        }
         vec![
             (self.properties)(),
             decl(self.color_property, with_alpha(value, &format!("var({})", self.alpha_property))),
@@ -186,7 +199,11 @@ impl ShadowUtility {
     }
 
     fn compile(&self, candidate: &FunctionalCandidate, theme: &Theme) -> Option<Vec<AstNode>> {
-        let alpha = shadow_alpha(candidate.modifier.as_ref());
+        // Before 4.1.0, the modifier was only the opacity of a shadow
+        // color: a shadow of the theme with a modifier gave nothing, and
+        // each other shadow ignored the modifier.
+        let has_alpha = crate::switches::SHADOW_ALPHA.on();
+        let alpha = if has_alpha { shadow_alpha(candidate.modifier.as_ref()) } else { None };
         let invalid_alpha = candidate.modifier.is_some()
             && !alpha.as_ref().is_some_and(|a| !a.is_empty())
             && crate::switches::UNUSED_MODIFIER_IS_INVALID.on();
@@ -245,7 +262,7 @@ impl ShadowUtility {
 
         // Shadow size
         if let Some(value) = truthy(theme.get(&[&format!("{}-{named}", self.theme_key)])) {
-            if invalid_alpha {
+            if invalid_alpha || (!has_alpha && candidate.modifier.is_some()) {
                 return None;
             }
             return Some(self.shadow(&value, alpha.as_ref(), ""));
@@ -705,11 +722,15 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
 
     utilities.functional_full("text", |candidate, ds| compile_text(candidate, &ds.theme), None);
 
-    static_utility(
-        utilities,
-        "text-shadow-initial",
-        vec![n(text_shadow_properties), d("--tw-text-shadow-color", "initial")],
-    );
+    // The utilities of 4.1.0 (`switches::TEXT_SHADOW`).
+    let text_shadow = crate::switches::TEXT_SHADOW.on();
+    if text_shadow {
+        static_utility(
+            utilities,
+            "text-shadow-initial",
+            vec![n(text_shadow_properties), d("--tw-text-shadow-color", "initial")],
+        );
+    }
 
     const TEXT_SHADOW: ShadowUtility = ShadowUtility {
         property: "text-shadow",
@@ -722,7 +743,9 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         arbitrary_prefix: "",
         properties: text_shadow_properties,
     };
-    utilities.functional("text-shadow", |candidate, ds| TEXT_SHADOW.compile(candidate, &ds.theme));
+    if text_shadow {
+        utilities.functional("text-shadow", |candidate, ds| TEXT_SHADOW.compile(candidate, &ds.theme));
+    }
 
     {
         static_utility(utilities, "shadow-initial", vec![n(box_shadow_properties), d("--tw-shadow-color", "initial")]);

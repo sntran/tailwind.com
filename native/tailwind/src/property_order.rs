@@ -389,6 +389,10 @@ pub fn property_index(property: &str) -> Option<usize> {
     {
         return None;
     }
+    // Before 4.1.0, the same for the properties of the masks.
+    if (property.starts_with("mask-") || property.starts_with("--tw-mask-")) && !crate::switches::MASK_UTILITIES.on() {
+        return None;
+    }
     static INDEX: OnceLock<HashMap<&str, usize>> = OnceLock::new();
     INDEX
         .get_or_init(|| {

@@ -115,8 +115,34 @@ function same(a, b) {
 // result of the official compiler with this fault is not a difference.
 const [major, minor, patch] = version.split('.').map(Number)
 const KEEPS_AT_VARIANT = major === 4 && (minor < 1 || (minor === 1 && patch < 14))
+
+// A known fault of Tailwind CSS before 4.1.0: an arbitrary value had no
+// check, so a `}` with no open bracket before it (`w-[}]`) closed the
+// rule of the output too early, which is not valid CSS. This compiler
+// refuses such a value in each version (docs/SWITCHES.md).
+const CLOSES_A_RULE_EARLY = major === 4 && minor < 1
+
+// True when a line of the CSS has a `}` with no open `{` before it on
+// that line, and the line is not only that `}`. The printer writes the
+// `}` of a rule on a line of its own.
+function closesARuleEarly(css) {
+  for (const line of css.split('\n')) {
+    if (line.trim() === '}') continue
+    // An escape and a string have no brackets.
+    const text = line.replace(/\\./g, '').replace(/"[^"]*"|'[^']*'/g, '')
+    let depth = 0
+    for (const character of text) {
+      if (character === '{') depth++
+      else if (character === '}' && depth-- === 0) return true
+    }
+  }
+  return false
+}
+
 function hasKnownFault(official) {
-  return KEEPS_AT_VARIANT && official.css !== undefined && /^\s*@variant /m.test(official.css)
+  if (official.css === undefined) return false
+  if (KEEPS_AT_VARIANT && /^\s*@variant /m.test(official.css)) return true
+  return CLOSES_A_RULE_EARLY && closesARuleEarly(official.css)
 }
 
 // The case with no candidate that shows the known fault alone: the other
@@ -488,7 +514,7 @@ console.log(
 )
 if (stats.knownFaults > 0) {
   console.log(
-    `fuzz: ${stats.knownFaults} cases with a known fault of Tailwind CSS ${version} (an \`@variant\` rule in the output): ${stats.knownFaults - stats.knownFaultsOnly} compared again with no candidate that shows it, ${stats.knownFaultsOnly} not compared (the stylesheet shows it)`,
+    `fuzz: ${stats.knownFaults} cases with a known fault of Tailwind CSS ${version} (output that is not valid CSS): ${stats.knownFaults - stats.knownFaultsOnly} compared again with no candidate that shows it, ${stats.knownFaultsOnly} not compared (the stylesheet shows it)`,
   )
 }
 console.log(`fuzz: ${compared} cases compared, ${failures} different (seed ${opts.seed})`)

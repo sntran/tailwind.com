@@ -239,6 +239,14 @@ fn handle_bg_linear(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyst
 
         let interpolation_method = resolve_interpolation_modifier(candidate.modifier.as_ref());
 
+        // Before 4.1.0, there was no fallback with no method.
+        if !crate::switches::GRADIENT_POSITION_FALLBACK.on() {
+            return Some(vec![
+                decl("--tw-gradient-position", format!("{value} {interpolation_method}")),
+                decl("background-image", "linear-gradient(var(--tw-gradient-stops))"),
+            ]);
+        }
+
         Some(vec![
             decl("--tw-gradient-position", value.as_str()),
             rule(
@@ -443,6 +451,22 @@ fn value_utility(utilities: &mut Utilities, class_root: &str, css_property: &'st
     );
 }
 
+/// False for a static utility of this part that the selected version
+/// does not have.
+fn has_static_utility(name: &str) -> bool {
+    // The utilities of 4.1.0.
+    if name.ends_with("-safe") || name.ends_with("-baseline-last") {
+        return crate::switches::SAFE_AND_LAST_BASELINE_ALIGNMENT.on();
+    }
+    if name.starts_with("wrap-") {
+        return crate::switches::WRAP_UTILITIES.on();
+    }
+    if matches!(name, "bg-top-left" | "bg-top-right" | "bg-bottom-left" | "bg-bottom-right") {
+        return crate::switches::CORNER_POSITION_NAMES.on();
+    }
+    true
+}
+
 /// Register the utilities of this part.
 pub fn register(utilities: &mut Utilities, theme: &Theme) {
     let u = utilities;
@@ -450,7 +474,9 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
     // Register static utilities that set one property.
     fn group(u: &mut Utilities, css_property: &'static str, values: &[(&str, &'static str)]) {
         for (name, value) in values {
-            static_decls(u, name, &[(css_property, value)]);
+            if has_static_utility(name) {
+                static_decls(u, name, &[(css_property, value)]);
+            }
         }
     }
 
@@ -829,7 +855,11 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
     }
 
     group(u, "background-size", &[("bg-auto", "auto"), ("bg-cover", "cover"), ("bg-contain", "contain")]);
-    value_utility(u, "bg-size", "background-size");
+    // The utilities of 4.1.0 (`switches::BG_SIZE_AND_POSITION`).
+    let bg_size_and_position = crate::switches::BG_SIZE_AND_POSITION.on();
+    if bg_size_and_position {
+        value_utility(u, "bg-size", "background-size");
+    }
 
     group(u, "background-attachment", &[("bg-fixed", "fixed"), ("bg-local", "local"), ("bg-scroll", "scroll")]);
 
@@ -848,7 +878,9 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
             ("bg-center", "center"),
         ],
     );
-    value_utility(u, "bg-position", "background-position");
+    if bg_size_and_position {
+        value_utility(u, "bg-position", "background-position");
+    }
 
     group(
         u,
@@ -983,6 +1015,12 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         },
         |value| vec![gradient_stop_properties(), decl("--tw-gradient-to-position", value)],
     );
+
+    // The utilities of 4.1.0 (`switches::MASK_UTILITIES`): all the rest of
+    // this part.
+    if !crate::switches::MASK_UTILITIES.on() {
+        return;
+    }
 
     // mask-image
     static_decls(u, "mask-none", &[("mask-image", "none")]);

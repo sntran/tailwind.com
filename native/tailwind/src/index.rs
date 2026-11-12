@@ -817,12 +817,16 @@ impl Collector {
         let mut inline = false;
         let mut path: &str = &at.params;
 
-        if path.starts_with("not ") {
+        // Before 4.1.0, `not` and `inline(…)` were a part of the path, and
+        // such a path has no quotes.
+        let not_and_inline = crate::switches::SOURCE_NOT_AND_INLINE.on();
+
+        if not_and_inline && path.starts_with("not ") {
             not = true;
             path = &path[4..];
         }
 
-        if path.starts_with("inline(") {
+        if not_and_inline && path.starts_with("inline(") {
             inline = true;
             path = slice(path, 7);
             // Before 4.2.0, white space around the argument was an error.

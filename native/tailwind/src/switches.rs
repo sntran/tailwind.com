@@ -702,6 +702,90 @@ pub const FALLBACKS_AFTER_IMPORTS: Switch = Switch::since(4, 1, 1, "the @propert
 /// `00`, `01`, … `10`.
 pub const BRACE_RANGE_NO_PADDING: Switch = Switch::since(4, 1, 1, "a brace range has no padding");
 
+// --- 4.1.0 ----------------------------------------------------------------
+
+/// Each `@property` rule gives a fallback for a browser with no
+/// `@property`: a declaration with the initial value in one rule
+/// `@supports … { @layer base { … } }`. Before: no fallbacks.
+pub const AT_PROPERTY_FALLBACKS: Switch = Switch::since(4, 1, 0, "the @property rules have fallbacks");
+
+/// A declaration with `color-mix(…)` and a theme variable gets a fallback
+/// with the value of the variable, and the declaration goes into an
+/// `@supports` rule. Before: no fallback.
+pub const COLOR_MIX_FALLBACK: Switch = Switch::since(4, 1, 0, "color-mix() with a theme variable has a fallback");
+
+/// `bg-linear-to-r` and `bg-linear-45` set `--tw-gradient-position` with no
+/// interpolation method, and again with the method in an `@supports` rule.
+/// Before: one declaration with the method.
+pub const GRADIENT_POSITION_FALLBACK: Switch = Switch::since(4, 1, 0, "bg-linear-* has a fallback with no interpolation method");
+
+/// An arbitrary value, an arbitrary modifier and an arbitrary variant have
+/// no `;` and no closing bracket at the top level, and a `{` opens no
+/// level: `[color:red;x:y]`, `w-[1px)]` and `[--x:{a:b}]` are not valid.
+/// Before: no check. (A `}` with no open bracket before it is not valid
+/// in each version: the output of the official compiler for it was not
+/// valid CSS. See docs/SWITCHES.md.)
+pub const ARBITRARY_VALUE_CHECK: Switch = Switch::since(4, 1, 0, "an arbitrary value has a check of its brackets and of ;");
+
+/// `@source not "…"`, `@source inline("…")` and `@source not inline("…")`.
+/// Before: each was the error "`@source` paths must be quoted."
+pub const SOURCE_NOT_AND_INLINE: Switch = Switch::since(4, 1, 0, "@source not and @source inline()");
+
+/// `--theme(--x)` and `theme(--x)` give the variable in each place.
+/// Before: after the first `theme(…)` with a key path
+/// (`theme(colors.red.500)`), the theme function of the plugin layer read
+/// each next path: `--theme(--x)` gave the value and not `var(--x)`, and
+/// the variable was not marked as used.
+pub const THEME_VARIABLE_AFTER_KEY_PATH: Switch = Switch::since(4, 1, 0, "--theme(--x) gives the variable also after theme() with a key path");
+
+/// `shadow-*` and `inset-shadow-*` take an opacity as a modifier
+/// (`shadow-xl/50`), a shadow color is `color-mix(…)` with
+/// `--tw-shadow-alpha`, and the two alpha variables have `@property`
+/// rules. Before: the color as it was, no result for a theme shadow with a
+/// modifier, and each other shadow ignored its modifier.
+pub const SHADOW_ALPHA: Switch = Switch::since(4, 1, 0, "shadow-* and inset-shadow-* take an opacity modifier");
+
+/// `drop-shadow-*` takes a color (`drop-shadow-red-500`) and an opacity
+/// modifier, and writes the shadow to `--tw-drop-shadow-size`. The filter
+/// utilities have three more `@property` rules. Before: only a theme
+/// value or an arbitrary value, as one `drop-shadow(…)` for each shadow.
+pub const DROP_SHADOW_COLOR: Switch = Switch::since(4, 1, 0, "drop-shadow-* takes a color and an opacity modifier");
+
+/// The utilities `text-shadow-*`, and `text-*` ignores the theme keys
+/// `--text-shadow-*`. Before: no such utilities, and `text-shadow-sm` was
+/// the font size `--text-shadow-sm`.
+pub const TEXT_SHADOW: Switch = Switch::since(4, 1, 0, "text-shadow-* utilities");
+
+/// The utilities `mask-*`, and the `mask-*` and `--tw-mask-*` properties in
+/// the order of the properties. Before: no such utilities, and these
+/// properties had no place in the order.
+pub const MASK_UTILITIES: Switch = Switch::since(4, 1, 0, "mask-* utilities");
+
+/// The alignment utilities with `safe` (`items-center-safe`,
+/// `justify-end-safe`, …) and with `last baseline` (`items-baseline-last`,
+/// `self-baseline-last`). Before: no such utilities.
+pub const SAFE_AND_LAST_BASELINE_ALIGNMENT: Switch = Switch::since(4, 1, 0, "safe and last baseline alignment utilities");
+
+/// The utilities `wrap-anywhere`, `wrap-break-word` and `wrap-normal`.
+/// Before: no such utilities.
+pub const WRAP_UTILITIES: Switch = Switch::since(4, 1, 0, "wrap-* utilities");
+
+/// The utilities `bg-size-*` and `bg-position-*` for arbitrary values.
+/// Before: no such utilities.
+pub const BG_SIZE_AND_POSITION: Switch = Switch::since(4, 1, 0, "bg-size-* and bg-position-* utilities");
+
+/// The corner positions have the vertical side first: `bg-top-left`,
+/// `bg-top-right`, `bg-bottom-left`, `bg-bottom-right`, and the same for
+/// `object-*`. Before: only `bg-left-top`, `object-left-top`, … (they
+/// stay, as old utilities).
+pub const CORNER_POSITION_NAMES: Switch = Switch::since(4, 1, 0, "bg-top-left and object-top-left are names of corner positions");
+
+/// The variants `details-content`, `user-valid`, `user-invalid`,
+/// `inverted-colors`, `noscript`, `pointer-none`, `pointer-coarse`,
+/// `pointer-fine`, `any-pointer-none`, `any-pointer-coarse` and
+/// `any-pointer-fine`. Before: no such variants.
+pub const STATIC_VARIANTS_OF_4_1: Switch = Switch::since(4, 1, 0, "details-content, user-valid, noscript, pointer-* and more variants");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -824,4 +908,19 @@ pub const ALL: &[&Switch] = &[
     &INSET_SHADOW_LIST,
     &FALLBACKS_AFTER_IMPORTS,
     &BRACE_RANGE_NO_PADDING,
+    &AT_PROPERTY_FALLBACKS,
+    &COLOR_MIX_FALLBACK,
+    &GRADIENT_POSITION_FALLBACK,
+    &ARBITRARY_VALUE_CHECK,
+    &SOURCE_NOT_AND_INLINE,
+    &THEME_VARIABLE_AFTER_KEY_PATH,
+    &SHADOW_ALPHA,
+    &DROP_SHADOW_COLOR,
+    &TEXT_SHADOW,
+    &MASK_UTILITIES,
+    &SAFE_AND_LAST_BASELINE_ALIGNMENT,
+    &WRAP_UTILITIES,
+    &BG_SIZE_AND_POSITION,
+    &CORNER_POSITION_NAMES,
+    &STATIC_VARIANTS_OF_4_1,
 ];

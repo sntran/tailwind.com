@@ -39,6 +39,10 @@ fn ignored_theme_keys(namespace: &str) -> &'static [&'static str] {
 
 fn is_ignored_theme_key(theme_key: &str, namespace: &str) -> bool {
     ignored_theme_keys(namespace).iter().any(|ignored| {
+        // Before 4.1.0, `--text-shadow-*` was a key of `--text`.
+        if *ignored == "--text-shadow" && !crate::switches::TEXT_SHADOW.on() {
+            return false;
+        }
         theme_key == *ignored
             || (theme_key.starts_with(ignored) && theme_key.as_bytes().get(ignored.len()) == Some(&b'-'))
     })
