@@ -23,6 +23,9 @@
 //   compiler  a stylesheet and a list of candidates: compile(css) and
 //             build(candidates) of the npm package tailwindcss, against
 //             examples/fuzz_build.rs, which does the same with this crate.
+//             About one third of the cases have two builds on the one
+//             compiler (`first` candidates, then the other ones), as the
+//             watch does: the result is the text of the second build.
 //   project   a directory with app.css and source files with classes:
 //             the official command line program against this program,
 //             with the same arguments (also --minify and --optimize). The
@@ -95,7 +98,7 @@ function officialResult(c) {
 // --- This compiler, through the builder ----------------------------------
 
 function ourResults(cases) {
-  const input = cases.map((c) => JSON.stringify({ css: c.css, candidates: c.candidates, base: c.base ?? '' })).join('\n') + '\n'
+  const input = cases.map((c) => JSON.stringify({ css: c.css, candidates: c.candidates, base: c.base ?? '', first: c.first })).join('\n') + '\n'
   const run = spawnSync(opts.builder, [path.join(officialDir)], { input, maxBuffer: 1024 * 1024 * 1024 })
   if (run.status !== 0) {
     throw new Error(`the builder failed (status ${run.status}): ${run.stderr.toString().slice(0, 2000)}`)
@@ -145,16 +148,24 @@ function hasKnownFault(official) {
   return CLOSES_A_RULE_EARLY && closesARuleEarly(official.css)
 }
 
+// The case with only the candidates at these indexes. For a case with two
+// builds (`first`), each candidate stays in its build.
+function keep(c, indexes) {
+  const candidates = indexes.map((i) => c.candidates[i])
+  if (c.first === undefined) return { ...c, candidates }
+  return { ...c, candidates, first: indexes.filter((i) => i < c.first).length }
+}
+
 // The case with no candidate that shows the known fault alone: the other
 // candidates are compared again. `null`: the stylesheet shows the fault
 // with no candidate (`@apply` of a custom variant).
 async function withoutKnownFault(c) {
-  if (hasKnownFault(await officialResult({ ...c, candidates: [] }))) return null
-  const candidates = []
-  for (const one of c.candidates) {
-    if (!hasKnownFault(await officialResult({ ...c, candidates: [one] }))) candidates.push(one)
+  if (hasKnownFault(await officialResult(keep(c, [])))) return null
+  const indexes = []
+  for (let i = 0; i < c.candidates.length; i++) {
+    if (!hasKnownFault(await officialResult(keep(c, [i])))) indexes.push(i)
   }
-  const rest = { ...c, candidates }
+  const rest = keep(c, indexes)
   return hasKnownFault(await officialResult(rest)) ? null : rest
 }
 
@@ -351,7 +362,12 @@ function compilerCase() {
   const parts = stylesheet()
   const candidates = []
   for (let n = random.int(40); n > 0; n--) candidates.push(candidate())
-  return { parts, css: parts.join('\n'), candidates, files: caseFiles, copy: caseCopy }
+  // Some cases have two builds on one compiler, as the watch does when
+  // the source files get new candidates: `first` candidates, then the
+  // other ones. A compiler that keeps state between builds must give the
+  // result of the official compiler here too.
+  const first = random.chance(0.3) ? random.int(candidates.length + 1) : undefined
+  return { parts, css: parts.join('\n'), candidates, first, files: caseFiles, copy: caseCopy }
 }
 
 // --- The reducer ---------------------------------------------------------
@@ -365,21 +381,24 @@ async function differs(c) {
 // The smallest part of the case that still differs: first the
 // candidates, then the parts of the stylesheet, one at a time.
 async function reduce(c) {
-  let best = { parts: [...c.parts], candidates: [...c.candidates], files: c.files, copy: c.copy, base: c.base }
+  let best = { parts: [...c.parts], candidates: [...c.candidates], first: c.first, files: c.files, copy: c.copy, base: c.base }
   const make = (b) => ({ ...b, css: b.parts.join('\n') })
-  if (best.candidates.length > 0 && (await differs(make({ ...best, candidates: [] })))) {
-    best.candidates = []
+  // One build, when the two builds are not the cause.
+  if (best.first !== undefined && (await differs(make({ ...best, first: undefined })))) best.first = undefined
+  const all = best.candidates.map((_, i) => i)
+  if (best.candidates.length > 0 && (await differs(make(keep(best, []))))) {
+    best = keep(best, [])
   } else {
     // A candidate that differs alone is the best result.
-    for (const one of best.candidates) {
-      if (await differs(make({ ...best, candidates: [one] }))) {
-        best.candidates = [one]
+    for (const i of all) {
+      if (await differs(make(keep(best, [i])))) {
+        best = keep(best, [i])
         break
       }
     }
     for (let i = best.candidates.length - 1; i >= 0 && best.candidates.length > 1; i--) {
-      const fewer = best.candidates.filter((_, j) => j !== i)
-      if (await differs(make({ ...best, candidates: fewer }))) best.candidates = fewer
+      const fewer = keep(best, best.candidates.map((_, j) => j).filter((j) => j !== i))
+      if (await differs(make(fewer))) best = fewer
     }
   }
   for (let i = best.parts.length - 1; i >= 0; i--) {
@@ -479,11 +498,11 @@ for (let done = 0; done < opts.cases && Date.now() < compilerDeadline; done += B
     const reduced = await reduce(cases[i])
     const [reducedOurs] = ourResults([reduced])
     const reducedTheirs = await officialResult(reduced)
-    console.log(`fuzz: a difference in compiler case ${done + i}:\n${reduced.css}\n  candidates: ${JSON.stringify(reduced.candidates)}`)
+    console.log(`fuzz: a difference in compiler case ${done + i}:\n${reduced.css}\n  candidates: ${JSON.stringify(reduced.candidates)}${reduced.first === undefined ? '' : `\n  two builds: the first ${reduced.first} candidates, then the other ones`}`)
     record({
       kind: 'compiler',
-      case: { css: cases[i].css, candidates: cases[i].candidates, files: cases[i].files, copy: cases[i].copy },
-      reduced: { css: reduced.css, candidates: reduced.candidates, files: usedFiles(reduced), copy: usedCopy(reduced), official: reducedTheirs, ours: reducedOurs },
+      case: { css: cases[i].css, candidates: cases[i].candidates, first: cases[i].first, files: cases[i].files, copy: cases[i].copy },
+      reduced: { css: reduced.css, candidates: reduced.candidates, first: reduced.first, files: usedFiles(reduced), copy: usedCopy(reduced), official: reducedTheirs, ours: reducedOurs },
     })
   }
 }

@@ -210,7 +210,7 @@ project. `JS` marks a change in the plugin layer.
 | `SCOPE_HOISTING` | fix | S | rare | `@scope` stayed nested in the rule, with its contents as they were |
 | `DEAD_PSEUDO_ELEMENT_RULES` | fix | S | rare | A rule after a pseudo-element (`::selection > *`) was in the output |
 | `UNUSED_MODIFIER_IS_INVALID` | fix | S | rare | `rounded-sm/50` gave the class with the modifier ignored |
-| `EMPTY_EXTRA_MODIFIER_IS_INVALID` | fix | S | edge | `bg-red-500/50/` was valid |
+| `EMPTY_EXTRA_MODIFIER_IS_INVALID` | fix | S | edge | `bg-red-500/50/` was valid. Two variants that differed only in an empty second modifier kept the sequence of the candidates |
 | `BALANCED_ARBITRARY_VALUE` | fix | M | rare | `w-[calc(1px]` was valid: only `;` and a closing bracket at depth 0 were errors |
 | `SUPPORTS_KEYWORDS_AS_FUNCTIONS` | fix | M | rare | `and`, `or`, `not` got spaces around them in all of a `supports-[…]` value |
 | `BREAKPOINT_DECIMAL_SORT` | fix | S | edge | `40.25rem` and `40.5rem` were equal in the sort (`parseInt`) |

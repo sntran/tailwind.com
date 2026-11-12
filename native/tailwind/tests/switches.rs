@@ -119,3 +119,83 @@ fn each_switch_is_in_the_list() {
         assert!(!switch.what.is_empty());
     }
 }
+
+/// The result of a list of builds on one compiler: the text of the last
+/// build, or the first error.
+fn sequence(css: &str, builds: &[Vec<String>], version: Version) -> serde_json::Value {
+    let options = CompileOptions { test_mode: true, version: Some(version), ..CompileOptions::default() };
+    let mut compiler = match compile(css, options) {
+        Ok(compiler) => compiler,
+        Err(error) => return serde_json::json!({ "error": error.message }),
+    };
+    let mut output = String::new();
+    for candidates in builds {
+        match compiler.try_build(candidates) {
+            Ok(css) => output = css,
+            Err(error) => return serde_json::json!({ "error": error.message }),
+        }
+    }
+    serde_json::json!({ "css": output })
+}
+
+/// The cases where the official compiler of an old version gives another
+/// text for another sequence of the candidates, with the first version
+/// that does not. The Rust compiler does the same as that version.
+const SEQUENCE_SHOWS: &[(&str, Version)] = &[
+    // Before 4.3.4, `group-hover/foo//bar:flex` and `group-hover/foo/:flex`
+    // are the same variant for the sort, so their rules stay in the
+    // sequence of the candidates.
+    ("4.3.4 an empty extra modifier", Version(4, 3, 4)),
+];
+
+/// The watch builds again when the source files have new candidates
+/// (`specs/Watch.tla`). The model takes the output as a function of the
+/// input and of the set of candidates. So, as each version, builds in a
+/// sequence must give the result of one build with all the candidates:
+/// in two parts, one candidate at a time, and in the other direction.
+/// (The fuzzer compares builds in a sequence with the official compiler:
+/// `first` in `tests/fuzz/fuzz.mjs`.)
+#[test]
+fn builds_in_a_sequence_give_the_result_of_one_build_as_each_version() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/upstream/switches.jsonl");
+    let text = std::fs::read_to_string(path).expect("tests/upstream/switches.jsonl");
+    let mut different: Vec<String> = Vec::new();
+    let mut compared = 0;
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let case: serde_json::Value = serde_json::from_str(line).expect("a JSON case");
+        let name = case["name"].as_str().unwrap_or("?");
+        let css = case["css"].as_str().expect("css");
+        let candidates: Vec<String> =
+            case["candidates"].as_array().map(|list| list.iter().filter_map(|c| c.as_str().map(String::from)).collect()).unwrap_or_default();
+        if candidates.len() < 2 {
+            continue;
+        }
+        let (first, second) = candidates.split_at(candidates.len() / 2);
+        let one_at_a_time: Vec<Vec<String>> = candidates.iter().map(|c| vec![c.clone()]).collect();
+        let other_direction: Vec<Vec<String>> = candidates.iter().rev().map(|c| vec![c.clone()]).collect();
+        let forms: [(&str, Vec<Vec<String>>); 4] = [
+            ("two parts", vec![first.to_vec(), second.to_vec()]),
+            ("two parts, the second first", vec![second.to_vec(), first.to_vec()]),
+            ("one candidate at a time", one_at_a_time),
+            ("one candidate at a time, the last first", other_direction),
+        ];
+        for version in case["results"].as_object().expect("results").keys() {
+            let parsed = Version::parse(version).expect("a version");
+            if SEQUENCE_SHOWS.iter().any(|(case, fixed)| *case == name && parsed < *fixed) {
+                continue;
+            }
+            let expected = sequence(css, std::slice::from_ref(&candidates), parsed);
+            if expected.get("error").is_some() {
+                continue;
+            }
+            for (form, builds) in &forms {
+                compared += 1;
+                if sequence(css, builds, parsed) != expected {
+                    different.push(format!("{name}, as Tailwind CSS {version}, {form}"));
+                }
+            }
+        }
+    }
+    assert!(compared > 0);
+    assert!(different.is_empty(), "{} of {compared} sequences give another result:\n{}", different.len(), different.join("\n"));
+}

@@ -67,7 +67,10 @@ export async function officialTailwind(dir) {
   }
 
   // compile(css) and build(candidates). The result is { css } or { error }.
-  async function run({ css, candidates, base }) {
+  // With `first` (a number), two builds on the one compiler, as the watch
+  // does: the first `first` candidates, then the other candidates. The
+  // result is the text of the second build.
+  async function run({ css, candidates, base, first }) {
     // The warnings of the compiler (console.warn) and the messages of
     // plugins (console.log) are not compared.
     const { warn, log } = console
@@ -75,7 +78,8 @@ export async function officialTailwind(dir) {
     console.log = () => {}
     try {
       const compiler = await official.compile(css, { base: base ?? officialDir, loadStylesheet, loadModule })
-      return { css: compiler.build(candidates).replace(BANNER, '') }
+      if (first !== undefined) compiler.build(candidates.slice(0, first))
+      return { css: compiler.build(first === undefined ? candidates : candidates.slice(first)).replace(BANNER, '') }
     } catch (e) {
       return { error: e?.message ?? String(e) }
     } finally {

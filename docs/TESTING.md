@@ -184,6 +184,25 @@ TLC found a real error with this model. The first version of the watch
 recorded the stamps of the files of a new compiler after it read them.
 An edit between the read and the stamp was then lost.
 
+The model takes one thing as given: the output of a compiler is a
+function of its input and of the set of candidates, and the sequence of
+the builds does not change it. The code must keep this as each version
+of Tailwind CSS, also where a switch copies a fault of an old version
+that keeps state between builds (the one cache of compiled candidates
+before 4.1.12, the shared nodes of fixed values in 4.1.14). Two checks
+hold it:
+
+- The test `builds_in_a_sequence_give_the_result_of_one_build_as_each_version`
+  (`tests/switches.rs`): for each recorded case and version, builds in
+  two parts, one candidate at a time, and in the other direction give
+  the result of one build. One case is the exception, and the official
+  compiler does the same: before 4.3.4, two candidates that differ only
+  in an empty second modifier (`group-hover/foo//bar:flex`,
+  `group-hover/foo/:flex`) keep the sequence in which they came.
+- The fuzzer: about one third of its compiler cases make two builds on
+  one compiler, and the result must be that of the official compiler of
+  the version (next section).
+
 ## The Erlang and Elixir modules
 
 `mix test` (ExUnit, `tests/*_test.exs`) runs the program of
@@ -212,7 +231,10 @@ them). Two kinds of cases:
   prefix, `important`) and random candidates (the class list, the
   variants, arbitrary values, edge cases, and small random changes of
   them). `compile()` and `build()` of the npm package against
-  `examples/fuzz_build.rs` of this crate.
+  `examples/fuzz_build.rs` of this crate. About one third of these cases
+  make two builds on the one compiler, as the watch does when the
+  source files get new candidates: some candidates, then the other
+  ones. The result is the text of the second build.
 - **project**: a directory with `app.css` and HTML, HEEx and JavaScript
   files with random classes. The official command line program against
   this program, with the same arguments (also `--minify` and
