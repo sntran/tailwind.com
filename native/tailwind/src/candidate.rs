@@ -422,11 +422,14 @@ fn has_a_dash_at_the_start(value: &str) -> bool {
 
 /// True when the text in `(…)` can be the short form of a variable: it
 /// starts with `--`. Before 4.1.6: see `has_a_dash_at_the_start`.
+/// (Before 4.0.1, a modifier and the value of a variant had no check.)
 fn is_variable_short_form(value: &str) -> bool {
     if switches::PAREN_VALUE_NEEDS_TWO_DASHES.on() {
         value.starts_with("--")
-    } else {
+    } else if switches::PAREN_MODIFIER_NEEDS_DASH.on() {
         has_a_dash_at_the_start(value)
+    } else {
+        true
     }
 }
 

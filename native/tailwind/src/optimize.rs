@@ -323,7 +323,8 @@ impl Optimizer<'_> {
                 }
                 // Before 4.1.13, equal declarations stayed in a rule.
                 if switches::NESTING_PASS.on() || !switches::EQUAL_DECLARATIONS_REMOVED.on() {
-                    if !self.arena.children(copy).is_empty() {
+                    // (Before 4.0.2, an empty rule stayed in the output.)
+                    if !self.arena.children(copy).is_empty() || !switches::EMPTY_RULES_REMOVED.on() {
                         self.arena.attach(parent, copy);
                     }
                 } else {
@@ -386,9 +387,13 @@ impl Optimizer<'_> {
                     self.keyframes.push((copy, rule.params.clone()));
                 }
 
+                // Before 4.0.2, each at-rule stayed in the output. Only in
+                // 4.0.2, an `@import` rule with no body was removed.
                 if !self.arena.children(copy).is_empty()
-                    || matches!(rule.name.as_str(), "@layer" | "@charset" | "@custom-media" | "@namespace" | "@import")
+                    || matches!(rule.name.as_str(), "@layer" | "@charset" | "@custom-media" | "@namespace")
+                    || (rule.name == "@import" && switches::EMPTY_IMPORT_STAYS.on())
                     || (rule.name == "@apply" && switches::APPLY_CSS_MIXINS.on())
+                    || !switches::EMPTY_RULES_REMOVED.on()
                 {
                     self.arena.attach(parent, copy);
                 }
@@ -675,7 +680,7 @@ impl Optimizer<'_> {
 /// whose one child is the context node of the theme.
 fn is_first_theme_rule(node: &AstNode) -> bool {
     let AstNode::Rule(rule) = node else { return false };
-    rule.selector == ":root, :host"
+    rule.selector == crate::index::theme_rule_selector()
         && matches!(&rule.nodes[..], [AstNode::Context(inner)]
             if inner.context.len() == 1 && inner.context.get("theme").is_some_and(ContextValue::truthy))
 }

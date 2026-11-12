@@ -84,9 +84,12 @@ fn decode_node(node: &mut ValueAstNode) {
                 convert_in_place(&mut node.value, false);
                 for (i, child) in node.nodes.iter_mut().enumerate() {
                     // The first argument of `var()` keeps its underscores.
+                    // (Before 4.0.4, it also kept `\_`.)
                     if i == 0 {
                         if let ValueAstNode::Word(word) = child {
-                            convert_in_place(&mut word.value, true);
+                            if crate::switches::VAR_NAME_UNESCAPES_UNDERSCORE.on() {
+                                convert_in_place(&mut word.value, true);
+                            }
                             continue;
                         }
                     }

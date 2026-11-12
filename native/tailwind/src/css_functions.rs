@@ -160,8 +160,13 @@ pub fn substitute_functions(ast: &mut Vec<AstNode>, design_system: &DesignSystem
     let mut features = FEATURES_NONE;
     let mut error: Option<Error> = None;
 
+    // Before 4.0.4, a walk did not go into an at-root node (the
+    // `@keyframes` rules of the theme).
+    let enters_at_root = crate::switches::WALK_ENTERS_AT_ROOT.on();
+
     walk(ast, |node, _| {
         let new_value = match &*node {
+            AstNode::AtRoot(_) if !enters_at_root => return WalkAction::Skip,
             // A declaration: `color: theme(--color-red-500)`.
             AstNode::Declaration(d) => match &d.value {
                 Some(value) if has_theme_function_invocation(value) => {

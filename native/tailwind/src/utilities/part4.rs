@@ -274,9 +274,17 @@ impl ShadowUtility {
     }
 }
 
-/// The line height from the modifier of a `text-*` candidate. `None` is an
-/// invalid modifier.
-fn text_line_height(modifier: &CandidateModifier, theme: &Theme) -> Option<String> {
+/// The line height from the modifier of a `text-*` candidate.
+enum LineHeight {
+    Value(String),
+    /// The candidate is not valid.
+    Invalid,
+    /// Before 4.0.1: the modifier gives no line height, and the candidate
+    /// is valid with no line height.
+    Ignored,
+}
+
+fn text_line_height(modifier: &CandidateModifier, theme: &Theme) -> LineHeight {
     let mut value = truthy(if modifier.kind == ValueKind::Arbitrary {
         Some(modifier.value.clone())
     } else {
@@ -284,16 +292,26 @@ fn text_line_height(modifier: &CandidateModifier, theme: &Theme) -> Option<Strin
     });
 
     if value.is_none() && is_valid_spacing_multiplier(&modifier.value) {
-        truthy(theme.resolve(None, &["--spacing"]))?;
+        if truthy(theme.resolve(None, &["--spacing"])).is_none() {
+            return LineHeight::Invalid;
+        }
         value = Some(format!("--spacing({})", modifier.value));
     }
 
+    // Before 4.0.1, a modifier with no line height was ignored, and `none`
+    // was such a modifier.
+    let strict = crate::switches::TEXT_MODIFIER_IS_LINE_HEIGHT.on();
+
     // Shorthand for `leading-none`
-    if value.is_none() && modifier.value == "none" {
+    if value.is_none() && modifier.value == "none" && strict {
         value = Some("1".to_string());
     }
 
-    value
+    match value {
+        Some(value) => LineHeight::Value(value),
+        None if strict => LineHeight::Invalid,
+        None => LineHeight::Ignored,
+    }
 }
 
 /// The `text-*` utility: a color or a font size.
@@ -312,10 +330,11 @@ fn compile_text(candidate: &FunctionalCandidate, theme: &Theme) -> Compiled {
                 Some("size" | "length" | "percentage" | "absolute-size" | "relative-size") => {
                     if let Some(modifier) = &candidate.modifier {
                         return match text_line_height(modifier, theme) {
-                            Some(line_height) => {
+                            LineHeight::Value(line_height) => {
                                 Compiled::Nodes(vec![decl("font-size", value.as_str()), decl("line-height", line_height)])
                             }
-                            None => Compiled::Null,
+                            LineHeight::Invalid => Compiled::Null,
+                            LineHeight::Ignored => Compiled::Nodes(vec![decl("font-size", value.as_str())]),
                         };
                     }
                     Compiled::Nodes(vec![decl("font-size", value.as_str())])
@@ -340,8 +359,11 @@ fn compile_text(candidate: &FunctionalCandidate, theme: &Theme) -> Compiled {
 
     if let Some(modifier) = &candidate.modifier {
         return match text_line_height(modifier, theme) {
-            Some(line_height) => Compiled::Nodes(vec![decl("font-size", font_size), decl("line-height", line_height)]),
-            None => Compiled::Null,
+            LineHeight::Value(line_height) => {
+                Compiled::Nodes(vec![decl("font-size", font_size), decl("line-height", line_height)])
+            }
+            LineHeight::Invalid => Compiled::Null,
+            LineHeight::Ignored => Compiled::Nodes(vec![decl("font-size", font_size)]),
         };
     }
 

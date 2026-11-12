@@ -312,6 +312,12 @@ fn for_each_apply(nodes: &[AstNode], f: &mut dyn FnMut(&AtRule) -> Result<()>) -
 /// The first walk: find the `@utility` definitions and the `@apply` rules.
 fn collect(nodes: &[AstNode], path: &mut Path, design_system: &DesignSystem, out: &mut Collected) -> Result<()> {
     for (index, node) in nodes.iter().enumerate() {
+        // Before 4.0.4, a walk did not go into an at-root node (the
+        // `@keyframes` rules of the theme).
+        if matches!(node, AstNode::AtRoot(_)) && !crate::switches::WALK_ENTERS_AT_ROOT.on() {
+            continue;
+        }
+
         path.push(index);
 
         if let AstNode::AtRule(at) = node {

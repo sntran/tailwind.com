@@ -622,7 +622,9 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
             if value.options & theme::REFERENCE != 0 {
                 continue;
             }
-            nodes.push(decl(escape(&key).into_owned(), value.value).with_src(value.src.as_ref()));
+            // (Before 4.0.2, the key had its escapes.)
+            let property = if crate::switches::THEME_KEYS_UNESCAPED.on() { escape(&key).into_owned() } else { key };
+            nodes.push(decl(property, value.value).with_src(value.src.as_ref()));
         }
 
         // An `AtRoot` moves the `@keyframes` out of `:root`. They are at
@@ -633,8 +635,20 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
         // name was a word in the value of an `--animate-*` variable
         // (`animation.split(/\s+/)`).
         let animation_parts: Option<Vec<String>> = (!crate::switches::THEME_KEYFRAMES_ALL_COLLECTED.on()).then(|| {
+            // (Before 4.0.4: `animation.split(' ')`.)
+            let at_white_space = crate::switches::ANIMATE_NAMES_AT_WHITE_SPACE.on();
             let animations = design_system.theme.namespace("--animate");
-            animations.values().flat_map(|animation| crate::optimize::split_at_white_space(animation)).map(String::from).collect()
+            animations
+                .values()
+                .flat_map(|animation| {
+                    if at_white_space {
+                        crate::optimize::split_at_white_space(animation)
+                    } else {
+                        animation.split(' ').collect()
+                    }
+                })
+                .map(String::from)
+                .collect()
         });
         for keyframes in design_system.theme.get_keyframes() {
             if animation_parts.as_ref().is_some_and(|parts| !parts.contains(&keyframes.params)) {
@@ -686,10 +700,20 @@ fn for_each_utility(nodes: &mut [AstNode], ordinal: &mut usize, f: &mut dyn FnMu
     }
 }
 
+/// The selector of the rule that has the variables of the theme. Before
+/// 4.0.1, it was `:root`.
+pub fn theme_rule_selector() -> &'static str {
+    if crate::switches::THEME_ROOT_AND_HOST.on() {
+        ":root, :host"
+    } else {
+        ":root"
+    }
+}
+
 /// True for the rule that is at the place of the first `@theme`.
 fn is_first_theme_rule(node: &AstNode) -> bool {
     let AstNode::Rule(rule) = node else { return false };
-    if rule.selector != ":root, :host" || rule.nodes.len() != 1 {
+    if rule.selector != theme_rule_selector() || rule.nodes.len() != 1 {
         return false;
     }
     matches!(&rule.nodes[0], AstNode::Context(inner)
@@ -722,6 +746,22 @@ impl Collector {
     fn visit(&mut self, node: &mut AstNode, ancestors: &[AstNode]) -> Result<WalkAction<AstNode>> {
         let AstNode::AtRule(at) = node else { return Ok(WalkAction::Continue) };
         let has_parent = css_parent(ancestors).is_some();
+
+        // Before 4.0.4, the compiler did not look in an `@media` rule that
+        // stays in the output. An at-rule with a body stayed in the output
+        // there, which is not valid CSS: for that one, the result is the
+        // result of 4.0.4.
+        if !crate::switches::AT_RULES_IN_MEDIA.on() && ancestors.iter().any(|ancestor| ancestor.is_at_rule("@media")) {
+            // (Before 4.0.2, an at-rule with no body stayed too.)
+            let stays = match at.name.as_str() {
+                "@theme" | "@utility" | "@custom-variant" => !at.nodes.is_empty() || !crate::switches::EMPTY_RULES_REMOVED.on(),
+                "@tailwind" | "@source" => !crate::switches::EMPTY_RULES_REMOVED.on(),
+                _ => false,
+            };
+            if !stays && at.name != "@variant" {
+                return Ok(WalkAction::Continue);
+            }
+        }
 
         // Find `@tailwind utilities`. `build` replaces it with the rules of
         // the candidates.
@@ -1095,6 +1135,12 @@ impl Collector {
         if !unknown_params.is_empty() {
             at.params = unknown_params.join(" ");
         } else if !params.is_empty() {
+            // In 4.0.2 and 4.0.3, the compiler collected each `@variant`
+            // rule of the import two times, and applied the variant two
+            // times. An `@variant` rule in itself gives that result.
+            if crate::switches::AT_VARIANT_IN_IMPORT_TWICE.on() && !crate::switches::AT_VARIANT_IN_IMPORT_ONCE.on() {
+                nest_variants_in_themselves(&mut at.nodes, css_parent(ancestors).is_none());
+            }
             return Ok(WalkAction::Replace(std::mem::take(&mut at.nodes)));
         }
 
@@ -1139,9 +1185,12 @@ impl Collector {
                 // The `@theme` rule itself goes away, so keep the
                 // `@keyframes` rules for the output.
                 AstNode::AtRule(child_rule) if child_rule.name == "@keyframes" => {
-                    // Before 4.0.9, the `@keyframes` rules of `@theme
-                    // reference` were not in the output.
-                    if theme_options & theme::REFERENCE == 0 || crate::switches::REFERENCE_THEME_KEYFRAMES.on() {
+                    // From 4.0.2 to 4.0.8, the `@keyframes` rules of
+                    // `@theme reference` were not in the output.
+                    if theme_options & theme::REFERENCE == 0
+                        || crate::switches::REFERENCE_THEME_KEYFRAMES.on()
+                        || !crate::switches::REFERENCE_THEME_NO_KEYFRAMES.on()
+                    {
                         theme.add_keyframes(child_rule.clone());
                     }
                     return WalkAction::Skip;
@@ -1150,7 +1199,16 @@ impl Collector {
                 AstNode::Declaration(declaration) if declaration.property.starts_with("--") => {
                     let value = declaration.value.as_deref().unwrap_or("");
                     let src = declaration.loc.src().cloned();
-                    if let Err(e) = theme.add_with_src(&unescape(&declaration.property), value, theme_options, src) {
+                    // Before 4.0.2, the key was the text of the property,
+                    // with its escapes (but `\*` at the end was `*`).
+                    let key = if crate::switches::THEME_KEYS_UNESCAPED.on() {
+                        unescape(&declaration.property)
+                    } else if let Some(namespace) = declaration.property.strip_suffix("\\*") {
+                        format!("{namespace}*").into()
+                    } else {
+                        declaration.property.as_str().into()
+                    };
+                    if let Err(e) = theme.add_with_src(&key, value, theme_options, src) {
                         error = Some(e);
                         return WalkAction::Stop;
                     }
@@ -1188,11 +1246,31 @@ impl Collector {
         {
             self.has_first_theme_rule = true;
             let marker = context(context_with("theme", true.into()), Vec::new());
-            Ok(WalkAction::ReplaceSkip(vec![style_rule(":root, :host", vec![marker]).with_src(at.loc.src())]))
+            Ok(WalkAction::ReplaceSkip(vec![style_rule(theme_rule_selector(), vec![marker]).with_src(at.loc.src())]))
         } else {
             Ok(WalkAction::ReplaceSkip(Vec::new()))
         }
     }
+}
+
+/// Put each `@variant` rule of the subtree in a copy of itself: see
+/// `switches::AT_VARIANT_IN_IMPORT_TWICE`. An `@variant` rule at the top
+/// level with no body or with an `@slot` rule is an `@custom-variant`: the
+/// compiler applied nothing to it.
+fn nest_variants_in_themselves(nodes: &mut Vec<AstNode>, top_level: bool) {
+    walk(nodes, |child, ctx| match child {
+        AstNode::AtRule(variant) if variant.name == "@variant" => {
+            if top_level && css_parent(ctx.path).is_none() && (variant.nodes.is_empty() || has_slot(&variant.nodes)) {
+                return WalkAction::Continue;
+            }
+            let mut body = std::mem::take(&mut variant.nodes);
+            nest_variants_in_themselves(&mut body, false);
+            let inner = AtRule { name: variant.name.clone(), params: variant.params.clone(), nodes: body, loc: variant.loc.clone() };
+            variant.nodes = vec![AstNode::AtRule(inner)];
+            WalkAction::Skip
+        }
+        _ => WalkAction::Continue,
+    });
 }
 
 /// True when the subtree has an `@slot` rule.
