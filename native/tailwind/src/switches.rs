@@ -786,6 +786,21 @@ pub const CORNER_POSITION_NAMES: Switch = Switch::since(4, 1, 0, "bg-top-left an
 /// `any-pointer-fine`. Before: no such variants.
 pub const STATIC_VARIANTS_OF_4_1: Switch = Switch::since(4, 1, 0, "details-content, user-valid, noscript, pointer-* and more variants");
 
+// --- 4.0.16 ---------------------------------------------------------------
+
+/// `--value('auto')` and `--modifier('auto')` of `@utility` match a named
+/// value with the same text. Before: a literal matched nothing.
+pub const CSS_UTILITY_LITERALS: Switch = Switch::since(4, 0, 16, "--value('…') and --modifier('…') take literal values");
+
+/// A comma also ends a keyframes name in `animation` and in `--animate-*`:
+/// `animation: a 1s, b 1s` uses `a` and `b`. Before: only white space ended
+/// a name, so the `@keyframes` rule of a name before a comma was removed.
+pub const KEYFRAME_NAMES_AFTER_COMMA: Switch = Switch::since(4, 0, 16, "a comma ends a keyframes name in an animation value");
+
+/// `marker` also has the selectors `& *::-webkit-details-marker` and
+/// `&::-webkit-details-marker`. Before: only the two `::marker` selectors.
+pub const MARKER_DETAILS_MARKER: Switch = Switch::since(4, 0, 16, "the marker variant has ::-webkit-details-marker");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -923,4 +938,7 @@ pub const ALL: &[&Switch] = &[
     &BG_SIZE_AND_POSITION,
     &CORNER_POSITION_NAMES,
     &STATIC_VARIANTS_OF_4_1,
+    &CSS_UTILITY_LITERALS,
+    &KEYFRAME_NAMES_AFTER_COMMA,
+    &MARKER_DETAILS_MARKER,
 ];

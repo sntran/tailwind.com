@@ -761,8 +761,10 @@ fn is_variable_used(
 }
 
 /// JavaScript `value.split(/[\s,]+/)`.
+/// (Before 4.0.16, a comma was not a separator: `value.split(/\s+/)`.)
 fn extract_keyframe_names(value: &str) -> Vec<&str> {
-    let is_separator = |c: char| c == ',' || is_js_whitespace(c);
+    let comma = crate::switches::KEYFRAME_NAMES_AFTER_COMMA.on();
+    let is_separator = |c: char| (comma && c == ',') || is_js_whitespace(c);
     let mut names = Vec::new();
     let mut start = 0;
     let mut chars = value.char_indices().peekable();

@@ -615,6 +615,19 @@ The scanner of the source files follows no version, in each engine. Its
 changes in these releases: the Markdown and Ruby pre-processors, and the
 `.jsonl` and `.ndjson` files.
 
+### 4.0.17 (no change of the compiler)
+
+### 4.0.16 (3 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `MARKER_DETAILS_MARKER` | form | S | common | `marker:*` had only the two `::marker` selectors, with no `::-webkit-details-marker` |
+| `KEYFRAME_NAMES_AFTER_COMMA` | fix | S | rare | Only white space ended a keyframes name: with `--animate-both: fade 1s,slide 2s`, the `@keyframes slide` rule of the theme was removed |
+| `CSS_UTILITY_LITERALS` | feature | S | rare | `--value('auto')` and `--modifier('auto')` of `@utility` matched nothing |
+
+No switch: the suggestions of `--spacing(--value(integer))` and of the
+literal values are for the editor tools.
+
 ## What the list shows
 
 - **56 changes** in the eleven releases from 4.2.0 to 4.3.5. 7 of them

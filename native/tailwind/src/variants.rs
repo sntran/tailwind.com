@@ -916,7 +916,12 @@ pub fn create_variants(theme: &Theme) -> Variants {
     static_variant(v, "first-letter", &["&::first-letter"], None);
     static_variant(v, "first-line", &["&::first-line"], None);
 
-    static_variant(v, "marker", &["& *::marker", "&::marker", "& *::-webkit-details-marker", "&::-webkit-details-marker"], None);
+    if crate::switches::MARKER_DETAILS_MARKER.on() {
+        static_variant(v, "marker", &["& *::marker", "&::marker", "& *::-webkit-details-marker", "&::-webkit-details-marker"], None);
+    } else {
+        // Before 4.0.16, `marker` had no `::-webkit-details-marker`.
+        static_variant(v, "marker", &["& *::marker", "&::marker"], None);
+    }
 
     static_variant(v, "selection", &["& *::selection", "&::selection"], None);
     static_variant(v, "file", &["&::file-selector-button"], None);

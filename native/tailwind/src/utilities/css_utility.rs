@@ -496,7 +496,8 @@ fn resolve_value_function(
 
         if value.named {
             // A literal: `--modifier('closest-side')`.
-            if quoted(arg) == Some(value.value) {
+            // (Before 4.0.16, a literal matched nothing.)
+            if crate::switches::CSS_UTILITY_LITERALS.on() && quoted(arg) == Some(value.value) {
                 return Resolved::parse(value.value);
             }
 
