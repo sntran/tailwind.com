@@ -161,7 +161,9 @@ jobs:
       - name: The page in Chromium
         env:
           NODE_PATH: ${{ runner.temp }}/playwright/node_modules
-        run: node tests/site/page.mjs --screenshot build/site/screenshot.png
+        # Some cases and versions: site/build.mjs checks each case, and the
+        # main tests compare the two engines for each version.
+        run: node tests/site/page.mjs --screenshot build/site/screenshot.png --cases 5 --versions 4.3.5,4.0.0
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:

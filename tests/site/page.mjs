@@ -1,17 +1,25 @@
 #!/usr/bin/env node
 // The page of the site in Chromium: the directory of site/build.mjs.
 //
-// Usage: node tests/site/page.mjs [--site DIR] [--screenshot FILE] [--cases all|N]
+// Usage: node tests/site/page.mjs [--site DIR] [--screenshot FILE]
+//        [--cases all|N] [--versions all|A,B,...]
 //
 //   --site DIR          the site (default build/site)
 //   --screenshot FILE   a picture of the page after the first example
 //   --cases all|N       the recorded cases to open (default all)
+//   --versions LIST     the versions for the mode "Rust and official"
+//                       (default all)
 //
-// The test opens the page, each example and each recorded case of
-// data.json. Each build must end with no error, and the console must have
-// no error. For each example in the mode "Rust and official", the two
-// compilers must give the same output. Each recorded case on the page must
-// show a difference between its two versions.
+// The test opens the page, each example, the recorded cases and the mode
+// "Rust and official" for the versions. Each build must end with no
+// error, and the console must have no error. For each example and each
+// version in the mode "Rust and official", the two compilers must give
+// the same output. Each recorded case that it opens must show a
+// difference between its two versions.
+//
+// CI opens only some cases and versions: site/build.mjs already finds the
+// cases that show their change, with the same host in Node.js, and
+// tests/versions.sh compares the two engines for each version.
 //
 // It needs Playwright with Chromium.
 import fs from 'node:fs'
@@ -22,12 +30,13 @@ import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '../..')
-const opts = { site: path.join(root, 'build/site'), screenshot: null, cases: 'all' }
+const opts = { site: path.join(root, 'build/site'), screenshot: null, cases: 'all', versions: 'all' }
 const args = process.argv.slice(2)
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--site') opts.site = path.resolve(args[++i])
   else if (args[i] === '--screenshot') opts.screenshot = path.resolve(args[++i])
   else if (args[i] === '--cases') opts.cases = args[++i]
+  else if (args[i] === '--versions') opts.versions = args[++i]
   else throw new Error(`unknown argument: ${args[i]}`)
 }
 
@@ -112,14 +121,18 @@ try {
   // The mode "Rust and official" for each version, with the first example.
   await after(() => page.selectOption('#example', '0'))
   await after(() => page.check('input[name="mode"][value="engines"]'))
+  const versions = opts.versions === 'all' ? data.versions : opts.versions.split(',')
+  for (const version of versions) {
+    if (!data.versions.includes(version)) throw new Error(`${version} is not a version of the site`)
+  }
   let different = []
-  for (const version of data.versions) {
+  for (const version of versions) {
     const result = await after(() => page.selectOption('#version-a', version))
     if (/error/.test(result.status)) problems.push(`Rust and official, ${version}: ${result.status}`)
     if (!result.output.startsWith('The two outputs are the same')) different.push(version)
   }
   if (different.length) problems.push(`Rust and official: different output for ${different.join(', ')}`)
-  log(`Rust and official, the first example, ${data.versions.length} versions: ${different.length} different`)
+  log(`Rust and official, the first example, ${versions.length} versions: ${different.length} different`)
 
   // The recorded cases.
   const cases = await page.$$('#releases button')

@@ -64,7 +64,8 @@ jobs:
       - name: The page in Chromium
         env:
           NODE_PATH: ${{ runner.temp }}/playwright/node_modules
-        run: node tests/site/page.mjs
+        # Some cases and versions: the release ran all the tests.
+        run: node tests/site/page.mjs --cases 5 --versions 4.3.5,4.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: build/site

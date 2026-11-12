@@ -108,7 +108,11 @@ python3 -m http.server -d build/site 8000
 
 The two tests need Playwright with Chromium. The job `site` of
 `.github/workflows/build.yml` runs them for each push, and the artifact
-`site` has the site and a picture of the page.
+`site` has the site and a picture of the page. In CI, `page.mjs` opens
+only 5 cases and two versions (`--cases 5 --versions 4.3.5,4.0.0`):
+`site/build.mjs` already checks each case with the same host in Node.js,
+and `tests/versions.sh` compares the two engines for each version. With
+no option, it opens all of them (about 7 minutes in CI).
 
 ## The deploy
 
