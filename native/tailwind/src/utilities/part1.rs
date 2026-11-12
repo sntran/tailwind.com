@@ -64,6 +64,16 @@ fn grid_repeat(value: &NamedValue, _: &DesignSystem) -> Option<String> {
 }
 
 /// A description that sets one property.
+/// `col-*` and `row-*` take an integer and a negative value.
+/// (Before 4.0.10, only a theme value or an arbitrary value.)
+fn grid_line_numbers(description: UtilityDescription) -> UtilityDescription {
+    if switches::GRID_LINE_NUMBERS.on() {
+        description.negative().bare(integer)
+    } else {
+        description
+    }
+}
+
 fn one_property(property: &'static str) -> UtilityDescription {
     UtilityDescription::new(move |value, _, _| Some(vec![decl(property, value)]))
 }
@@ -400,9 +410,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     functional_utility(
         u,
         "col",
-        one_property("grid-column")
-            .negative()
-            .bare(integer)
+        grid_line_numbers(one_property("grid-column"))
             .theme_keys(&["--grid-column"])
             .static_values(values("grid-column", &[("auto", "auto")])),
     );
@@ -436,9 +444,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     functional_utility(
         u,
         "row",
-        one_property("grid-row")
-            .negative()
-            .bare(integer)
+        grid_line_numbers(one_property("grid-row"))
             .theme_keys(&["--grid-row"])
             .static_values(values("grid-row", &[("auto", "auto")])),
     );
@@ -608,6 +614,12 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     st(u, "h-auto", &[("height", "auto")]);
     st(u, "min-w-auto", &[("min-width", "auto")]);
     st(u, "min-h-auto", &[("min-height", "auto")]);
+    // Before 4.0.10, also `max-w-auto` and `max-h-auto`: `auto` is not a
+    // value of these properties.
+    if !switches::NO_MAX_SIZE_AUTO.on() {
+        st(u, "max-w-auto", &[("max-width", "auto")]);
+        st(u, "max-h-auto", &[("max-height", "auto")]);
+    }
 
     if switches::HEIGHT_LH.on() {
         st(u, "h-lh", &[("height", "1lh")]);

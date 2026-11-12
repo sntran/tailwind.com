@@ -547,7 +547,18 @@ fn negate_selector(selector: &str) -> Option<String> {
         return None;
     }
     // `&:hover` becomes `&:not(*:hover)`.
-    let selectors: Vec<String> = segment(selector, b',').into_iter().map(|sel| sel.replace('&', "*")).collect();
+    let selectors: Vec<String> = segment(selector, b',')
+        .into_iter()
+        .map(|sel| {
+            // Before 4.0.10, a selector lost `&:is(` at its start and `)`
+            // at its end: `&:is(.a):is(.b)` became `.a):is(.b`.
+            let sel = match sel.strip_prefix("&:is(").and_then(|rest| rest.strip_suffix(')')) {
+                Some(inner) if !crate::switches::NOT_KEEPS_IS.on() => inner,
+                _ => sel,
+            };
+            sel.replace('&', "*")
+        })
+        .collect();
     Some(format!("&:not({})", selectors.join(", ")))
 }
 

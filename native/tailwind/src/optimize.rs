@@ -192,6 +192,9 @@ struct Optimizer<'a> {
     /// The `@keyframes` rules of the theme.
     keyframes: Vec<(Id, String)>,
     used_keyframe_names: HashSet<String>,
+    /// Before 4.0.9 (`switches::REFERENCE_IMPORT_THEME`): the rule of the
+    /// first `@theme`, when the tree has one.
+    first_theme_rule: Option<AstNode>,
     property_fallbacks_root: Vec<AstNode>,
     property_fallbacks_universal: Vec<AstNode>,
     variable_dependencies: IndexMap<String, IndexSet<String>>,
@@ -379,6 +382,21 @@ impl Optimizer<'_> {
 
             AstNode::Context(node) => {
                 if node.context.get("reference").is_some_and(ContextValue::truthy) {
+                    // Before 4.0.9, a reference import gave the rule of
+                    // the first `@theme`, in the at-rules that are above
+                    // that rule in the import. When the rule was not in
+                    // the import, it was a copy with no at-rule.
+                    if !switches::REFERENCE_IMPORT_THEME.on() {
+                        if let Some(first_theme_rule) = self.first_theme_rule.clone() {
+                            let mut at_rules = Vec::new();
+                            find_at_rules_above(&node.nodes, &mut at_rules);
+                            let mut child = first_theme_rule;
+                            for (name, params) in at_rules.into_iter().rev() {
+                                child = ast::at_rule(name, params, vec![child]);
+                            }
+                            self.transform(&child, parent, context.merge(&node.context), depth);
+                        }
+                    }
                     return;
                 }
                 let merged = context.merge(&node.context);
@@ -487,7 +505,13 @@ impl Optimizer<'_> {
 
     /// Remove the theme variables that have no use.
     fn remove_unused_theme_variables(&mut self, root: Id) {
-        let animate_prefix = self.design_system.theme.prefix_key("--animate-");
+        // Before 4.0.10, the name had no prefix: with a prefix, no
+        // `--animate-*` variable marked its keyframes as used.
+        let animate_prefix = if switches::ANIMATE_KEYFRAMES_WITH_PREFIX.on() {
+            self.design_system.theme.prefix_key("--animate-")
+        } else {
+            "--animate-".to_string()
+        };
         let lists = std::mem::take(&mut self.css_theme_variables);
 
         for (parent, declarations) in lists {
@@ -605,6 +629,46 @@ impl Optimizer<'_> {
     }
 }
 
+/// The rule of the first `@theme` (`index.rs`): a rule `:root, :host`
+/// whose one child is the context node of the theme.
+fn is_first_theme_rule(node: &AstNode) -> bool {
+    let AstNode::Rule(rule) = node else { return false };
+    rule.selector == ":root, :host"
+        && matches!(&rule.nodes[..], [AstNode::Context(inner)]
+            if inner.context.len() == 1 && inner.context.get("theme").is_some_and(ContextValue::truthy))
+}
+
+fn find_first_theme_rule(nodes: &[AstNode]) -> Option<&AstNode> {
+    nodes.iter().find_map(|node| {
+        if is_first_theme_rule(node) {
+            return Some(node);
+        }
+        node.children().and_then(|children| find_first_theme_rule(children))
+    })
+}
+
+/// The name and the parameters of each at-rule above the rule of the first
+/// `@theme` in these nodes, from the outer one. The result is false when
+/// the rule is not in these nodes.
+fn find_at_rules_above(nodes: &[AstNode], at_rules: &mut Vec<(String, String)>) -> bool {
+    for node in nodes {
+        if is_first_theme_rule(node) {
+            return true;
+        }
+        let Some(children) = node.children() else { continue };
+        if let AstNode::AtRule(rule) = node {
+            at_rules.push((rule.name.clone(), rule.params.clone()));
+            if find_at_rules_above(children, at_rules) {
+                return true;
+            }
+            at_rules.pop();
+        } else if find_at_rules_above(children, at_rules) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Make the tree ready for the printer.
 pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: crate::Polyfills) -> Vec<AstNode> {
     // Before 4.1.0, the compiler had no polyfills.
@@ -628,6 +692,7 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
         color_mix_declarations: IndexMap::new(),
         keyframes: Vec::new(),
         used_keyframe_names: HashSet::new(),
+        first_theme_rule: if switches::REFERENCE_IMPORT_THEME.on() { None } else { find_first_theme_rule(ast).cloned() },
         property_fallbacks_root: Vec::new(),
         property_fallbacks_universal: Vec::new(),
         variable_dependencies: IndexMap::new(),

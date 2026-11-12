@@ -848,6 +848,82 @@ pub const VARIABLE_CANDIDATE_REBUILDS: Switch = Switch::since(4, 0, 15, "a new t
 /// `font-weight`.
 pub const SORT_IGNORES_EMPTY_DECLARATIONS: Switch = Switch::since(4, 0, 12, "the sort ignores a declaration with no value");
 
+// --- 4.0.10 ---------------------------------------------------------------
+
+/// An `@apply` rule is replaced in the walk of its own parent, after the
+/// utilities that it applies are ready. Before: the walk of a parent also
+/// replaced the `@apply` rules of its nested rules, and the new nodes were
+/// the nodes of the cache of the compiler. So a utility that a nested
+/// `@apply` compiled too early kept an `@apply` rule of its own, and that
+/// rule gave nothing for the candidate of the utility
+/// (`.a { div { @apply b; } }` with `@utility b { @apply flex; }`).
+pub const APPLY_IN_ITS_OWN_PARENT: Switch = Switch::since(4, 0, 10, "@apply is replaced in the walk of its own parent");
+
+/// `not-*` keeps the selector of the variant as it is: `not-[&:is(.a,.b)]`
+/// gives `&:not(*:is(.a,.b))`. Before: a selector lost `&:is(` at its start
+/// and `)` at its end, so it gave `&:not(.a,.b)`, and
+/// `not-[&:is(.a):is(.b)]` gave `&:not(.a):is(.b)`.
+pub const NOT_KEEPS_IS: Switch = Switch::since(4, 0, 10, "not-* keeps a wrapping &:is(…)");
+
+/// The `@keyframes` rule of a used `--animate-*` variable stays also with
+/// a prefix (`--tw-animate-spin`). Before: with a prefix, no theme
+/// variable marked its keyframes as used, so they were removed.
+pub const ANIMATE_KEYFRAMES_WITH_PREFIX: Switch = Switch::since(4, 0, 10, "the keyframes of --animate-* stay with a prefix");
+
+/// `!important` goes on each declaration of a utility, also on a custom
+/// property: `--tw-ease: var(--ease-out) !important`. Before (4.0.9): not
+/// on a custom property.
+pub const IMPORTANT_CUSTOM_PROPERTIES: Switch = Switch::since(4, 0, 10, "!important goes also on a custom property");
+
+/// `col-2`, `row-3`, `-col-2` and `-row-[2]`: `col-*` and `row-*` take an
+/// integer and a negative value. Before: only a theme value or an
+/// arbitrary value.
+pub const GRID_LINE_NUMBERS: Switch = Switch::since(4, 0, 10, "col-* and row-* take an integer and a negative value");
+
+/// No `max-w-auto` and no `max-h-auto`. Before: they gave `max-width:
+/// auto` and `max-height: auto`, which are not valid values.
+pub const NO_MAX_SIZE_AUTO: Switch = Switch::since(4, 0, 10, "no max-w-auto and no max-h-auto");
+
+/// `outline-hidden` sets `--tw-outline-style: none`. Before: only
+/// `outline-style: none`.
+pub const OUTLINE_HIDDEN_STYLE_VARIABLE: Switch = Switch::since(4, 0, 10, "outline-hidden sets --tw-outline-style");
+
+// --- 4.0.9 ----------------------------------------------------------------
+
+/// The `var(…)` of a value of `@theme reference` has the value as its
+/// fallback: `var(--color-potato, #ac855b)`. Before: `var(--color-potato)`.
+pub const REFERENCE_VAR_FALLBACK: Switch = Switch::since(4, 0, 9, "var() of a reference theme value has a fallback");
+
+/// An `@theme` in a reference import (`@reference "…"`, `@import "…"
+/// reference`) is an `@theme reference`: its variables are not in the
+/// output. Before: its variables were normal theme variables, and each
+/// reference import at the top level gave a copy of the rule of the first
+/// `@theme` (with the at-rules above that rule, when the rule was in the
+/// import).
+pub const REFERENCE_IMPORT_THEME: Switch = Switch::since(4, 0, 9, "@theme in a reference import is @theme reference");
+
+/// The `@keyframes` rules of `@theme reference` are in the output when an
+/// animation uses them. Before: they were not in the output.
+pub const REFERENCE_THEME_KEYFRAMES: Switch = Switch::since(4, 0, 9, "@keyframes of @theme reference are in the output");
+
+/// The `@keyframes` rules of the theme are at the end of the tree: in the
+/// output, they are after the `@property` rules. Before: they were in the
+/// rule of the first `@theme`, so they were before the `@property` rules,
+/// and a reference import removed them with that rule.
+pub const THEME_KEYFRAMES_AT_THE_END: Switch = Switch::since(4, 0, 9, "the @keyframes of the theme are at the end of the tree");
+
+/// A byte order mark at the start of the stylesheet is skipped. Before: it
+/// was a part of the first rule or declaration, so a stylesheet that
+/// starts with the mark and `@tailwind utilities;` was the error "Invalid
+/// declaration: `@tailwind utilities`".
+pub const BOM_IS_SKIPPED: Switch = Switch::since(4, 0, 9, "a byte order mark at the start is skipped");
+
+/// `!important` goes on each declaration that is not a custom property:
+/// `z-10!` gives `z-index: 10 !important`. Before: not on a property with
+/// `-` as its first or its second character, so `z-index` and
+/// `-webkit-…` did not get it.
+pub const IMPORTANT_DASH_PROPERTIES: Switch = Switch::since(4, 0, 9, "!important goes also on z-index and -webkit-* properties");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -995,4 +1071,17 @@ pub const ALL: &[&Switch] = &[
     &CSS_UTILITY_ONE_REMOVAL,
     &VARIABLE_CANDIDATE_REBUILDS,
     &SORT_IGNORES_EMPTY_DECLARATIONS,
+    &APPLY_IN_ITS_OWN_PARENT,
+    &NOT_KEEPS_IS,
+    &ANIMATE_KEYFRAMES_WITH_PREFIX,
+    &IMPORTANT_CUSTOM_PROPERTIES,
+    &GRID_LINE_NUMBERS,
+    &NO_MAX_SIZE_AUTO,
+    &OUTLINE_HIDDEN_STYLE_VARIABLE,
+    &REFERENCE_VAR_FALLBACK,
+    &REFERENCE_IMPORT_THEME,
+    &REFERENCE_THEME_KEYFRAMES,
+    &THEME_KEYFRAMES_AT_THE_END,
+    &BOM_IS_SKIPPED,
+    &IMPORTANT_DASH_PROPERTIES,
 ];

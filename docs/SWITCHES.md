@@ -669,6 +669,48 @@ scanner of the source files follows no version.
 
 ### 4.0.11 (no change of the compiler)
 
+### 4.0.10 (7 switches, all there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `APPLY_IN_ITS_OWN_PARENT` | fix | M | rare | The walk of a rule with `@apply` also replaced the `@apply` rules of its nested rules, before their utilities were ready: `.a { @apply underline; div { @apply b; } }` with `@utility b { @apply flex; }` gave no rule for the candidate `b`. An `@apply` at the top level gave its declarations at the top level |
+| `NOT_KEEPS_IS` | fix | S | common | `not-*` removed `&:is(` and `)` from the ends of a selector: `not-group-hover:flex` gave `&:not(:where(.group):hover *)`, and `not-[&:is(.a):is(.b)]:flex` gave `&:not(.a):is(.b)` |
+| `ANIMATE_KEYFRAMES_WITH_PREFIX` | fix | S | rare | With a prefix, the `@keyframes` rule of a used `--tw-animate-*` variable was removed |
+| `IMPORTANT_CUSTOM_PROPERTIES` | form | S | common | Only in 4.0.9: `!important` did not go on a custom property (`translate-x-2!` gave `--tw-translate-x: …` with no `!important`) |
+| `GRID_LINE_NUMBERS` | feature | S | common | `col-2`, `row-3`, `-col-2` and `-col-[2]` gave nothing: `col-*` and `row-*` took only a theme value or an arbitrary value |
+| `NO_MAX_SIZE_AUTO` | fix | S | rare | `max-w-auto` gave `max-width: auto`, and `max-h-auto` gave `max-height: auto` |
+| `OUTLINE_HIDDEN_STYLE_VARIABLE` | fix | S | common | `outline-hidden` did not set `--tw-outline-style: none` |
+
+No switch: the flags for `details-content`, `pointer-*` and `scripting`
+were off in a release (`STATIC_VARIANTS_OF_4_1`, 4.1.0). `prefixKey` of
+the theme is now public, with the same result.
+
+`APPLY_IN_ITS_OWN_PARENT` is the start of the walk of 4.0.10 to 4.1.5
+(`APPLY_NESTED_WALK`). Before 4.0.10, the walk was the walk of 4.1.6, but
+the nodes that replaced an `@apply` rule were the nodes of the cache of
+the compiler. A utility that a nested `@apply` compiled too early kept
+its own `@apply` rules in the cache. The walk then replaced these rules
+in the tree. In the cache, it replaced only the ones in a nested rule of
+the utility: an `@apply` rule that is a child of the utility stayed, and
+it gives nothing for the candidate of the build. The Rust compiler has
+no shared nodes: it writes each such change back to the cache
+(`DesignSystem::replace_compiled_node`).
+
+### 4.0.9 (6 switches, all there; 1 change in the plugin layer)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `REFERENCE_VAR_FALLBACK` | form | S | common | A value of `@theme reference` gave `var(--color-potato)`, with no fallback |
+| `REFERENCE_IMPORT_THEME` | form | M | common | An `@theme` in a reference import (`@reference "…"`) was a normal `@theme`. Each reference import at the top level gave a copy of the rule of the first `@theme`, with the used variables (in the at-rules above that rule, when the rule was in the import) |
+| `REFERENCE_THEME_KEYFRAMES` | fix | S | rare | The `@keyframes` rules of `@theme reference` were not in the output |
+| `THEME_KEYFRAMES_AT_THE_END` | form | S | common | The `@keyframes` rules of the theme were in the rule of the first `@theme`: in the output they were before the `@property` rules, and a reference import removed them with that rule |
+| `BOM_IS_SKIPPED` | fix | S | edge | A byte order mark was a part of the first rule or declaration: before `@tailwind utilities;` or `@import "…";` it gave the error "Invalid declaration" |
+| `IMPORTANT_DASH_PROPERTIES` | fix | S | common | `!important` did not go on a property with `-` as its first or second character: `z-10!` gave `z-index: 10`, and `-webkit-line-clamp` of `line-clamp-2!` had no `!important` |
+| selector-parser-nested-function (JS) | fix | S | edge | In the selector parser of `addUtilities`, a function in a function (`:is(:not(.a))`) went to the top level of the selector |
+
+No switch: the flags for `wrap-anywhere` and `inverted-colors` were off in
+a release (4.1.0).
+
 ## What the list shows
 
 - **56 changes** in the eleven releases from 4.2.0 to 4.3.5. 7 of them

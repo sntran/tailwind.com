@@ -235,7 +235,8 @@ impl Theme {
         // needs a fallback.
         let prefixed = self.prefix_key(theme_key);
         let name = escape(&prefixed);
-        if value.options & REFERENCE != 0 && !value.value.is_empty() {
+        // (Before 4.0.9, no fallback.)
+        if value.options & REFERENCE != 0 && !value.value.is_empty() && crate::switches::REFERENCE_VAR_FALLBACK.on() {
             Some(format!("var({name}, {})", value.value))
         } else {
             Some(format!("var({name})"))

@@ -199,7 +199,8 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
 
     // Upstream replaces a byte order mark with a space, and then ignores
     // the space. Thus the parse starts after the mark.
-    let mut i = if input.starts_with('\u{FEFF}') { 3 } else { 0 };
+    // (Before 4.0.9, the mark was a part of the first rule or declaration.)
+    let mut i = if input.starts_with('\u{FEFF}') && crate::switches::BOM_IS_SKIPPED.on() { 3 } else { 0 };
 
     while i < len {
         let current = bytes[i];

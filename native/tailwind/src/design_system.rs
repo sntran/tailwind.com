@@ -141,6 +141,32 @@ impl DesignSystem {
         compiled
     }
 
+    /// Replace a node in the cached rules of a candidate: the rule with the
+    /// index `rule`, or the child `child` of that rule. Only `@apply` of
+    /// before 4.0.10 uses this (`apply.rs`): there, the nodes of an
+    /// `@apply` were the nodes of the cache, and a change in them was a
+    /// change of the cache.
+    pub fn replace_compiled_node(
+        &self,
+        flags: CompileAstFlags,
+        (candidate, rule): (*const Candidate, usize),
+        child: Option<usize>,
+        node: AstNode,
+    ) {
+        let mut compiled = self.compiled.borrow_mut();
+        let Some(item) = compiled.get_mut(&(flags, candidate)).and_then(|rules| Rc::make_mut(rules).get_mut(rule)) else {
+            return;
+        };
+        match child {
+            None => item.node = node,
+            Some(index) => {
+                if let Some(slot) = item.node.children_mut().and_then(|children| children.get_mut(index)) {
+                    *slot = node;
+                }
+            }
+        }
+    }
+
     /// The order of each variant that the parser saw, for the sort of the
     /// output. Variants that compare as equal have the same order.
     pub fn get_variant_order(&self) -> Rc<VariantOrder> {

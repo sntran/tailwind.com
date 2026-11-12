@@ -620,15 +620,19 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
 
     {
         utilities.r#static("outline-hidden", |_, _| {
-            Some(vec![
-                decl("--tw-outline-style", "none"),
+            let mut nodes = vec![
                 decl("outline-style", "none"),
                 at_rule(
                     "@media",
                     "(forced-colors: active)",
                     vec![decl("outline", "2px solid transparent"), decl("outline-offset", "2px")],
                 ),
-            ])
+            ];
+            // Before 4.0.10, `outline-hidden` did not set the variable.
+            if crate::switches::OUTLINE_HIDDEN_STYLE_VARIABLE.on() {
+                nodes.insert(0, decl("--tw-outline-style", "none"));
+            }
+            Some(nodes)
         });
 
         for (name, style) in [

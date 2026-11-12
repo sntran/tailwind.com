@@ -35,6 +35,9 @@ pub struct SortedNode {
     /// The orders of the variants of the candidate, as a set of bits.
     pub variants: VariantBits,
     pub candidate: String,
+    /// The place of the rule in the cache of the compiler: the parsed
+    /// candidate, and the index of the rule in the rules of that candidate.
+    pub origin: (*const Candidate, usize),
 }
 
 /// A set of variant orders. Its order is the order of the number that has
@@ -118,7 +121,7 @@ pub fn compile_candidates(
             }
             found = true;
 
-            for compiled in rules.iter() {
+            for (rule_index, compiled) in rules.iter().enumerate() {
                 // The more important variants have the higher bits.
                 let mut variant_order = VariantBits::default();
                 if let Some(map) = &variant_order_map {
@@ -133,6 +136,7 @@ pub fn compile_candidates(
                     properties: compiled.property_sort.clone(),
                     variants: variant_order,
                     candidate: raw.to_string(),
+                    origin: (Rc::as_ptr(candidate), rule_index),
                 });
             }
         }
@@ -407,7 +411,23 @@ fn apply_important(ast: &mut [AstNode]) {
         match node {
             // An at-root has `@property` rules and such: no `!important`.
             AstNode::AtRoot(_) => continue,
-            AstNode::Declaration(d) => d.important = true,
+            AstNode::Declaration(d) => {
+                let mut property = d.property.chars();
+                let (first, second) = (property.next(), property.next());
+                let important = if crate::switches::IMPORTANT_CUSTOM_PROPERTIES.on() {
+                    true
+                } else if crate::switches::IMPORTANT_DASH_PROPERTIES.on() {
+                    // Before 4.0.10: not a custom property.
+                    !(first == Some('-') && second == Some('-'))
+                } else {
+                    // Before 4.0.9: not a property with `-` as its first
+                    // or its second character (`-webkit-…`, `z-index`).
+                    first != Some('-') && second != Some('-')
+                };
+                if important {
+                    d.important = true;
+                }
+            }
             AstNode::Rule(StyleRule { nodes, .. }) | AstNode::AtRule(crate::ast::AtRule { nodes, .. }) => {
                 apply_important(nodes)
             }

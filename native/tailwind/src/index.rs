@@ -628,8 +628,13 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
         // An `AtRoot` moves the `@keyframes` out of `:root`. They are at
         // the top level of the tree, so that a `@reference` cannot remove
         // them.
+        // (Before 4.0.9, they were in the rule of the first `@theme`.)
         for keyframes in design_system.theme.get_keyframes() {
-            ast.push(context(context_with("theme", true.into()), vec![at_root(vec![AstNode::AtRule(keyframes)])]));
+            if crate::switches::THEME_KEYFRAMES_AT_THE_END.on() {
+                ast.push(context(context_with("theme", true.into()), vec![at_root(vec![AstNode::AtRule(keyframes)])]));
+            } else {
+                nodes.push(at_root(vec![AstNode::AtRule(keyframes)]));
+            }
         }
 
         fill_first_theme_rule(&mut ast, &mut Some(nodes));
@@ -1092,7 +1097,9 @@ impl Collector {
             self.features |= FEATURES_AT_THEME;
         }
 
-        if css_context(ancestors).get("reference").is_some_and(|v| v.truthy()) {
+        // Before 4.0.9, an `@theme` in a reference import was as each
+        // other `@theme`: see `optimize.rs` for its place in the output.
+        if css_context(ancestors).get("reference").is_some_and(|v| v.truthy()) && crate::switches::REFERENCE_IMPORT_THEME.on() {
             theme_options |= theme::REFERENCE;
         }
 
@@ -1115,7 +1122,11 @@ impl Collector {
                 // The `@theme` rule itself goes away, so keep the
                 // `@keyframes` rules for the output.
                 AstNode::AtRule(child_rule) if child_rule.name == "@keyframes" => {
-                    theme.add_keyframes(child_rule.clone());
+                    // Before 4.0.9, the `@keyframes` rules of `@theme
+                    // reference` were not in the output.
+                    if theme_options & theme::REFERENCE == 0 || crate::switches::REFERENCE_THEME_KEYFRAMES.on() {
+                        theme.add_keyframes(child_rule.clone());
+                    }
                     return WalkAction::Skip;
                 }
                 AstNode::Comment(_) => return WalkAction::Continue,
