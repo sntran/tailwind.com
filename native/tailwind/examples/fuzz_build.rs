@@ -7,7 +7,9 @@
 //! `@config` (optional). The JavaScript of a plugin reads the file system,
 //! and its `console` messages are not printed.
 //! For each one, a new compiler compiles the stylesheet and builds the
-//! candidates, and the output line is `{"css": "..."}` or
+//! candidates. With `"first": N`, it makes two builds, as the watch does:
+//! the first N candidates, then the other ones, and the result is the
+//! text of the second build. The output line is `{"css": "..."}` or
 //! `{"error": "..."}`, in the sequence of the input. An `@import` of
 //! `tailwindcss` or of `tailwindcss/NAME` gets the file of ASSETS_DIR, as
 //! the npm package gives it. A panic is an output line too
@@ -77,7 +79,7 @@ impl tailwind::script::Package for NpmPackage {
     }
 }
 
-fn one_script(package: &Rc<NpmPackage>, css: &str, candidates: &[String], base: &str) -> serde_json::Value {
+fn one_script(package: &Rc<NpmPackage>, css: &str, builds: &[&[String]], base: &str) -> serde_json::Value {
     let assets = package.directory.clone();
     let loader = |id: &str, base: &str| load(&assets, id, base);
     let options = tailwind::script::ScriptOptions {
@@ -86,7 +88,13 @@ fn one_script(package: &Rc<NpmPackage>, css: &str, candidates: &[String], base: 
         load_stylesheet: Some(&loader),
         module_loader: Rc::new(Quiet::default()),
     };
-    match tailwind::script::compile(css, options, package.clone()).and_then(|mut compiler| compiler.try_build(candidates)) {
+    match tailwind::script::compile(css, options, package.clone()).and_then(|mut compiler| {
+        let mut css = String::new();
+        for candidates in builds {
+            css = compiler.try_build(candidates)?;
+        }
+        Ok(css)
+    }) {
         // The compiler of a package always prints the license comment.
         // The fuzzer compares the CSS with no such line.
         Ok(css) => {
@@ -120,7 +128,7 @@ fn load(assets: &Path, id: &str, _base: &str) -> tailwind::Result<Stylesheet> {
     })
 }
 
-fn one(assets: &Path, version: Option<tailwind::Version>, css: &str, candidates: &[String], base: &str) -> Option<serde_json::Value> {
+fn one(assets: &Path, version: Option<tailwind::Version>, css: &str, builds: &[&[String]], base: &str) -> Option<serde_json::Value> {
     let loader = |id: &str, base: &str| load(assets, id, base);
     let options = CompileOptions {
         version,
@@ -130,7 +138,13 @@ fn one(assets: &Path, version: Option<tailwind::Version>, css: &str, candidates:
         test_mode: true,
         ..CompileOptions::default()
     };
-    match compile(css, options).and_then(|mut compiler| compiler.try_build(candidates)) {
+    match compile(css, options).and_then(|mut compiler| {
+        let mut css = String::new();
+        for candidates in builds {
+            css = compiler.try_build(candidates)?;
+        }
+        Ok(css)
+    }) {
         Ok(css) => Some(serde_json::json!({ "css": css })),
         // The Rust compiler does not load JavaScript plugins as an older
         // version: the program then uses the script engine.
@@ -169,9 +183,19 @@ fn main() {
             .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
             .unwrap_or_default();
         let base = case["base"].as_str().unwrap_or("").to_string();
+        // With `first`, two builds on the one compiler: the first `first`
+        // candidates, then the other ones. The result is the text of the
+        // second build.
+        let builds: Vec<&[String]> = match case["first"].as_u64() {
+            Some(first) => {
+                let (first, rest) = candidates.split_at((first as usize).min(candidates.len()));
+                vec![first, rest]
+            }
+            None => vec![&candidates],
+        };
         let build = std::panic::AssertUnwindSafe(|| match &script {
-            Some(package) => one_script(package, &css, &candidates, &base),
-            None => one(&assets, version, &css, &candidates, &base).unwrap_or_else(|| one_script(&package(), &css, &candidates, &base)),
+            Some(package) => one_script(package, &css, &builds, &base),
+            None => one(&assets, version, &css, &builds, &base).unwrap_or_else(|| one_script(&package(), &css, &builds, &base)),
         });
         let result = std::panic::catch_unwind(build).unwrap_or_else(|p| {
             let text = p

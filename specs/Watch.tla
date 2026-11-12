@@ -19,6 +19,17 @@
        output becomes the build of the last input with all the candidates
        of the source files.
 
+   The model takes one thing as given: the output of a compiler is a
+   function of its input and of the set of candidates that it got. The
+   sequence of the builds does not change it (the step Scan writes the
+   pair of the input version and the set). The code must keep this for
+   each version of Tailwind CSS that the Rust compiler follows, also
+   where it copies a fault of an old version that keeps state between
+   builds. The test builds_in_a_sequence_give_the_result_of_one_build_as_
+   each_version (native/tailwind/tests/switches.rs) checks this, and the
+   fuzzer compares two builds on one compiler with the official compiler
+   (docs/TESTING.md).
+
    StampBeforeRead = FALSE is the wrong order: the program reads the
    input and then records the stamp. A change between the two steps is
    then lost, and Converges fails. The first version of the code had this

@@ -8,7 +8,9 @@
 //                    (sh tests/fuzz/install.sh DIR VERSION)
 //   --builder FILE   target/release/examples/fuzz_build
 //   CASES.jsonl      one case for each line: {"css": "...", "candidates": [...]}
-//                    (default: the standard input). A line can have "name".
+//                    (default: the standard input). A line can have "name",
+//                    and "first" (a number): two builds on one compiler,
+//                    the first `first` candidates and then the other ones.
 //   --record         write the official result of each case into the line of
 //                    CASES.jsonl, as results[VERSION]. The file
 //                    tests/upstream/switches.jsonl has such lines: the Rust
@@ -46,7 +48,7 @@ const cases = fs
   .map((line) => JSON.parse(line))
 const official = await officialTailwind(officialDir)
 
-const input = cases.map((c) => JSON.stringify({ css: c.css, candidates: c.candidates ?? [], base: official.officialDir })).join('\n') + '\n'
+const input = cases.map((c) => JSON.stringify({ css: c.css, candidates: c.candidates ?? [], base: official.officialDir, first: c.first })).join('\n') + '\n'
 const run = spawnSync(path.resolve(builder), [official.officialDir], { input, maxBuffer: 1024 * 1024 * 1024 })
 if (run.status !== 0) {
   console.error(`the builder failed (status ${run.status}): ${run.stderr.toString().slice(0, 2000)}`)
@@ -56,7 +58,7 @@ const ours = run.stdout.toString().trim().split('\n').map((line) => JSON.parse(l
 
 let different = 0
 for (let [index, c] of cases.entries()) {
-  const expected = await official.run({ css: c.css, candidates: c.candidates ?? [] })
+  const expected = await official.run({ css: c.css, candidates: c.candidates ?? [], first: c.first })
   if (record) c.results = { ...(c.results ?? {}), [official.version]: expected }
   const actual = ours[index]
   const name = c.name ?? `case ${index + 1}`

@@ -107,24 +107,78 @@ jobs:
           name: fuzz-script-${{ matrix.version }}
           path: build/fuzz
 
+  # The program and the builder for the job "switches": one build for all
+  # its versions.
+  programs:
+    name: Build the program and the builder
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - name: Build the program and the builder
+        run: |
+          cargo build --release --bin tailwind --example fuzz_build
+          mkdir -p build/programs
+          cp target/release/tailwind target/release/examples/fuzz_build build/programs/
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: fuzz-programs
+          path: build/programs
+          retention-days: 1
+
   # The Rust compiler as an older version (docs/SWITCHES.md): for each
   # version that it serves (from Version::OLDEST of src/version.rs to the
   # version before UPSTREAM), compare it with the official compiler of
   # that version. A difference is a behavior with no switch.
   switches:
+    needs: programs
     name: The Rust compiler as Tailwind CSS ${{ matrix.version }}
     runs-on: ubuntu-26.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        version: ["4.3.4", "4.3.3", "4.3.2", "4.3.1", "4.3.0", "4.2.4", "4.2.3", "4.2.2", "4.2.1", "4.2.0"]
+        version:
+          - "4.3.4"
+          - "4.3.3"
+          - "4.3.2"
+          - "4.3.1"
+          - "4.3.0"
+          - "4.2.4"
+          - "4.2.3"
+          - "4.2.2"
+          - "4.2.1"
+          - "4.2.0"
+          - "4.1.18"
+          - "4.1.17"
+          - "4.1.16"
+          - "4.1.15"
+          - "4.1.14"
+          - "4.1.13"
+          - "4.1.12"
+          - "4.1.11"
+          - "4.1.10"
+          - "4.1.9"
+          - "4.1.8"
+          - "4.1.7"
+          - "4.1.6"
+          - "4.1.5"
+          - "4.1.4"
+          - "4.1.3"
+          - "4.1.2"
+          - "4.1.1"
+          - "4.1.0"
+          - "4.0.17"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          submodules: true
-      - name: Build the program and the builder
-        run: cargo build --release --bin tailwind --example fuzz_build
+          name: fuzz-programs
+          path: build/programs
+      - name: The program and the builder
+        run: chmod +x build/programs/tailwind build/programs/fuzz_build
       - name: The official packages of the version
         run: sh tests/fuzz/install.sh "$RUNNER_TEMP/official" "${{ matrix.version }}"
       - name: Fuzz
@@ -136,8 +190,8 @@ jobs:
           echo "The seed is $seed. A run with the same seed tries the same cases."
           node tests/fuzz/fuzz.mjs \
             --official "$RUNNER_TEMP/official" \
-            --builder target/release/examples/fuzz_build \
-            --program target/release/tailwind \
+            --builder build/programs/fuzz_build \
+            --program build/programs/tailwind \
             --seed "$seed" --cases 1000000 --projects 0 \
             --seconds $((MINUTES * 60)) --out build/fuzz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
