@@ -6,7 +6,7 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
-## Unreleased
+## 0.2.0 - 2026-11-12
 
 Each version of Tailwind CSS 4, from 4.0.0 to 4.3.5, in one file.
 
@@ -71,6 +71,12 @@ Each version of Tailwind CSS 4, from 4.0.0 to 4.3.5, in one file.
 
 ### Changed
 
+- The version of tailwind.com is not paired with a version of Tailwind
+  CSS: one file has each version. The Erlang and Elixir modules and the
+  npm package download from the release of their own version. A release
+  does not make a second release with the version of Tailwind CSS (for
+  example `v4.3.5`) any more. The release `v4.3.5` keeps the files of
+  0.1.0 for the modules of 0.1.0.
 - `version:` in the configuration of the Hex package can be each
   version of Tailwind CSS 4 from 4.0.0 to 4.3.5. Before, it was only
   `4.3.5`.
