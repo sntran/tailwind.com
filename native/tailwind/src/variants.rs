@@ -1,5 +1,6 @@
 //! The variants: `variants.ts` of Tailwind CSS.
 
+use crate::switches;
 use crate::ast::{at_root, at_rule, context, decl, rule, style_rule, AstNode, AtRule, ContextMap, StyleRule};
 use crate::candidate::{ValueKind, Variant};
 use crate::compile::apply_variant;
@@ -19,9 +20,13 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 /// The test of a variant name: `/^@?[a-z0-9][a-zA-Z0-9_-]*(?<![_-])$/`.
+/// Before 4.1.13: `/^@?[a-zA-Z0-9_-]*$/`.
 pub fn is_valid_variant_name(name: &str) -> bool {
     let bytes = name.as_bytes();
     let bytes = bytes.strip_prefix(b"@").unwrap_or(bytes);
+    if !crate::switches::VARIANT_NAME_START_AND_END.on() {
+        return bytes.iter().all(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-');
+    }
     let Some((first, rest)) = bytes.split_first() else { return false };
     if !(first.is_ascii_lowercase() || first.is_ascii_digit()) {
         return false;
@@ -82,6 +87,10 @@ pub struct Variants {
     last_order: i64,
     /// The error of a variant function. Upstream throws it.
     error: RefCell<Option<Error>>,
+    /// True: `from_ast` does not replace the `@variant` rules of a body.
+    /// Only for a version before 4.1.14 and custom variants that use each
+    /// other in a circle (`switches::CUSTOM_VARIANT_CYCLE_ERROR`).
+    pub keep_at_variant: bool,
 }
 
 impl Variants {
@@ -289,8 +298,18 @@ impl Variants {
         let mut uses_at_variant = false;
         let mut uses_at_scope = false;
         collect_selectors(&ast, &mut selectors, &mut uses_at_variant, &mut uses_at_scope);
+        let uses_at_scope = uses_at_scope && switches::SCOPE_HOISTING.on();
         let selector_refs: Vec<&str> = selectors.iter().map(String::as_str).collect();
-        let compounds = compounds_for_selectors(&selector_refs);
+        // Before 4.1.14, an `@variant` rule in the body was an at-rule as
+        // each other: a compound variant (`group-*`) did not take the
+        // variant.
+        let compounds = if uses_at_variant && !switches::CUSTOM_VARIANT_AT_VARIANT_COMPOUNDS.on() {
+            COMPOUNDS_NEVER
+        } else {
+            compounds_for_selectors(&selector_refs)
+        };
+        // See `keep_at_variant`.
+        let uses_at_variant = uses_at_variant && !self.keep_at_variant;
 
         self.r#static(
             name,
@@ -458,7 +477,22 @@ fn negate_conditions(rule_name: &str, conditions: &[&str]) -> Vec<String> {
     conditions
         .iter()
         .map(|condition| {
-            if rule_name == "@container" {
+            if !crate::switches::NOT_CONTAINER_VALUE_PARSER.on() {
+                // The condition in parts, at each space.
+                let condition = js_trim(condition);
+                let parts = segment(condition, b' ');
+                if parts[0] == "not" {
+                    parts[1..].join(" ")
+                } else if rule_name != "@container" || parts[0].starts_with('(') {
+                    format!("not {condition}")
+                } else if parts.get(1) == Some(&"not") {
+                    // `{name} not {query}`
+                    format!("{} {}", parts[0], parts[2..].join(" "))
+                } else {
+                    // `{name} {query}`
+                    format!("{} not {}", parts[0], parts[1..].join(" "))
+                }
+            } else if rule_name == "@container" {
                 let mut ast = value_parser::parse(js_trim(condition));
                 let is_word = |node: &ValueAstNode| node.is_word();
                 let is_not = |node: &ValueAstNode| node.is_word() && node.value() == "not";
@@ -513,7 +547,18 @@ fn negate_selector(selector: &str) -> Option<String> {
         return None;
     }
     // `&:hover` becomes `&:not(*:hover)`.
-    let selectors: Vec<String> = segment(selector, b',').into_iter().map(|sel| sel.replace('&', "*")).collect();
+    let selectors: Vec<String> = segment(selector, b',')
+        .into_iter()
+        .map(|sel| {
+            // Before 4.0.10, a selector lost `&:is(` at its start and `)`
+            // at its end: `&:is(.a):is(.b)` became `.a):is(.b`.
+            let sel = match sel.strip_prefix("&:is(").and_then(|rest| rest.strip_suffix(')')) {
+                Some(inner) if !crate::switches::NOT_KEEPS_IS.on() => inner,
+                _ => sel,
+            };
+            sel.replace('&', "*")
+        })
+        .collect();
     Some(format!("&:not({})", selectors.join(", ")))
 }
 
@@ -656,7 +701,11 @@ fn group_or_peer(name: &'static str, combinator: &'static str) -> impl Fn(&mut A
             if segment(&selector, b',').len() > 1 {
                 selector = format!(":is({selector})");
             }
-            format!(":is({selector}{combinator}&)")
+            if switches::GROUP_PEER_TARGET_IN_IS.on() {
+                format!(":is({selector}{combinator}&)")
+            } else {
+                format!("&:is({selector}{combinator}*)")
+            }
         })
     }
 }
@@ -666,6 +715,36 @@ fn starts_with_function(value: &str) -> bool {
     let rest = value.trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-');
     let rest = rest.trim_start_matches(is_js_whitespace);
     rest.starts_with('(')
+}
+
+/// Before 4.3.4: `value.replace(/\b(and|or|not)\b/g, ' $1 ')`. Each of
+/// the words gets spaces around it, also in `selector(…)` and between
+/// hyphens.
+fn space_supports_words(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let is_word = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
+    let mut out = String::with_capacity(value.len() + 8);
+    let mut i = 0;
+    while i < bytes.len() {
+        let before = i == 0 || !is_word(bytes[i - 1]);
+        let found = ["and", "or", "not"].into_iter().find(|word| {
+            before && bytes[i..].starts_with(word.as_bytes()) && bytes.get(i + word.len()).is_none_or(|&next| !is_word(next))
+        });
+        match found {
+            Some(word) => {
+                out.push(' ');
+                out.push_str(word);
+                out.push(' ');
+                i += word.len();
+            }
+            None => {
+                let length = value[i..].chars().next().map_or(1, char::len_utf8);
+                out.push_str(&value[i..i + length]);
+                i += length;
+            }
+        }
+    }
+    out
 }
 
 /// Put spaces around `and`, `or` and `not` when they are functions.
@@ -798,6 +877,10 @@ pub fn create_variants(theme: &Theme) -> Variants {
     let at_rules = VariantOptions { compounds: Some(COMPOUNDS_AT_RULES), order: None };
     let never = VariantOptions { compounds: Some(COMPOUNDS_NEVER), order: None };
 
+    // Before 4.0.1, the `force` variant changed nothing.
+    if !switches::NO_FORCE_VARIANT.on() {
+        v.r#static("force", |_, _, _| Some(()), never);
+    }
     static_variant(v, "*", &[":is(& > *)"], Some(COMPOUNDS_NEVER));
     static_variant(v, "**", &[":is(& *)"], Some(COMPOUNDS_NEVER));
 
@@ -848,13 +931,22 @@ pub fn create_variants(theme: &Theme) -> Variants {
     static_variant(v, "first-letter", &["&::first-letter"], None);
     static_variant(v, "first-line", &["&::first-line"], None);
 
-    static_variant(v, "marker", &["& *::marker", "&::marker", "& *::-webkit-details-marker", "&::-webkit-details-marker"], None);
+    if crate::switches::MARKER_DETAILS_MARKER.on() {
+        static_variant(v, "marker", &["& *::marker", "&::marker", "& *::-webkit-details-marker", "&::-webkit-details-marker"], None);
+    } else {
+        // Before 4.0.16, `marker` had no `::-webkit-details-marker`.
+        static_variant(v, "marker", &["& *::marker", "&::marker"], None);
+    }
 
     static_variant(v, "selection", &["& *::selection", "&::selection"], None);
     static_variant(v, "file", &["&::file-selector-button"], None);
     static_variant(v, "placeholder", &["&::placeholder"], None);
     static_variant(v, "backdrop", &["&::backdrop"], None);
-    static_variant(v, "details-content", &["&::details-content"], None);
+    // The variants of 4.1.0 (`switches::STATIC_VARIANTS_OF_4_1`).
+    let variants_of_4_1 = switches::STATIC_VARIANTS_OF_4_1.on();
+    if variants_of_4_1 {
+        static_variant(v, "details-content", &["&::details-content"], None);
+    }
 
     for (name, selector) in [("before", "&::before"), ("after", "&::after")] {
         v.r#static(
@@ -888,7 +980,12 @@ pub fn create_variants(theme: &Theme) -> Variants {
     // State
     static_variant(v, "visited", &["&:visited"], None);
     static_variant(v, "target", &["&:target"], None);
-    static_variant(v, "open", &["&:is([open], :popover-open, :open)"], None);
+    // (Before 4.0.1, the selector had no `:open`.)
+    if switches::OPEN_VARIANT_OPEN_PSEUDO.on() {
+        static_variant(v, "open", &["&:is([open], :popover-open, :open)"], None);
+    } else {
+        static_variant(v, "open", &["&:is([open], :popover-open)"], None);
+    }
 
     // Forms
     static_variant(v, "default", &["&:default"], None);
@@ -900,8 +997,10 @@ pub fn create_variants(theme: &Theme) -> Variants {
     static_variant(v, "required", &["&:required"], None);
     static_variant(v, "valid", &["&:valid"], None);
     static_variant(v, "invalid", &["&:invalid"], None);
-    static_variant(v, "user-valid", &["&:user-valid"], None);
-    static_variant(v, "user-invalid", &["&:user-invalid"], None);
+    if variants_of_4_1 {
+        static_variant(v, "user-valid", &["&:user-valid"], None);
+        static_variant(v, "user-invalid", &["&:user-invalid"], None);
+    }
     static_variant(v, "in-range", &["&:in-range"], None);
     static_variant(v, "out-of-range", &["&:out-of-range"], None);
     static_variant(v, "read-only", &["&:read-only"], None);
@@ -961,7 +1060,9 @@ pub fn create_variants(theme: &Theme) -> Variants {
                 ValueKind::Arbitrary => format!("[aria-{}]", quote_attribute_value(&value.value)),
                 ValueKind::Named => format!("[aria-{}=\"true\"]", value.value),
             };
-            crate::attribute_selector_parser::parse(&selector)?;
+            if crate::switches::ARIA_DATA_ATTRIBUTE_CHECK.on() {
+                crate::attribute_selector_parser::parse(&selector)?;
+            }
             wrap_in(rule_node, |nodes| style_rule(format!("&{selector}"), nodes))
         },
         VariantOptions::default(),
@@ -975,7 +1076,9 @@ pub fn create_variants(theme: &Theme) -> Variants {
                 return None;
             }
             let selector = format!("[data-{}]", quote_attribute_value(&value.value));
-            crate::attribute_selector_parser::parse(&selector)?;
+            if crate::switches::ARIA_DATA_ATTRIBUTE_CHECK.on() {
+                crate::attribute_selector_parser::parse(&selector)?;
+            }
             wrap_in(rule_node, |nodes| style_rule(format!("&{selector}"), nodes))
         },
         VariantOptions::default(),
@@ -999,8 +1102,16 @@ pub fn create_variants(theme: &Theme) -> Variants {
             // `selector(…)`, is used as it is.
             if starts_with_function(&value) {
                 // `(a)or(b)` is not valid in Chrome, `(a) or (b)` is.
-                let mut ast = value_parser::parse(&value);
-                let query = if space_supports_keywords(&mut ast) { value_parser::to_css(&ast) } else { value };
+                let query = if switches::SUPPORTS_KEYWORDS_AS_FUNCTIONS.on() {
+                    let mut ast = value_parser::parse(&value);
+                    if space_supports_keywords(&mut ast) {
+                        value_parser::to_css(&ast)
+                    } else {
+                        value
+                    }
+                } else {
+                    space_supports_words(&value)
+                };
                 return wrap_in(rule_node, |nodes| at_rule("@supports", query, nodes));
             }
 
@@ -1069,16 +1180,18 @@ pub fn create_variants(theme: &Theme) -> Variants {
 
     static_variant(v, "forced-colors", &["@media (forced-colors: active)"], None);
 
-    static_variant(v, "inverted-colors", &["@media (inverted-colors: inverted)"], None);
+    if variants_of_4_1 {
+        static_variant(v, "inverted-colors", &["@media (inverted-colors: inverted)"], None);
 
-    static_variant(v, "pointer-none", &["@media (pointer: none)"], None);
-    static_variant(v, "pointer-coarse", &["@media (pointer: coarse)"], None);
-    static_variant(v, "pointer-fine", &["@media (pointer: fine)"], None);
-    static_variant(v, "any-pointer-none", &["@media (any-pointer: none)"], None);
-    static_variant(v, "any-pointer-coarse", &["@media (any-pointer: coarse)"], None);
-    static_variant(v, "any-pointer-fine", &["@media (any-pointer: fine)"], None);
+        static_variant(v, "pointer-none", &["@media (pointer: none)"], None);
+        static_variant(v, "pointer-coarse", &["@media (pointer: coarse)"], None);
+        static_variant(v, "pointer-fine", &["@media (pointer: fine)"], None);
+        static_variant(v, "any-pointer-none", &["@media (any-pointer: none)"], None);
+        static_variant(v, "any-pointer-coarse", &["@media (any-pointer: coarse)"], None);
+        static_variant(v, "any-pointer-fine", &["@media (any-pointer: fine)"], None);
 
-    static_variant(v, "noscript", &["@media (scripting: none)"], None);
+        static_variant(v, "noscript", &["@media (scripting: none)"], None);
+    }
 
     variants
 }
@@ -1111,6 +1224,27 @@ fn quote_attribute_value(input: &str) -> String {
 /// Replace each `@slot` with `nodes`. Put each `@keyframes` and `@property`
 /// rule in an at-root node.
 pub fn substitute_at_slot(ast: &mut Vec<AstNode>, nodes: &[AstNode]) {
+    // Before 4.2.0, the walk also went into the nodes that replaced
+    // `@slot`. So the `@keyframes` and `@property` rules of these nodes
+    // went into at-root nodes too. (An `@slot` in these nodes made an
+    // endless loop in the official compiler: here it stays.)
+    let wrapped: Vec<AstNode>;
+    let nodes = if switches::SLOT_NODES_STAY.on() {
+        nodes
+    } else {
+        let mut copy = nodes.to_vec();
+        walk(&mut copy, |node, _| match node {
+            AstNode::AtRule(r) if r.name == "@keyframes" || r.name == "@property" => {
+                let mut inner = std::mem::take(r);
+                inner.loc = Default::default();
+                *node = at_root(vec![AstNode::AtRule(inner)]);
+                WalkAction::Skip
+            }
+            _ => WalkAction::Continue,
+        });
+        wrapped = copy;
+        &wrapped
+    };
     walk(ast, |node, _| {
         let AstNode::AtRule(r) = node else { return WalkAction::Continue };
         if r.name == "@slot" {
@@ -1141,7 +1275,9 @@ pub fn substitute_at_variant(ast: &mut Vec<AstNode>, design_system: &DesignSyste
 
         let mut body = Some(std::mem::take(&mut variant_rule.nodes));
         let mut nodes: Vec<AstNode> = Vec::new();
-        let compound_variants = segment(&variant_rule.params, b',');
+        // Before 4.3.0, the text was one variant.
+        let list = crate::switches::AT_VARIANT_LIST.on();
+        let compound_variants = if list { segment(&variant_rule.params, b',') } else { vec![variant_rule.params.as_str()] };
         let last = compound_variants.len() - 1;
 
         for (idx, compound_variant) in compound_variants.iter().enumerate() {
@@ -1150,10 +1286,11 @@ pub fn substitute_at_variant(ast: &mut Vec<AstNode>, design_system: &DesignSyste
             let children = if idx == last { body.take().unwrap_or_default() } else { body.clone().unwrap_or_default() };
             let mut node = style_rule("&", children);
 
-            for variant in segment(compound_variant, b':').into_iter().rev() {
-                let variant = js_trim(variant);
+            let stacked_variants = if list { segment(compound_variant, b':') } else { vec![*compound_variant] };
+            for variant in stacked_variants.into_iter().rev() {
+                let variant = if list { js_trim(variant) } else { variant };
 
-                if variant.is_empty() {
+                if variant.is_empty() && list {
                     error = Some(Error::new("Cannot use `@variant` with empty variant"));
                     return WalkAction::Stop;
                 }
@@ -1177,7 +1314,13 @@ pub fn substitute_at_variant(ast: &mut Vec<AstNode>, design_system: &DesignSyste
             }
 
             match node {
-                AstNode::Rule(StyleRule { selector, nodes: children, .. }) if selector == "&" => nodes.extend(children),
+                // Before the nesting pass, the `&` rule stayed until the
+                // last step of the compiler.
+                AstNode::Rule(StyleRule { selector, nodes: children, .. })
+                    if selector == "&" && crate::switches::NESTING_PASS.on() =>
+                {
+                    nodes.extend(children)
+                }
                 other => nodes.push(other),
             }
         }

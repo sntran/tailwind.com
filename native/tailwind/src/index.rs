@@ -40,6 +40,7 @@ use crate::utils::js::js_trim;
 use crate::utils::segment::segment;
 use crate::utils::topological_sort::topological_sort;
 use crate::variants::{compounds_for_selectors, is_valid_variant_name, substitute_at_variant, VariantOptions};
+use crate::version::{self, Version};
 use crate::walk::{walk, WalkAction};
 use crate::{
     Error, Features, Polyfills, Result, FEATURES_AT_THEME, FEATURES_NONE, FEATURES_UTILITIES, POLYFILLS_ALL,
@@ -77,6 +78,9 @@ pub struct CompileOptions<'a> {
     /// `@config`. `None`: these rules are errors, as upstream with no
     /// `loadModule`.
     pub module_loader: Option<Rc<dyn ModuleLoader>>,
+    /// The version of Tailwind CSS to compile as (`version.rs`). `None`:
+    /// the version of the port.
+    pub version: Option<Version>,
 }
 
 impl Default for CompileOptions<'_> {
@@ -88,6 +92,7 @@ impl Default for CompileOptions<'_> {
             test_mode: false,
             from: None,
             module_loader: None,
+            version: None,
         }
     }
 }
@@ -128,6 +133,8 @@ pub struct Compiler {
     /// first use.
     all_valid_candidates: Vec<String>,
     all_valid_candidates_set: HashSet<String>,
+    /// The version of Tailwind CSS that this compiler follows.
+    version: Version,
     /// The output of the last compilation.
     compiled: Option<String>,
     previous_ast_node_count: usize,
@@ -153,18 +160,28 @@ impl Compiler {
     /// The CSS for all the candidates of this call and of the calls before.
     ///
     /// When a function of a JavaScript plugin throws, upstream throws from
-    /// `build`. Here `try_build` gives that error, and `build` gives the
-    /// CSS without the candidate of the failure.
+    /// `build`. Upstream also throws when a candidate uses a custom variant
+    /// whose `@variant` rule is not valid. Here `try_build` gives that
+    /// error, and `build` gives the CSS without the candidate of the
+    /// failure.
     pub fn build(&mut self, candidates: &[String]) -> String {
+        let _version = version::enter(self.version);
         let output = self.build_css(candidates);
         self.design_system.take_js_error();
+        self.design_system.variants.take_error();
         output
     }
 
-    /// `build`, with the error of a JavaScript plugin function.
+    /// `build`, with the error of a JavaScript plugin function or of a
+    /// custom variant.
     pub fn try_build(&mut self, candidates: &[String]) -> Result<String> {
+        let _version = version::enter(self.version);
+        self.design_system.variants.take_error();
         let output = self.build_css(candidates);
-        match self.design_system.take_js_error() {
+        if let Some(error) = self.design_system.take_js_error() {
+            return Err(error);
+        }
+        match self.design_system.variants.take_error() {
             Some(error) => Err(error),
             None => Ok(output),
         }
@@ -190,8 +207,11 @@ impl Compiler {
             }
             if candidate.starts_with("--") {
                 let did_mark_variable_as_used = self.design_system.theme.mark_used_variable(candidate);
-                did_change |= did_mark_variable_as_used;
-                did_add_external_variable |= did_mark_variable_as_used;
+                // Before 4.0.15, a new variable alone made no new output.
+                if crate::switches::VARIABLE_CANDIDATE_REBUILDS.on() {
+                    did_change |= did_mark_variable_as_used;
+                    did_add_external_variable |= did_mark_variable_as_used;
+                }
             } else if self.all_valid_candidates_set.insert(candidate.clone()) {
                 self.all_valid_candidates.push(candidate.clone());
                 did_change = true;
@@ -255,6 +275,7 @@ impl Compiler {
     /// The source map of the last output of `build` (`buildSourceMap`).
     /// It has mappings only when `compile` got the `from` option.
     pub fn build_source_map(&self) -> DecodedSourceMap {
+        let _version = version::enter(self.version);
         match &self.compiled_ast {
             Some(ast) => create_source_map(ast),
             // No compilation yet, or the stylesheet uses no feature: the
@@ -300,11 +321,13 @@ fn node_at_mut<'a>(tree: &'a mut [AstNode], path: &[usize]) -> Option<&'a mut As
 
 /// Compile a stylesheet.
 pub fn compile(css: &str, options: CompileOptions) -> Result<Compiler> {
+    let version = options.version.unwrap_or(Version::NATIVE);
+    let _version = version::enter(version);
     let ast = css_parser::parse_with_source(css, options.from.as_deref())?;
     let mut parsed = parse_css(ast, &options)?;
 
     if !options.test_mode {
-        parsed.ast.insert(0, comment(format!("! tailwindcss v{VERSION} | MIT License | https://tailwindcss.com ")));
+        parsed.ast.insert(0, comment(format!("! tailwindcss v{version} | MIT License | https://tailwindcss.com ")));
     }
 
     // The node of `@tailwind utilities` becomes a plain context node. It
@@ -332,6 +355,7 @@ pub fn compile(css: &str, options: CompileOptions) -> Result<Compiler> {
         input: css.to_string(),
         utilities_path,
         polyfills: options.polyfills,
+        version,
         all_valid_candidates,
         all_valid_candidates_set,
         compiled: None,
@@ -537,7 +561,18 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
     // Register the custom variants: a variant comes after the variants that
     // it uses.
     let graph: Vec<(String, Vec<String>)> = custom_variant_dependencies.into_iter().collect();
-    let sorted = topological_sort(&graph).map_err(|circular| {
+    let sorted = topological_sort(&graph);
+    // Before 4.1.14, custom variants that use each other in a circle were
+    // no error: an `@variant` rule in `@custom-variant` stayed in the
+    // output. For such a stylesheet, these rules stay, as they did then.
+    let sorted = match sorted {
+        Err(_) if !crate::switches::CUSTOM_VARIANT_CYCLE_ERROR.on() => {
+            design_system.variants.keep_at_variant = true;
+            Ok(custom_variants.keys().cloned().collect())
+        }
+        sorted => sorted,
+    };
+    let sorted = sorted.map_err(|circular| {
         let nodes: Vec<AstNode> = circular
             .path
             .iter()
@@ -587,14 +622,43 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
             if value.options & theme::REFERENCE != 0 {
                 continue;
             }
-            nodes.push(decl(escape(&key).into_owned(), value.value).with_src(value.src.as_ref()));
+            // (Before 4.0.2, the key had its escapes.)
+            let property = if crate::switches::THEME_KEYS_UNESCAPED.on() { escape(&key).into_owned() } else { key };
+            nodes.push(decl(property, value.value).with_src(value.src.as_ref()));
         }
 
         // An `AtRoot` moves the `@keyframes` out of `:root`. They are at
         // the top level of the tree, so that a `@reference` cannot remove
         // them.
+        // (Before 4.0.9, they were in the rule of the first `@theme`.)
+        // Before 4.0.5, a `@keyframes` rule was in the tree only when its
+        // name was a word in the value of an `--animate-*` variable
+        // (`animation.split(/\s+/)`).
+        let animation_parts: Option<Vec<String>> = (!crate::switches::THEME_KEYFRAMES_ALL_COLLECTED.on()).then(|| {
+            // (Before 4.0.4: `animation.split(' ')`.)
+            let at_white_space = crate::switches::ANIMATE_NAMES_AT_WHITE_SPACE.on();
+            let animations = design_system.theme.namespace("--animate");
+            animations
+                .values()
+                .flat_map(|animation| {
+                    if at_white_space {
+                        crate::optimize::split_at_white_space(animation)
+                    } else {
+                        animation.split(' ').collect()
+                    }
+                })
+                .map(String::from)
+                .collect()
+        });
         for keyframes in design_system.theme.get_keyframes() {
-            ast.push(context(context_with("theme", true.into()), vec![at_root(vec![AstNode::AtRule(keyframes)])]));
+            if animation_parts.as_ref().is_some_and(|parts| !parts.contains(&keyframes.params)) {
+                continue;
+            }
+            if crate::switches::THEME_KEYFRAMES_AT_THE_END.on() {
+                ast.push(context(context_with("theme", true.into()), vec![at_root(vec![AstNode::AtRule(keyframes)])]));
+            } else {
+                nodes.push(at_root(vec![AstNode::AtRule(keyframes)]));
+            }
         }
 
         fill_first_theme_rule(&mut ast, &mut Some(nodes));
@@ -636,10 +700,20 @@ fn for_each_utility(nodes: &mut [AstNode], ordinal: &mut usize, f: &mut dyn FnMu
     }
 }
 
+/// The selector of the rule that has the variables of the theme. Before
+/// 4.0.1, it was `:root`.
+pub fn theme_rule_selector() -> &'static str {
+    if crate::switches::THEME_ROOT_AND_HOST.on() {
+        ":root, :host"
+    } else {
+        ":root"
+    }
+}
+
 /// True for the rule that is at the place of the first `@theme`.
 fn is_first_theme_rule(node: &AstNode) -> bool {
     let AstNode::Rule(rule) = node else { return false };
-    if rule.selector != ":root, :host" || rule.nodes.len() != 1 {
+    if rule.selector != theme_rule_selector() || rule.nodes.len() != 1 {
         return false;
     }
     matches!(&rule.nodes[0], AstNode::Context(inner)
@@ -673,6 +747,22 @@ impl Collector {
         let AstNode::AtRule(at) = node else { return Ok(WalkAction::Continue) };
         let has_parent = css_parent(ancestors).is_some();
 
+        // Before 4.0.4, the compiler did not look in an `@media` rule that
+        // stays in the output. An at-rule with a body stayed in the output
+        // there, which is not valid CSS: for that one, the result is the
+        // result of 4.0.4.
+        if !crate::switches::AT_RULES_IN_MEDIA.on() && ancestors.iter().any(|ancestor| ancestor.is_at_rule("@media")) {
+            // (Before 4.0.2, an at-rule with no body stayed too.)
+            let stays = match at.name.as_str() {
+                "@theme" | "@utility" | "@custom-variant" => !at.nodes.is_empty() || !crate::switches::EMPTY_RULES_REMOVED.on(),
+                "@tailwind" | "@source" => !crate::switches::EMPTY_RULES_REMOVED.on(),
+                _ => false,
+            };
+            if !stays && at.name != "@variant" {
+                return Ok(WalkAction::Continue);
+            }
+        }
+
         // Find `@tailwind utilities`. `build` replaces it with the rules of
         // the candidates.
         if at.name == "@tailwind" && at.params.starts_with("utilities") {
@@ -683,7 +773,10 @@ impl Collector {
 
             // In a `@reference`, `@tailwind utilities` is not there.
             let node_context = css_context(ancestors);
-            if node_context.get("reference").is_some_and(|v| v.truthy()) {
+            // Before 4.1.6 it was the utilities node, and its rules were
+            // removed with the other rules of the reference.
+            let in_reference = node_context.get("reference").is_some_and(|v| v.truthy());
+            if in_reference && crate::switches::REFERENCE_NO_UTILITIES.on() {
                 return Ok(WalkAction::Replace(Vec::new()));
             }
 
@@ -745,7 +838,9 @@ impl Collector {
         let shared: SharedAtRule = Rc::new(RefCell::new(at.clone()));
         let Some(utility) = create_css_utility_shared(shared.clone()) else {
             let params = &at.params;
-            if !params.ends_with("-*") {
+            // Before 4.1.12, each name that is not valid had the same
+            // message.
+            if !params.ends_with("-*") && crate::switches::UTILITY_NAME_ERROR_REASONS.on() {
                 if params.ends_with('*') {
                     return Err(Error::new(format!(
                         "`@utility {params}` defines an invalid utility name. A functional utility must end in `-*`."
@@ -780,14 +875,22 @@ impl Collector {
         let mut inline = false;
         let mut path: &str = &at.params;
 
-        if path.starts_with("not ") {
+        // Before 4.1.0, `not` and `inline(…)` were a part of the path, and
+        // such a path has no quotes.
+        let not_and_inline = crate::switches::SOURCE_NOT_AND_INLINE.on();
+
+        if not_and_inline && path.starts_with("not ") {
             not = true;
             path = &path[4..];
         }
 
-        if path.starts_with("inline(") {
+        if not_and_inline && path.starts_with("inline(") {
             inline = true;
-            path = js_trim(slice(path, 7));
+            path = slice(path, 7);
+            // Before 4.2.0, white space around the argument was an error.
+            if crate::switches::SOURCE_INLINE_WHITESPACE.on() {
+                path = js_trim(path);
+            }
         }
 
         if !is_quoted(path) {
@@ -836,9 +939,16 @@ impl Collector {
         let selector = parts.get(1).copied().filter(|selector| !selector.is_empty());
 
         if !is_valid_variant_name(&name) {
-            return Err(Error::new(format!(
-                "`@custom-variant {name}` defines an invalid variant name. Variants should only contain alphanumeric, dashes, or underscore characters and start with a lowercase letter or number."
-            )));
+            // Before 4.1.13, the message had no rule about the start.
+            return Err(Error::new(if crate::switches::VARIANT_NAME_START_AND_END.on() {
+                format!(
+                    "`@custom-variant {name}` defines an invalid variant name. Variants should only contain alphanumeric, dashes, or underscore characters and start with a lowercase letter or number."
+                )
+            } else {
+                format!(
+                    "`@custom-variant {name}` defines an invalid variant name. Variants should only contain alphanumeric, dashes or underscore characters."
+                )
+            }));
         }
 
         if !at.nodes.is_empty() && selector.is_some() {
@@ -870,7 +980,8 @@ impl Collector {
                 }
             }
 
-            let uses_at_scope = at_rule_params.iter().any(|param| param.starts_with("@scope"));
+            let uses_at_scope =
+                crate::switches::SCOPE_HOISTING.on() && at_rule_params.iter().any(|param| param.starts_with("@scope"));
             let all: Vec<&str> = style_rule_selectors.iter().chain(&at_rule_params).map(String::as_str).collect();
             let compounds = compounds_for_selectors(&all);
 
@@ -966,7 +1077,10 @@ impl Collector {
                 // `@media theme(…)`: `@import "…" theme(reference)` imports
                 // a theme file as a reference.
                 let theme_params = slice(param, 6);
-                let has_reference = theme_params.contains("reference");
+                // Before 4.0.8, each node that is not an at-rule was an
+                // error, with each option.
+                let with_rules = crate::switches::IMPORT_THEME_OPTION_WITH_RULES.on();
+                let has_reference = theme_params.contains("reference") || !with_rules;
                 let mut invalid = false;
 
                 walk(&mut at.nodes, |child, _| match child {
@@ -989,9 +1103,11 @@ impl Collector {
                 });
 
                 if invalid {
-                    return Err(Error::new(
-                        "Files imported with `@import \"…\" theme(reference)` must only contain `@theme` blocks.\nUse `@reference \"…\";` instead.",
-                    ));
+                    return Err(Error::new(if with_rules {
+                        "Files imported with `@import \"…\" theme(reference)` must only contain `@theme` blocks.\nUse `@reference \"…\";` instead."
+                    } else {
+                        "Files imported with `@import \"…\" theme(…)` must only contain `@theme` blocks."
+                    }));
                 }
             } else if param.starts_with("prefix(") {
                 // `@media prefix(…)`: `@import "…" prefix(ident)` sets the
@@ -1019,6 +1135,12 @@ impl Collector {
         if !unknown_params.is_empty() {
             at.params = unknown_params.join(" ");
         } else if !params.is_empty() {
+            // In 4.0.2 and 4.0.3, the compiler collected each `@variant`
+            // rule of the import two times, and applied the variant two
+            // times. An `@variant` rule in itself gives that result.
+            if crate::switches::AT_VARIANT_IN_IMPORT_TWICE.on() && !crate::switches::AT_VARIANT_IN_IMPORT_ONCE.on() {
+                nest_variants_in_themselves(&mut at.nodes, css_parent(ancestors).is_none());
+            }
             return Ok(WalkAction::Replace(std::mem::take(&mut at.nodes)));
         }
 
@@ -1030,9 +1152,17 @@ impl Collector {
         let AstNode::AtRule(at) = node else { return Ok(WalkAction::Continue) };
         let (mut theme_options, theme_prefix) = parse_theme_options(&at.params);
 
-        self.features |= FEATURES_AT_THEME;
+        // Before 4.1.14, `@theme` was not a feature: with no other feature,
+        // the output was the input.
+        if crate::switches::AT_THEME_IS_A_FEATURE.on() {
+            self.features |= FEATURES_AT_THEME;
+        }
 
-        if css_context(ancestors).get("reference").is_some_and(|v| v.truthy()) {
+        // Only in 4.0.8, an `@theme` in a reference import was as each
+        // other `@theme`: see `optimize.rs` for its place in the output.
+        if css_context(ancestors).get("reference").is_some_and(|v| v.truthy())
+            && (crate::switches::REFERENCE_IMPORT_THEME.on() || !crate::switches::REFERENCE_IMPORT_THEME_IS_NORMAL.on())
+        {
             theme_options |= theme::REFERENCE;
         }
 
@@ -1055,14 +1185,30 @@ impl Collector {
                 // The `@theme` rule itself goes away, so keep the
                 // `@keyframes` rules for the output.
                 AstNode::AtRule(child_rule) if child_rule.name == "@keyframes" => {
-                    theme.add_keyframes(child_rule.clone());
+                    // From 4.0.2 to 4.0.8, the `@keyframes` rules of
+                    // `@theme reference` were not in the output.
+                    if theme_options & theme::REFERENCE == 0
+                        || crate::switches::REFERENCE_THEME_KEYFRAMES.on()
+                        || !crate::switches::REFERENCE_THEME_NO_KEYFRAMES.on()
+                    {
+                        theme.add_keyframes(child_rule.clone());
+                    }
                     return WalkAction::Skip;
                 }
                 AstNode::Comment(_) => return WalkAction::Continue,
                 AstNode::Declaration(declaration) if declaration.property.starts_with("--") => {
                     let value = declaration.value.as_deref().unwrap_or("");
                     let src = declaration.loc.src().cloned();
-                    if let Err(e) = theme.add_with_src(&unescape(&declaration.property), value, theme_options, src) {
+                    // Before 4.0.2, the key was the text of the property,
+                    // with its escapes (but `\*` at the end was `*`).
+                    let key = if crate::switches::THEME_KEYS_UNESCAPED.on() {
+                        unescape(&declaration.property)
+                    } else if let Some(namespace) = declaration.property.strip_suffix("\\*") {
+                        format!("{namespace}*").into()
+                    } else {
+                        declaration.property.as_str().into()
+                    };
+                    if let Err(e) = theme.add_with_src(&key, value, theme_options, src) {
                         error = Some(e);
                         return WalkAction::Stop;
                     }
@@ -1094,14 +1240,37 @@ impl Collector {
 
         // The first `@theme` rule becomes the rule that gets the complete
         // theme later. The other `@theme` rules go away.
-        if !self.has_first_theme_rule {
+        // (Before 4.0.8, an `@theme reference` was not the first rule.)
+        if !self.has_first_theme_rule
+            && (theme_options & theme::REFERENCE == 0 || crate::switches::THEME_RULE_AT_FIRST_THEME.on())
+        {
             self.has_first_theme_rule = true;
             let marker = context(context_with("theme", true.into()), Vec::new());
-            Ok(WalkAction::ReplaceSkip(vec![style_rule(":root, :host", vec![marker]).with_src(at.loc.src())]))
+            Ok(WalkAction::ReplaceSkip(vec![style_rule(theme_rule_selector(), vec![marker]).with_src(at.loc.src())]))
         } else {
             Ok(WalkAction::ReplaceSkip(Vec::new()))
         }
     }
+}
+
+/// Put each `@variant` rule of the subtree in a copy of itself: see
+/// `switches::AT_VARIANT_IN_IMPORT_TWICE`. An `@variant` rule at the top
+/// level with no body or with an `@slot` rule is an `@custom-variant`: the
+/// compiler applied nothing to it.
+fn nest_variants_in_themselves(nodes: &mut Vec<AstNode>, top_level: bool) {
+    walk(nodes, |child, ctx| match child {
+        AstNode::AtRule(variant) if variant.name == "@variant" => {
+            if top_level && css_parent(ctx.path).is_none() && (variant.nodes.is_empty() || has_slot(&variant.nodes)) {
+                return WalkAction::Continue;
+            }
+            let mut body = std::mem::take(&mut variant.nodes);
+            nest_variants_in_themselves(&mut body, false);
+            let inner = AtRule { name: variant.name.clone(), params: variant.params.clone(), nodes: body, loc: variant.loc.clone() };
+            variant.nodes = vec![AstNode::AtRule(inner)];
+            WalkAction::Skip
+        }
+        _ => WalkAction::Continue,
+    });
 }
 
 /// True when the subtree has an `@slot` rule.
@@ -1221,6 +1390,16 @@ mod tests {
         };
         assert_eq!(error("@plugin \"./plugin.js\";"), plugin);
         assert_eq!(error("@config \"./config.js\";"), config);
+    }
+
+    #[test]
+    fn build_gives_the_error_of_a_custom_variant() {
+        // Upstream throws from `build` when a candidate uses the variant.
+        let css = "@custom-variant a {\n  @variant nope { @slot; }\n}\n@tailwind utilities;";
+        let mut compiler = compile(css, options()).unwrap();
+        assert_eq!(compiler.try_build(&["flex".to_string()]).unwrap(), ".flex {\n  display: flex;\n}\n");
+        let error = compiler.try_build(&["a:flex".to_string()]).unwrap_err();
+        assert_eq!(error.message, "Cannot use `@variant` with unknown variant: nope");
     }
 
     #[test]

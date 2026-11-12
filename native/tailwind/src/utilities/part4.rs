@@ -49,7 +49,7 @@ fn shadow_alpha(modifier: Option<&CandidateModifier>) -> Option<String> {
     let modifier = modifier?;
     if modifier.kind == ValueKind::Arbitrary {
         Some(modifier.value.clone())
-    } else if is_valid_opacity_value(&modifier.value) {
+    } else if super::is_shadow_alpha(&modifier.value) {
         Some(format!("{}%", modifier.value))
     } else {
         None
@@ -87,6 +87,15 @@ fn alpha_replaced_shadow_properties(
         if prefix.is_empty() {
             return x;
         }
+        // Before 4.1.2, the prefix was only before the first shadow.
+        if !crate::switches::INSET_SHADOW_LIST.on() {
+            return format!("{} {x}", js_trim(prefix));
+        }
+        // Before 4.2.0, the prefix was `inset ` and each shadow stayed as
+        // it was.
+        if !crate::switches::INSET_SHADOW_LIST_SPACES.on() {
+            return segment(&x, b',').into_iter().map(|value| format!("{} {value}", js_trim(prefix))).collect::<Vec<_>>().join(",");
+        }
         segment(&x, b',')
             .into_iter()
             .map(|value| format!("{} {}", js_trim(prefix), js_trim(value)))
@@ -113,13 +122,22 @@ fn text_shadow_properties() -> AstNode {
 }
 
 fn box_shadow_properties() -> AstNode {
-    at_root(vec![
-        property("--tw-shadow", Some(NULL_SHADOW), None),
-        prop("--tw-shadow-color"),
-        property("--tw-shadow-alpha", Some("100%"), Some("<percentage>")),
-        property("--tw-inset-shadow", Some(NULL_SHADOW), None),
-        prop("--tw-inset-shadow-color"),
-        property("--tw-inset-shadow-alpha", Some("100%"), Some("<percentage>")),
+    // Before 4.1.0, a shadow had no alpha variable.
+    let alpha = |ident: &str| crate::switches::SHADOW_ALPHA.on().then(|| property(ident, Some("100%"), Some("<percentage>")));
+    let properties = [
+        Some(property("--tw-shadow", Some(NULL_SHADOW), None)),
+        Some(prop("--tw-shadow-color")),
+        alpha("--tw-shadow-alpha"),
+        Some(property("--tw-inset-shadow", Some(NULL_SHADOW), None)),
+        Some(prop("--tw-inset-shadow-color")),
+        alpha("--tw-inset-shadow-alpha"),
+    ];
+    at_root(properties.into_iter().flatten().chain(ring_properties()).collect())
+}
+
+/// The `@property` rules of the rings, which follow these of the shadows.
+fn ring_properties() -> Vec<AstNode> {
+    vec![
         prop("--tw-ring-color"),
         property("--tw-ring-shadow", Some(NULL_SHADOW), None),
         prop("--tw-inset-ring-color"),
@@ -129,7 +147,7 @@ fn box_shadow_properties() -> AstNode {
         property("--tw-ring-offset-width", Some("0px"), Some("<length>")),
         property("--tw-ring-offset-color", Some("#fff"), None),
         property("--tw-ring-offset-shadow", Some(NULL_SHADOW), None),
-    ])
+    ]
 }
 
 /// The data of one shadow utility (`text-shadow`, `shadow`, `inset-shadow`).
@@ -170,6 +188,10 @@ impl ShadowUtility {
 
     /// The rules of a shadow color.
     fn color(&self, value: &str) -> Vec<AstNode> {
+        // Before 4.1.0, the color had no alpha variable.
+        if !crate::switches::SHADOW_ALPHA.on() {
+            return vec![(self.properties)(), decl(self.color_property, value)];
+        }
         vec![
             (self.properties)(),
             decl(self.color_property, with_alpha(value, &format!("var({})", self.alpha_property))),
@@ -177,8 +199,14 @@ impl ShadowUtility {
     }
 
     fn compile(&self, candidate: &FunctionalCandidate, theme: &Theme) -> Option<Vec<AstNode>> {
-        let alpha = shadow_alpha(candidate.modifier.as_ref());
-        let invalid_alpha = candidate.modifier.is_some() && !alpha.as_ref().is_some_and(|a| !a.is_empty());
+        // Before 4.1.0, the modifier was only the opacity of a shadow
+        // color: a shadow of the theme with a modifier gave nothing, and
+        // each other shadow ignored the modifier.
+        let has_alpha = crate::switches::SHADOW_ALPHA.on();
+        let alpha = if has_alpha { shadow_alpha(candidate.modifier.as_ref()) } else { None };
+        let invalid_alpha = candidate.modifier.is_some()
+            && !alpha.as_ref().is_some_and(|a| !a.is_empty())
+            && crate::switches::UNUSED_MODIFIER_IS_INVALID.on();
 
         let named = match &candidate.value {
             None => {
@@ -210,13 +238,20 @@ impl ShadowUtility {
                 if candidate.modifier.is_some() {
                     return None;
                 }
-                let mut nodes = vec![(self.properties)(), decl(self.property, self.none_value)];
+                // Before 4.3.1, `inset-shadow-none` had no `inset`.
+                let none_value = if self.arbitrary_prefix == "inset" && !crate::switches::INSET_SHADOW_NONE_INSET.on() {
+                    NULL_SHADOW
+                } else {
+                    self.none_value
+                };
+                let mut nodes = vec![(self.properties)(), decl(self.property, none_value)];
                 if self.box_shadow {
                     nodes.push(decl("box-shadow", CSS_BOX_SHADOW_VALUE));
                 }
                 return Some(nodes);
             }
-            "inherit" => {
+            // Before 4.1.4, `inherit` was a color as each other.
+            "inherit" if crate::switches::SHADOW_INHERIT.on() => {
                 if candidate.modifier.is_some() {
                     return None;
                 }
@@ -227,7 +262,7 @@ impl ShadowUtility {
 
         // Shadow size
         if let Some(value) = truthy(theme.get(&[&format!("{}-{named}", self.theme_key)])) {
-            if invalid_alpha {
+            if invalid_alpha || (!has_alpha && candidate.modifier.is_some()) {
                 return None;
             }
             return Some(self.shadow(&value, alpha.as_ref(), ""));
@@ -239,9 +274,17 @@ impl ShadowUtility {
     }
 }
 
-/// The line height from the modifier of a `text-*` candidate. `None` is an
-/// invalid modifier.
-fn text_line_height(modifier: &CandidateModifier, theme: &Theme) -> Option<String> {
+/// The line height from the modifier of a `text-*` candidate.
+enum LineHeight {
+    Value(String),
+    /// The candidate is not valid.
+    Invalid,
+    /// Before 4.0.1: the modifier gives no line height, and the candidate
+    /// is valid with no line height.
+    Ignored,
+}
+
+fn text_line_height(modifier: &CandidateModifier, theme: &Theme) -> LineHeight {
     let mut value = truthy(if modifier.kind == ValueKind::Arbitrary {
         Some(modifier.value.clone())
     } else {
@@ -249,16 +292,26 @@ fn text_line_height(modifier: &CandidateModifier, theme: &Theme) -> Option<Strin
     });
 
     if value.is_none() && is_valid_spacing_multiplier(&modifier.value) {
-        truthy(theme.resolve(None, &["--spacing"]))?;
+        if truthy(theme.resolve(None, &["--spacing"])).is_none() {
+            return LineHeight::Invalid;
+        }
         value = Some(format!("--spacing({})", modifier.value));
     }
 
+    // Before 4.0.1, a modifier with no line height was ignored, and `none`
+    // was such a modifier.
+    let strict = crate::switches::TEXT_MODIFIER_IS_LINE_HEIGHT.on();
+
     // Shorthand for `leading-none`
-    if value.is_none() && modifier.value == "none" {
+    if value.is_none() && modifier.value == "none" && strict {
         value = Some("1".to_string());
     }
 
-    value
+    match value {
+        Some(value) => LineHeight::Value(value),
+        None if strict => LineHeight::Invalid,
+        None => LineHeight::Ignored,
+    }
 }
 
 /// The `text-*` utility: a color or a font size.
@@ -277,10 +330,11 @@ fn compile_text(candidate: &FunctionalCandidate, theme: &Theme) -> Compiled {
                 Some("size" | "length" | "percentage" | "absolute-size" | "relative-size") => {
                     if let Some(modifier) = &candidate.modifier {
                         return match text_line_height(modifier, theme) {
-                            Some(line_height) => {
+                            LineHeight::Value(line_height) => {
                                 Compiled::Nodes(vec![decl("font-size", value.as_str()), decl("line-height", line_height)])
                             }
-                            None => Compiled::Null,
+                            LineHeight::Invalid => Compiled::Null,
+                            LineHeight::Ignored => Compiled::Nodes(vec![decl("font-size", value.as_str())]),
                         };
                     }
                     Compiled::Nodes(vec![decl("font-size", value.as_str())])
@@ -305,8 +359,11 @@ fn compile_text(candidate: &FunctionalCandidate, theme: &Theme) -> Compiled {
 
     if let Some(modifier) = &candidate.modifier {
         return match text_line_height(modifier, theme) {
-            Some(line_height) => Compiled::Nodes(vec![decl("font-size", font_size), decl("line-height", line_height)]),
-            None => Compiled::Null,
+            LineHeight::Value(line_height) => {
+                Compiled::Nodes(vec![decl("font-size", font_size), decl("line-height", line_height)])
+            }
+            LineHeight::Invalid => Compiled::Null,
+            LineHeight::Ignored => Compiled::Nodes(vec![decl("font-size", font_size)]),
         };
     }
 
@@ -400,7 +457,15 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
             "transition",
             UtilityDescription::new(move |value, _, _| Some(transition(value)))
                 .default_value(Some(
-                    "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events",
+                    // Before 4.1.13, the list had `visibility`. Before
+                    // 4.1.5, the list ended at `backdrop-filter`.
+                    if crate::switches::TRANSITION_NO_VISIBILITY.on() {
+                        "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, content-visibility, overlay, pointer-events"
+                    } else if crate::switches::TRANSITION_DISPLAY.on() {
+                        "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter, display, visibility, content-visibility, overlay, pointer-events"
+                    } else {
+                        "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to, opacity, box-shadow, transform, translate, scale, rotate, filter, -webkit-backdrop-filter, backdrop-filter"
+                    },
                 ))
                 .theme_keys(&["--transition-property"])
                 .static_values(static_values),
@@ -482,7 +547,8 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 decl("content", "var(--tw-content)"),
             ])
         })
-        .theme_keys(&["--content"]),
+        // Before 4.1.18, `content-*` did not read the theme.
+        .theme_keys(if crate::switches::CONTENT_THEME_KEY.on() { &["--content"] } else { &[] }),
     );
 
     {
@@ -503,7 +569,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
             static_utility(
                 utilities,
                 name,
-                vec![n(css_contain_properties), d(variable, value), d("contain", CSS_CONTAIN_VALUE)],
+                vec![n(css_contain_properties), d(variable, value), d("contain", super::empty_fallbacks(CSS_CONTAIN_VALUE))],
             );
         }
 
@@ -568,7 +634,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 vec![
                     n(font_variant_numeric_properties),
                     d(variable, name),
-                    d("font-variant-numeric", CSS_FONT_VARIANT_NUMERIC_VALUE),
+                    d("font-variant-numeric", super::empty_fallbacks(CSS_FONT_VARIANT_NUMERIC_VALUE)),
                 ],
             );
         }
@@ -576,15 +642,19 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
 
     {
         utilities.r#static("outline-hidden", |_, _| {
-            Some(vec![
-                decl("--tw-outline-style", "none"),
+            let mut nodes = vec![
                 decl("outline-style", "none"),
                 at_rule(
                     "@media",
                     "(forced-colors: active)",
                     vec![decl("outline", "2px solid transparent"), decl("outline-offset", "2px")],
                 ),
-            ])
+            ];
+            // Before 4.0.10, `outline-hidden` did not set the variable.
+            if crate::switches::OUTLINE_HIDDEN_STYLE_VARIABLE.on() {
+                nodes.insert(0, decl("--tw-outline-style", "none"));
+            }
+            Some(nodes)
         });
 
         for (name, style) in [
@@ -604,7 +674,12 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                     if candidate.modifier.is_some() {
                         return None;
                     }
-                    let value = theme.get(&["--default-outline-width"]).unwrap_or_else(|| "1px".to_string());
+                    // Before 4.0.7, the width was always `1px`.
+                    let value = if crate::switches::DEFAULT_OUTLINE_WIDTH.on() {
+                        theme.get(&["--default-outline-width"]).unwrap_or_else(|| "1px".to_string())
+                    } else {
+                        "1px".to_string()
+                    };
                     return Some(outline_width(value));
                 }
                 Some(UtilityValue::Arbitrary { data_type, value }) => {
@@ -678,11 +753,15 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
 
     utilities.functional_full("text", |candidate, ds| compile_text(candidate, &ds.theme), None);
 
-    static_utility(
-        utilities,
-        "text-shadow-initial",
-        vec![n(text_shadow_properties), d("--tw-text-shadow-color", "initial")],
-    );
+    // The utilities of 4.1.0 (`switches::TEXT_SHADOW`).
+    let text_shadow = crate::switches::TEXT_SHADOW.on();
+    if text_shadow {
+        static_utility(
+            utilities,
+            "text-shadow-initial",
+            vec![n(text_shadow_properties), d("--tw-text-shadow-color", "initial")],
+        );
+    }
 
     const TEXT_SHADOW: ShadowUtility = ShadowUtility {
         property: "text-shadow",
@@ -695,7 +774,9 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         arbitrary_prefix: "",
         properties: text_shadow_properties,
     };
-    utilities.functional("text-shadow", |candidate, ds| TEXT_SHADOW.compile(candidate, &ds.theme));
+    if text_shadow {
+        utilities.functional("text-shadow", |candidate, ds| TEXT_SHADOW.compile(candidate, &ds.theme));
+    }
 
     {
         static_utility(utilities, "shadow-initial", vec![n(box_shadow_properties), d("--tw-shadow-color", "initial")]);
@@ -734,14 +815,15 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
 
         static_utility(utilities, "ring-inset", vec![n(box_shadow_properties), d("--tw-ring-inset", "inset")]);
 
-        let default_ring_color = theme.get(&["--default-ring-color"]).unwrap_or_else(|| "currentcolor".to_string());
+        let default_ring_color = theme.get(&["--default-ring-color"]).unwrap_or_else(|| super::current_color().to_string());
         let ring_shadow = move |value: &str| {
             vec![
                 box_shadow_properties(),
                 decl(
                     "--tw-ring-shadow",
                     format!(
-                        "var(--tw-ring-inset, ) 0 0 0 calc({value} + var(--tw-ring-offset-width)) var(--tw-ring-color, {default_ring_color})"
+                        "{} 0 0 0 calc({value} + var(--tw-ring-offset-width)) var(--tw-ring-color, {default_ring_color})",
+                        super::empty_fallbacks("var(--tw-ring-inset, )")
                     ),
                 ),
                 decl("box-shadow", CSS_BOX_SHADOW_VALUE),
@@ -762,7 +844,10 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         let inset_ring_shadow = |value: &str| {
             vec![
                 box_shadow_properties(),
-                decl("--tw-inset-ring-shadow", format!("inset 0 0 0 {value} var(--tw-inset-ring-color, currentcolor)")),
+                decl(
+                    "--tw-inset-ring-shadow",
+                    format!("inset 0 0 0 {value} var(--tw-inset-ring-color, {})", super::current_color()),
+                ),
                 decl("box-shadow", CSS_BOX_SHADOW_VALUE),
             ]
         };
@@ -779,7 +864,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         const RING_OFFSET_SHADOW_VALUE: &str =
             "var(--tw-ring-inset, ) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color)";
         let ring_offset_width = |value: String| {
-            vec![decl("--tw-ring-offset-width", value), decl("--tw-ring-offset-shadow", RING_OFFSET_SHADOW_VALUE)]
+            vec![decl("--tw-ring-offset-width", value), decl("--tw-ring-offset-shadow", super::empty_fallbacks(RING_OFFSET_SHADOW_VALUE))]
         };
         utilities.functional("ring-offset", move |candidate, ds| {
             let theme = &ds.theme;
@@ -825,7 +910,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
             None => "inline-size",
             Some(UtilityValue::Arbitrary { value, .. }) => value.as_str(),
             Some(UtilityValue::Named { value, .. }) if value == "normal" => "normal",
-            Some(UtilityValue::Named { value, .. }) if value == "size" => "size",
+            Some(UtilityValue::Named { value, .. }) if value == "size" && crate::switches::CONTAINER_SIZE.on() => "size",
             Some(_) => return None,
         };
 

@@ -10,6 +10,7 @@
 //! are data (`Lazy`).
 
 use crate::design_system::DesignSystem;
+use crate::switches;
 use crate::theme;
 use crate::utilities::with_alpha;
 use crate::utils::escape::unescape;
@@ -173,6 +174,26 @@ impl CompatTheme {
         // `createCompatConfig`: the default theme with the `extend` object.
         let mut theme: Object = super::default_theme::default_theme().into_iter().map(|(k, v)| (k.to_string(), v)).collect();
 
+        // Before 4.3.3, the sans-serif fonts of the default theme started
+        // with `ui-sans-serif, system-ui`.
+        if !switches::DEFAULT_THEME_SYSTEM_FONTS.on() {
+            if let Some(Val::Obj(fonts)) = theme.get("fontFamily") {
+                let mut fonts: Object = (**fonts).clone();
+                let old = ["ui-sans-serif", "system-ui", "sans-serif", "\"Apple Color Emoji\"", "\"Segoe UI Emoji\"", "\"Segoe UI Symbol\"", "\"Noto Color Emoji\""];
+                fonts.insert("sans".to_string(), a(old.into_iter().map(s).collect()));
+                theme.insert("fontFamily".to_string(), Val::object(fonts));
+            }
+        }
+
+        // Before 4.1.2, the default colors of the border and of the ring
+        // were `currentColor`.
+        if !crate::switches::CURRENTCOLOR_LOWERCASE.on() {
+            for key in ["borderColor", "ringColor"] {
+                let parts = vec![Part::Entry("DEFAULT", s("currentColor")), Part::Spread("colors")];
+                theme.insert(key.to_string(), Val::Lazy(Rc::new(Lazy::Object(parts))));
+            }
+        }
+
         let spread = |key: &'static str| Val::Lazy(Rc::new(Lazy::Object(vec![Part::SpreadOrEmpty(key)])));
         let default_of = |key: &str| {
             let mut map = Object::new();
@@ -226,13 +247,17 @@ impl CompatTheme {
     }
 
     /// The replacement of `resolveThemeValue` of `upgradeToFullPluginSupport`,
-    /// for a path that does not start with `--`.
+    /// for a path that does not start with `--`. Before 4.1.0, also for a
+    /// path with `--` (`switches::THEME_VARIABLE_AFTER_KEY_PATH`).
     pub(super) fn resolve_theme_value(&self, design_system: &DesignSystem, path: &str) -> Option<String> {
         let mut resolved = theme_fn(design_system, &self.theme, &|value| value, path);
 
-        // A namespace root with a bare value: `--shadow` for `theme('shadow')`.
+        // An object with `DEFAULT` gives that value: a namespace root with a
+        // bare value (`--shadow` for `theme('shadow')`), or `colors.foo`
+        // with `--color-foo` and `--color-foo-bar`.
+        // (Before 4.1.15, such an object was no value.)
         if let Val::Obj(map) = &resolved {
-            if let Some(default) = map.get("DEFAULT").cloned() {
+            if let Some(default) = map.get("DEFAULT").cloned().filter(|_| switches::THEME_FN_OBJECT_DEFAULT.on()) {
                 resolved = default;
             }
         }
@@ -442,8 +467,11 @@ fn theme_fn(design_system: &DesignSystem, config_theme: &Object, resolve_value: 
         }
 
         // `--color-foo` and `--color-foo-bar` together give an object for
-        // `colors.foo`. Then the result is the value of `DEFAULT`.
-        if keypath.len() > 1 {
+        // `colors.foo`. Then the result is the value of `DEFAULT`. A
+        // namespace root (`theme('shadow')`) stays an object.
+        // (Before 4.3.3, the result was the object. In 4.3.3, a namespace
+        // root also gave its `DEFAULT`.)
+        if switches::THEME_FN_PREFERS_DEFAULT.on() && (keypath.len() > 1 || !switches::THEME_FN_NAMESPACE_ROOT.on()) {
             if let Val::Obj(map) = &css_value {
                 if let Some(default) = map.get("DEFAULT") {
                     break 'value default.clone();
@@ -544,8 +572,10 @@ fn read_from_css(design_system: &DesignSystem, path: &[String]) -> (Val, Val) {
     }
 
     // `theme('animation.spin')` reads `--animation-spin-*`, and there is
-    // only the value itself.
-    if path.len() > 1 && object.len() == 1 {
+    // only the value itself. A namespace root keeps the object.
+    // (Before 4.3.4, a namespace root with only a bare value also gave
+    // the value itself.)
+    if (path.len() > 1 || !switches::THEME_FN_NAMESPACE_ROOT.on()) && object.len() == 1 {
         if let Some(default) = object.get("DEFAULT") {
             return (default.clone(), options_object.get("DEFAULT").cloned().unwrap_or_else(none));
         }
@@ -575,8 +605,14 @@ fn camel_case(value: &str) -> String {
 /// does not exist, the key and the next key become one key with a dash.
 fn get(object: &Val, path: &mut [String]) -> Val {
     let mut current = object.clone();
+    // Before 4.1.15, a key was also an index into a text.
+    let index_strings = !switches::THEME_FN_NO_STRING_INDEX.on();
     for i in 0..path.len() {
-        match current.get_own(&path[i]) {
+        let value = match &current {
+            Val::Str(text) if index_strings => string_index(text, &path[i]),
+            _ => current.get_own(&path[i]),
+        };
+        match value {
             Some(value) => current = value,
             None => {
                 if i + 1 >= path.len() {
@@ -587,6 +623,17 @@ fn get(object: &Val, path: &mut [String]) -> Val {
         }
     }
     current
+}
+
+/// `text[key]` of JavaScript, for an index and for `length`. The units
+/// are UTF-16 code units. (The functions of a text, such as `trim`, are
+/// not in this model.)
+fn string_index(text: &str, key: &str) -> Option<Val> {
+    if key == "length" {
+        return Some(Val::Num(text.encode_utf16().count() as f64));
+    }
+    let unit = text.encode_utf16().nth(array_index(key)?)?;
+    Some(Val::Str(String::from_utf16_lossy(&[unit])))
 }
 
 /// `/^[a-zA-Z0-9-_%/.]+$/`
@@ -626,7 +673,8 @@ pub(super) fn key_path_to_css_property(path: &[String]) -> Option<String> {
         "transitionTimingFunction" => Some("transition-timing-function"),
         _ => None,
     };
-    if let Some(special_default) = special_default {
+    // (Before 4.1.18, it was in the namespace of the key.)
+    if let Some(special_default) = special_default.filter(|_| switches::THEME_FN_DEFAULT_NAMESPACE.on()) {
         if path.get(1).is_some_and(|key| key == "DEFAULT") {
             return Some(format!("default-{special_default}"));
         }
@@ -671,7 +719,8 @@ pub(super) fn key_path_to_css_property(path: &[String]) -> Option<String> {
 
         // The namespace, a nested key of a tuple, and `lineHeight` are in
         // kebab case.
-        if index == 0 || part.starts_with('-') || part == "lineHeight" {
+        // (Before 4.1.18, each part was in kebab case.)
+        if index == 0 || part.starts_with('-') || part == "lineHeight" || !switches::THEME_FN_KEEPS_KEY_CASE.on() {
             part = kebab_case(&part);
         }
 

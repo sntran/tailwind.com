@@ -133,7 +133,11 @@ design system in `runtime.rs` (see below), the file events
 the plugin layer, and 41 KB for the parts of Node.js), made by
 `tests/upstream/tools/build-compat-bundle.mjs` with esbuild from the
 source of Tailwind CSS and from `native/tailwind/js`. It is in the
-repository, so a build needs no Node.js.
+repository, so a build needs no Node.js. The same file from the source
+of each older version that the Rust compiler serves is a patch file in
+`assets/compat/` (`scripts/compat.sh`): `compat/js/bundles.rs` gives the
+file of the version that the compiler follows (`SWITCHES.md`, "The
+plugin layer").
 
 The bundle has these modules of Tailwind CSS as they are: all of
 `compat/` except `legacy-utilities.ts`, `plugin.ts`, the constructors
@@ -511,8 +515,10 @@ the method of BEAM.com for Rust:
 
 ### The size of the file
 
-The file is about 19 MB: two copies of the program, one for x86_64 and
-one for aarch64, of about 9.5 MB each. In one copy:
+The file is about 20 MB: two copies of the program, one for x86_64 and
+one for aarch64, of about 9.7 MB each, and 0.37 MB for the packages of
+the versions of Tailwind CSS in its ZIP directory (see "The versions of
+Tailwind CSS" below). In one copy:
 
 | Part | Size |
 |---|---|
@@ -520,20 +526,28 @@ one for aarch64, of about 9.5 MB each. In one copy:
 | The compiler (the utilities, the variants, the default theme of v3) | about 1 MB |
 | The scanner of Tailwind CSS with its regular expressions and its `.gitignore` code | about 1 MB |
 | QuickJS with its Unicode tables, and the JSON code | about 1.4 MB |
-| The JavaScript files of the program, as text: the plugin layer of Tailwind CSS with the parts of Node.js (130 KB), the TypeScript transform (206 KB), the three plugins of the standalone program (96 KB) | 0.43 MB |
+| The JavaScript files of the program, as text: the plugin layer of Tailwind CSS with the parts of Node.js (136 KB), the patches of the plugin layer of the 47 older versions (170 KB), the runtime of the script engine (58 KB), the TypeScript transform (206 KB), the three plugins of the standalone program (96 KB) | 0.67 MB |
 | The Rust standard library, the unwind tables, the stylesheets, Cosmopolitan | the rest |
 
 The source maps (the code of the compiler and of the program, and the
 source maps of Lightning CSS with the crate `parcel_sourcemap`) are
 about 0.15 MB of one copy.
 
-The JavaScript files are in the two copies, so they are 0.86 MB of
+The JavaScript files are in the two copies, so they are 1.33 MB of
 the file. Before TypeScript, the three plugins and the parts of Node.js,
-the file had 18.3 MB, with 89 KB of JavaScript in a copy. Now it has
+the file had 18.3 MB, with 89 KB of JavaScript in a copy. Then it had
 19.1 MB: 0.41 MB for the TypeScript transform, 0.19 MB for the three
 plugins, 0.08 MB for the parts of Node.js, and the rest for the Rust
 and C code of the loader and of the warnings. `tailwind.wasm` has one
-copy: 8.6 MB before, and 8.95 MB now.
+copy: 8.6 MB before, and 8.95 MB then.
+
+The versions of Tailwind CSS came next. Each copy is 0.49 MB larger:
+0.15 MB for the script engine, and 0.34 MB for the 195 switches and the
+plugin layer of the 47 older versions (half of it is the 170 KB of
+patches). With the packages in the ZIP directory, the file has 20.3 MB
+now, and `tailwind.wasm` 9.4 MB. The sizes in this section are in
+units of 1,000,000 bytes. `docs/BENCHMARKS.md` gives the same sizes in
+units of 1,048,576 bytes (19.4 MB and 9.0 MB).
 
 The dependencies build for size (`opt-level = "s"`), and the compiler
 and QuickJS (`-O2`) build for speed. With all the code built for speed,
@@ -544,6 +558,46 @@ The JavaScript engine starts only for a stylesheet with `@plugin` or
 `@config`. The project of `mix phx.new` (Phoenix 1.8, with heroicons and
 daisyUI) builds in about 0.11 s. The official program on Node.js needs
 about 0.29 s on the same computer.
+
+### The versions of Tailwind CSS
+
+The command line program has two engines behind one type
+(`AnyCompiler` in `src/cli/engine.rs`): the Rust compiler
+(`index.rs`), and the script engine (`src/script.rs`). See
+[`VERSIONS.md`](VERSIONS.md) for what a user sees.
+
+The script engine starts a QuickJS engine with the bundle
+`assets/script.js` (entry: `js/script-entry.ts`). This bundle has the
+loader of modules, the parts of Node.js and the TypeScript transform of
+the plugin runtime, and no code of Tailwind CSS. It asks the host for
+the files of the package (`asset` with `tailwindcss:FILE`), runs
+`dist/lib.js` as a CommonJS module, and calls its `compile`:
+
+| The official compiler needs | Where it comes from |
+|---|---|
+| `loadStylesheet(id, base)` | The host operation `stylesheet.load`: the resolver of `src/cli/resolve.rs`, as for the native engine. `theme.css`, `preflight.css` and `utilities.css` are the files of the package. |
+| `loadModule(id, base)` | `loadModule` of `js/modules.ts`: the same loader as for the plugins of the native engine. |
+| `tailwindcss/plugin` and the other modules of the package | The CommonJS files that `exports` of the `package.json` of the package names. |
+| `compiler.build(candidates)` | The candidates of the Rust scanner, as JSON. The result is the CSS text. |
+| `compiler.buildSourceMap()` | The decoded map as JSON. The Rust code of `--map` makes the map file from it, as for the native engine. |
+
+The two runtimes share their host operations for modules, files, the
+console and the process (`src/compat/js/platform.rs`).
+
+The packages are files: `DirectoryPackage` reads them from a directory.
+In `tailwind.com` that directory is `/zip/tailwindcss/VERSION`:
+Cosmopolitan gives the ZIP directory of the file as the path `/zip`.
+`scripts/build.sh` adds the files with `zip` after the link. The store
+has the newest package as a directory and each older version as a patch
+file (`src/patch.rs`): `DirectoryPackage` reads a file of a version
+from its directory, or from the reference version of its patch with the
+delta of the patch. The tool `tools/twpatch` makes the patch files: it
+includes `patch.rs`, and it builds for the computer of the build.
+
+The bundle has two parts that make QuickJS do the same as V8 for the
+compiler: `js/sort.ts` (the sort algorithm of V8) and `js/intl.ts`
+(`Intl.ListFormat` for English). They are in the plugin runtime of the
+native engine too, so a plugin gets the same sort.
 
 ## The Erlang and Elixir modules
 

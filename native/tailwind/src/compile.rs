@@ -1,6 +1,6 @@
 //! The compiler of candidates to rules: `compile.ts` of Tailwind CSS.
 
-use crate::ast::{at_rule, context, decl, rule, AstNode, ContextMap, StyleRule};
+use crate::ast::{at_rule, context, decl, rule, AstNode, ContextMap, Declaration, StyleRule};
 use crate::candidate::{Candidate, Variant};
 use crate::design_system::{CompileAstFlags, DesignSystem, COMPILE_NONE, COMPILE_RESPECT_IMPORTANT};
 use crate::property_order::property_index;
@@ -35,6 +35,9 @@ pub struct SortedNode {
     /// The orders of the variants of the candidate, as a set of bits.
     pub variants: VariantBits,
     pub candidate: String,
+    /// The place of the rule in the cache of the compiler: the parsed
+    /// candidate, and the index of the rule in the rules of that candidate.
+    pub origin: (*const Candidate, usize),
 }
 
 /// A set of variant orders. Its order is the order of the number that has
@@ -102,7 +105,11 @@ pub fn compile_candidates(
     let flags = if respect_important { COMPILE_RESPECT_IMPORTANT } else { COMPILE_NONE };
 
     // With one candidate, the sort needs no variant order.
-    let variant_order_map = if matches.len() > 1 { Some(design_system.get_variant_order()) } else { None };
+    let variant_order_map = if matches.len() > 1 || !crate::switches::ONE_CANDIDATE_NO_VARIANT_ORDER.on() {
+        Some(design_system.get_variant_order())
+    } else {
+        None
+    };
 
     // Make the rules.
     for (raw, candidates) in &matches {
@@ -114,7 +121,7 @@ pub fn compile_candidates(
             }
             found = true;
 
-            for compiled in rules.iter() {
+            for (rule_index, compiled) in rules.iter().enumerate() {
                 // The more important variants have the higher bits.
                 let mut variant_order = VariantBits::default();
                 if let Some(map) = &variant_order_map {
@@ -129,6 +136,7 @@ pub fn compile_candidates(
                     properties: compiled.property_sort.clone(),
                     variants: variant_order,
                     candidate: raw.to_string(),
+                    origin: (Rc::as_ptr(candidate), rule_index),
                 });
             }
         }
@@ -137,7 +145,7 @@ pub fn compile_candidates(
         }
     }
 
-    sorted.sort_by(|a, z| {
+    let by_order = |a: &SortedNode, z: &SortedNode| {
         // First the variants.
         let by_variants = a.variants.cmp(&z.variants);
         if by_variants != Ordering::Equal {
@@ -145,13 +153,17 @@ pub fn compile_candidates(
         }
 
         // Then the first property order that is different.
+        // (Before 4.0.8, only the first property was compared.)
         let (a_order, z_order) = (&a.properties.order, &z.properties.order);
         let mut offset = 0;
-        while offset < a_order.len() && offset < z_order.len() && a_order[offset] == z_order[offset] {
-            offset += 1;
+        if crate::switches::SORT_BY_EACH_PROPERTY.on() {
+            while offset < a_order.len() && offset < z_order.len() && a_order[offset] == z_order[offset] {
+                offset += 1;
+            }
         }
         match (a_order.get(offset), z_order.get(offset)) {
-            (Some(a), Some(z)) => return a.cmp(z),
+            (Some(a), Some(z)) if a != z => return a.cmp(z),
+            (Some(_), Some(_)) => {}
             (Some(_), None) => return Ordering::Less,
             (None, Some(_)) => return Ordering::Greater,
             (None, None) => {}
@@ -159,9 +171,71 @@ pub fn compile_candidates(
 
         // Then the count of properties (more comes first), then the name.
         z.properties.count.cmp(&a.properties.count).then_with(|| compare(&a.candidate, &z.candidate))
-    });
+    };
+    if crate::switches::COMPARE_WHOLE_NUMBERS.on() {
+        sorted.sort_by(by_order);
+    } else {
+        // Before 4.0.7, the order of the names was not consistent (`p-1`
+        // before `p-02`, `p-02` before `p-0a`, `p-0a` before `p-1`). So the
+        // result is the result of the algorithm of V8.
+        crate::utils::v8_sort::sort(&mut sorted, |a, z| by_order(a, z) as i64);
+    }
+
+    // Only in 4.1.14: a declaration of a fixed value is `!important` in
+    // each rule when one candidate made it so.
+    let shared = design_system.shared_declarations.borrow();
+    if shared.values().any(|important| *important) {
+        for sorted_node in &mut sorted {
+            apply_shared_important(std::slice::from_mut(&mut sorted_node.node), &shared);
+        }
+    }
+    drop(shared);
 
     sorted
+}
+
+/// Only for Tailwind CSS 4.1.14. In that version, the fixed values of a
+/// utility (`z-auto`, `leading-none`) gave the same node objects to each
+/// candidate. So the `!important` of one candidate (`z-auto!`) changed the
+/// declarations of each candidate with that value, also in the rules that
+/// the compiler made before. This function records the declarations of
+/// such a value. `compile_ast_nodes` records the `!important`, and
+/// `compile_candidates` gives it to each copy at its end: upstream reads
+/// the objects after it compiles all the candidates.
+pub fn share_declarations(nodes: &[AstNode], design_system: &DesignSystem) {
+    let mut shared = design_system.shared_declarations.borrow_mut();
+    for_each_declaration(nodes, &mut |declaration| {
+        if let Some(identity) = declaration.loc.identity() {
+            shared.entry(identity).or_insert(false);
+        }
+    });
+}
+
+/// The declarations that `apply_important` changes.
+fn for_each_declaration(ast: &[AstNode], visit: &mut dyn FnMut(&Declaration)) {
+    for node in ast {
+        match node {
+            AstNode::AtRoot(_) => continue,
+            AstNode::Declaration(d) => visit(d),
+            AstNode::Rule(StyleRule { nodes, .. }) | AstNode::AtRule(crate::ast::AtRule { nodes, .. }) => {
+                for_each_declaration(nodes, visit)
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Make each copy of a shared declaration with `!important` important.
+fn apply_shared_important(ast: &mut [AstNode], shared: &std::collections::HashMap<*const (), bool>) {
+    for node in ast {
+        if let AstNode::Declaration(d) = node {
+            if d.loc.identity().and_then(|identity| shared.get(&identity).copied()) == Some(true) {
+                d.important = true;
+            }
+        } else if let Some(children) = node.children_mut() {
+            apply_shared_important(children, shared);
+        }
+    }
 }
 
 /// The rules of one candidate, with its variants applied.
@@ -183,6 +257,16 @@ pub fn compile_ast_nodes(candidate: &Candidate, design_system: &DesignSystem, fl
         // one of the design system is applied only when the flag asks.
         if candidate.important() || respect_important {
             apply_important(&mut nodes);
+
+            // Only in 4.1.14: see `share_declarations`.
+            let mut shared = design_system.shared_declarations.borrow_mut();
+            if !shared.is_empty() {
+                for_each_declaration(&nodes, &mut |declaration| {
+                    if let Some(important) = declaration.loc.identity().and_then(|identity| shared.get_mut(&identity)) {
+                        *important = true;
+                    }
+                });
+            }
         }
 
         let mut node = AstNode::Rule(StyleRule { selector: selector.clone(), nodes, loc: Default::default() });
@@ -213,7 +297,7 @@ pub fn apply_variant(node: &mut AstNode, variant: &Variant, design_system: &Desi
 
         let nodes = std::mem::take(node.children_mut()?);
         let mut child = rule(selector.clone(), Vec::new());
-        if child.is_at_rule("@scope") {
+        if child.is_at_rule("@scope") && crate::switches::SCOPE_HOISTING.on() {
             let mut user = ContextMap::new();
             user.insert("source".into(), "user".into());
             *child.children_mut().unwrap() = vec![context(user, nodes)];
@@ -314,7 +398,11 @@ fn compile_base_utility(candidate: &Candidate, design_system: &DesignSystem) -> 
             match compiled {
                 Compiled::Undefined => continue,
                 Compiled::Null => {
-                    if utility.options.as_ref().is_some_and(|o| !o.types.is_empty()) {
+                    // Before 4.3.0, each utility that was not valid stopped
+                    // the other utilities.
+                    if utility.options.as_ref().is_some_and(|o| !o.types.is_empty())
+                        || !crate::switches::UTILITY_NULL_FALLTHROUGH.on()
+                    {
                         return asts;
                     }
                     continue;
@@ -335,7 +423,26 @@ fn apply_important(ast: &mut [AstNode]) {
         match node {
             // An at-root has `@property` rules and such: no `!important`.
             AstNode::AtRoot(_) => continue,
-            AstNode::Declaration(d) => d.important = true,
+            AstNode::Declaration(d) => {
+                let mut property = d.property.chars();
+                let (first, second) = (property.next(), property.next());
+                let important = if crate::switches::IMPORTANT_CUSTOM_PROPERTIES.on()
+                    || !crate::switches::IMPORTANT_SKIPS_DASH_PROPERTIES.on()
+                {
+                    // Before 4.0.8 and from 4.0.10: each declaration.
+                    true
+                } else if crate::switches::IMPORTANT_DASH_PROPERTIES.on() {
+                    // Before 4.0.10: not a custom property.
+                    !(first == Some('-') && second == Some('-'))
+                } else {
+                    // Only in 4.0.8: not a property with `-` as its first
+                    // or its second character (`-webkit-…`, `z-index`).
+                    first != Some('-') && second != Some('-')
+                };
+                if important {
+                    d.important = true;
+                }
+            }
             AstNode::Rule(StyleRule { nodes, .. }) | AstNode::AtRule(crate::ast::AtRule { nodes, .. }) => {
                 apply_important(nodes)
             }
@@ -355,13 +462,18 @@ fn get_property_sort(nodes: &[AstNode]) -> PropertySort {
     while let Some(node) = q.pop_front() {
         match node {
             AstNode::Declaration(d) => {
-                let Some(value) = &d.value else { continue };
-                count += 1;
+                // A declaration with no value is not in the output.
+                // (Before 4.0.12, its property was in the sort.)
+                if d.value.is_some() {
+                    count += 1;
+                } else if crate::switches::SORT_IGNORES_EMPTY_DECLARATIONS.on() {
+                    continue;
+                }
                 if seen_tw_sort {
                     continue;
                 }
                 if d.property == "--tw-sort" {
-                    if let Some(idx) = property_index(value) {
+                    if let Some(idx) = property_index(d.value.as_deref().unwrap_or("")) {
                         if !order.contains(&idx) {
                             order.push(idx);
                         }
@@ -383,5 +495,10 @@ fn get_property_sort(nodes: &[AstNode]) -> PropertySort {
     }
 
     order.sort_unstable();
+    // Before 4.0.8, the count was the count of the different properties
+    // that have a place in the order.
+    if !crate::switches::SORT_BY_EACH_PROPERTY.on() {
+        count = order.len();
+    }
     PropertySort { order, count }
 }

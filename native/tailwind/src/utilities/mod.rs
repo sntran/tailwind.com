@@ -21,6 +21,27 @@ use crate::utils::segment::segment;
 use indexmap::IndexMap;
 use std::rc::Rc;
 
+/// True for a bare modifier that is the opacity of a shadow.
+pub(crate) fn is_shadow_alpha(value: &str) -> bool {
+    if crate::switches::SHADOW_FRACTIONAL_ALPHA.on() {
+        is_valid_opacity_value(value)
+    } else {
+        is_positive_integer(value)
+    }
+}
+
+/// A value with empty `var()` fallbacks, as the selected version writes
+/// them: `var(--tw-blur, )`, and before 4.3.4 `var(--tw-blur,)`.
+pub(crate) fn empty_fallbacks(text: &'static str) -> &'static str {
+    if crate::switches::EMPTY_VAR_FALLBACK_SPACE.on() {
+        return text;
+    }
+    thread_local! {
+        static OLD: std::cell::RefCell<std::collections::HashMap<&'static str, &'static str>> = Default::default();
+    }
+    OLD.with(|old| *old.borrow_mut().entry(text).or_insert_with(|| Box::leak(text.replace(", )", ",)").into_boxed_str())))
+}
+
 /// The kind of a utility.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UtilityKind {
@@ -175,7 +196,8 @@ fn alpha_percentage(alpha: &str) -> String {
 /// Apply an opacity to a color with `color-mix`.
 pub fn with_alpha(value: &str, alpha: &str) -> String {
     let alpha = alpha_percentage(alpha);
-    if alpha == "100%" {
+    // Before 4.1.5, an alpha of 100% had a `color-mix(…)` too.
+    if alpha == "100%" && crate::switches::FULL_ALPHA_NO_COLOR_MIX.on() {
         return value.to_string();
     }
     format!("color-mix(in oklab, {value} {alpha}, transparent)")
@@ -213,6 +235,16 @@ pub fn as_color(value: &str, modifier: Option<&CandidateModifier>, theme: &Theme
 
 /// The color of a named candidate value from the theme, with the opacity of
 /// the modifier. `inherit`, `transparent` and `current` need no theme.
+/// The keyword `currentcolor`, as the selected version writes it. Before
+/// 4.1.2: `currentColor`.
+pub(crate) fn current_color() -> &'static str {
+    if crate::switches::CURRENTCOLOR_LOWERCASE.on() {
+        "currentcolor"
+    } else {
+        "currentColor"
+    }
+}
+
 pub fn resolve_theme_color(candidate: &FunctionalCandidate, theme: &Theme, theme_keys: &[&str]) -> Option<String> {
     let name = match &candidate.value {
         Some(UtilityValue::Named { value, .. }) => value.as_str(),
@@ -221,7 +253,7 @@ pub fn resolve_theme_color(candidate: &FunctionalCandidate, theme: &Theme, theme
     let value = match name {
         "inherit" => Some("inherit".to_string()),
         "transparent" => Some("transparent".to_string()),
-        "current" => Some("currentcolor".to_string()),
+        "current" => Some(current_color().to_string()),
         _ => theme.resolve(Some(name), theme_keys),
     };
     match value {
@@ -371,7 +403,11 @@ fn handle_functional_utility(desc: UtilityDescription, negative: bool) -> impl F
                 value = theme.resolve(Some(fraction.as_deref().unwrap_or(named)), &desc.theme_keys);
 
                 // A value of the theme does not take a modifier.
-                if value.is_some() && candidate.modifier.is_some() && fraction.is_none() {
+                if value.is_some()
+                    && candidate.modifier.is_some()
+                    && fraction.is_none()
+                    && crate::switches::UNUSED_MODIFIER_IS_INVALID.on()
+                {
                     return None;
                 }
 
@@ -383,7 +419,12 @@ fn handle_functional_utility(desc: UtilityDescription, negative: bool) -> impl F
                         if !is_positive_integer(lhs) || !is_positive_integer(rhs) {
                             return None;
                         }
-                        value = Some(format!("calc({lhs} / {rhs} * 100%)"));
+                        // Before 4.2.0, the fraction had no spaces.
+                        value = Some(if crate::switches::FRACTION_SPACES.on() {
+                            format!("calc({lhs} / {rhs} * 100%)")
+                        } else {
+                            format!("calc({fraction} * 100%)")
+                        });
                     }
                 }
 
@@ -413,6 +454,10 @@ fn handle_functional_utility(desc: UtilityDescription, negative: bool) -> impl F
                 // A fixed value.
                 if value.is_none() && !negative && candidate.modifier.is_none() {
                     if let Some((_, nodes)) = desc.static_values.iter().find(|(k, _)| k == named) {
+                        // Only in 4.1.14, each candidate got the same nodes.
+                        if !crate::switches::STATIC_VALUE_COPIES.on() {
+                            crate::compile::share_declarations(nodes, ds);
+                        }
                         return Some(nodes.clone());
                     }
                 }
@@ -423,7 +468,12 @@ fn handle_functional_utility(desc: UtilityDescription, negative: bool) -> impl F
         let value = value?;
 
         if negative {
-            (desc.handle)(&add_whitespace_around_math_operators(&format!("calc({value} * -1)")), data_type, ds)
+            let negated = format!("calc({value} * -1)");
+            if crate::switches::NEGATIVE_CALC_WHITESPACE.on() {
+                (desc.handle)(&add_whitespace_around_math_operators(&negated), data_type, ds)
+            } else {
+                (desc.handle)(&negated, data_type, ds)
+            }
         } else {
             (desc.handle)(&value, data_type, ds)
         }
@@ -431,7 +481,20 @@ fn handle_functional_utility(desc: UtilityDescription, negative: bool) -> impl F
 }
 
 /// Register a functional utility such as `max-w-*` that reads the theme.
-pub fn functional_utility(utilities: &mut Utilities, class_root: &str, desc: UtilityDescription) {
+pub fn functional_utility(utilities: &mut Utilities, class_root: &str, mut desc: UtilityDescription) {
+    if !crate::switches::STATIC_VALUES_AFTER_THEME.on() {
+        // Before 4.1.14, each fixed value was a static utility: a theme
+        // value with the same name did not replace it.
+        for (key, nodes) in std::mem::take(&mut desc.static_values) {
+            utilities.r#static(format!("{class_root}-{key}"), move |_, _| Some(nodes.clone()));
+        }
+    } else if !crate::switches::STATIC_VALUE_COPIES.on() {
+        // Only in 4.1.14, the nodes of a fixed value were the same objects
+        // for each candidate: see `compile::share_declarations`.
+        for (_, nodes) in &mut desc.static_values {
+            crate::ast::share_identity(nodes);
+        }
+    }
     if desc.supports_negative {
         utilities.functional(format!("-{class_root}"), handle_functional_utility(desc.clone(), true));
     }

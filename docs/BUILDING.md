@@ -35,7 +35,8 @@ You need, on Linux x86_64:
 - a nightly Rust with `rust-src` (default `nightly-2026-11-01`), for the
   aarch64 half of the file;
 - `curl` and `unzip`, for the download of `cosmocc` 4.0.2 (the script
-  checks its SHA-256).
+  checks its SHA-256);
+- `zip` and `tar`, for the packages of Tailwind CSS in the file.
 
 ```sh
 rustup target add x86_64-unknown-linux-musl
@@ -46,8 +47,18 @@ make                       # build/tailwind.com
 `cosmocc` also compiles QuickJS for each CPU: the C library of the file
 is Cosmopolitan, so the C compiler of the system is not used here.
 
+After the link, the build downloads the npm package `tailwindcss` of
+each version of the file `PACKAGES` (`scripts/packages.sh`, with a
+SHA-256 check). The tool `tools/twpatch` (a small Rust program for the
+computer of the build) makes a store from them: the newest package in
+full, and a patch file for each older version. The store goes into the
+ZIP directory `tailwindcss/` of `tailwind.com`. `PACKAGES=none make` builds a file with no packages,
+and `PACKAGES="4.2.4 4.3.0" make` a file with these versions only. See
+[`VERSIONS.md`](VERSIONS.md).
+
 `scripts/build.sh` has the steps, and its header names the environment
-variables (`COSMOCC`, `COSMOCC_VERSION`, `RUST_NIGHTLY`, `CPUS`).
+variables (`COSMOCC`, `COSMOCC_VERSION`, `RUST_NIGHTLY`, `CPUS`,
+`PACKAGES`).
 `CPUS=x86_64 sh scripts/build.sh` makes a file for x86_64 only, with no
 nightly Rust. See "The file tailwind.com" in
 [`INTERNALS.md`](INTERNALS.md) for how the link works.
@@ -105,13 +116,19 @@ for them.
   (see `c_src/QUICKJS.md`).
 - `native/tailwind/assets/compat.js` is the plugin layer of Tailwind
   CSS with the parts of Node.js of `native/tailwind/js`, in one file.
-  After a change of `native/tailwind/js`, or for a new version of
-  Tailwind CSS, make it again with Node.js and a clone of Tailwind CSS:
+  `native/tailwind/assets/compat/` has the plugin layer of each older
+  version that the Rust compiler serves, as patch files
+  ([`SWITCHES.md`](SWITCHES.md), "The plugin layer"). After a change of
+  `native/tailwind/js`, or for a new version of Tailwind CSS, make them
+  all again with Node.js, cargo and a clone of Tailwind CSS:
 
   ```sh
-  (cd tests/upstream/tools && npm install)      # esbuild, sucrase, the three plugins
-  node tests/upstream/tools/build-compat-bundle.mjs /path/to/tailwindcss
+  (cd tests/upstream/tools && npm ci --legacy-peer-deps --ignore-scripts)   # esbuild, sucrase, the three plugins
+  sh scripts/compat.sh /path/to/tailwindcss
   ```
+
+  The script gets the tag of each version into the clone, and uses
+  `tests/upstream/tools/build-compat-bundle.mjs` for one version.
 
 - `native/tailwind/assets/typescript.js` (the TypeScript transform of
   Sucrase, with `native/tailwind/js/typescript-entry.ts`) and

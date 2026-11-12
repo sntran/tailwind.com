@@ -8,6 +8,86 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 
 ## Unreleased
 
+Each version of Tailwind CSS 4, from 4.0.0 to 4.3.5, in one file.
+
+### Added
+
+- A second engine, the script engine: the official compiler of the npm
+  package `tailwindcss` of a version (`dist/lib.js`), with no change, in
+  the QuickJS of the file. The Rust compiler (the native engine) stays
+  the default engine.
+- `tailwind.com` has the package of each stable version of Tailwind
+  CSS 4, from 4.0.0 to 4.3.5 (48 versions), in its ZIP directory
+  `tailwindcss/`: an APE file is also a ZIP file. The file has the
+  newest package in full, and each older version as a patch file with
+  the differences from the next newer version (`tools/twpatch` makes
+  them). All 48 versions are 0.37 MB of the file.
+- `TAILWINDCSS_VERSION` selects the version, `TAILWIND_COM_ENGINE` the
+  engine (`native` or `script`), and `TAILWIND_COM_PACKAGES` a
+  directory with more packages. `--version` shows the selection.
+- The file `PACKAGES` lists the versions with the SHA-256 of each
+  package. `scripts/packages.sh` gets the packages, and `--record` adds
+  a version. A new version of Tailwind CSS needs one line in
+  `PACKAGES`, and no change of the code.
+- The Erlang and Elixir modules give `version` of the configuration to
+  the program, so each version of Tailwind CSS 4 works in a Phoenix
+  project (for example `"4.3.0"` of Phoenix 1.8.9). The default URL of
+  the download has the version of this package (`$program`).
+- For the script engine, the JavaScript runtime has the sort algorithm
+  of V8 and `Intl.ListFormat` for English, so that the compiler gives
+  the same output as in Node.js. A plugin gets them too.
+- With the script engine, a plugin or a config can load the module
+  `tailwindcss` itself.
+- The Rust compiler can compile as an older version: a behavior that
+  changed in a release is a switch (`src/switches.rs`). It has the 195
+  switches of 4.0.1 to 4.3.5, so each version from 4.0.0 to 4.3.5 uses
+  the Rust compiler.
+  `docs/SWITCHES.md` has the procedure, and the list of the changes of
+  Tailwind CSS for each release.
+- The program has the plugin layer of Tailwind CSS (the JavaScript for
+  `@plugin` and `@config`) of each version that the Rust compiler
+  serves, made from the source of that version with no change
+  (`scripts/compat.sh`). An older version is a patch file in the program
+  (170 KB in all). So a stylesheet with plugins as an older version uses
+  the Rust compiler too: a new Phoenix project has Tailwind CSS 4.3.3.
+  `tests/fuzz/compare.mjs` compares given cases with the official
+  compiler of a version.
+- `docs/VERSIONS.md`.
+- Tests of the script engine: the 150 recorded projects with the
+  package of 4.3.5, each version of `PACKAGES` on each system
+  (`tests/versions.sh`), the sort and `Intl.ListFormat` against V8
+  (`tests/v8.mjs`), and the fuzzer against the official compiler of
+  five versions in Node.js.
+- `tests/bench/versions.mjs`: the speed of each engine for older
+  versions of Tailwind CSS (`docs/BENCHMARKS.md`).
+
+### Changed
+
+- `version:` in the configuration of the Hex package can be each
+  version of Tailwind CSS 4 from 4.0.0 to 4.3.5. Before, it was only
+  `4.3.5`.
+- `Intl.ListFormat` for English works in plugins.
+
+### Fixed
+
+- The order of rules with variants could be different from the official
+  program in a project with a JavaScript config that has `screens` with
+  `min` and `max`: the sort of the variants now uses the algorithm of
+  V8. The fuzzer in CI found it.
+
+### Known limits
+
+- For another version than 4.3.5, the scanner and the optimizer are the
+  code of this program (the versions of 4.3.5). With `--minify` or
+  `--optimize`, the text can be different from the official program of
+  that version in small details. `--map` needs Tailwind CSS 4.1.6 or
+  later.
+- The script engine is slower than the native engine: about 80 ms in
+  place of 12 ms for a Phoenix project, and about 1.45 s in place of
+  0.22 s for a project with 5600 different classes. With no setting, it
+  is only for a version that is newer than the port.
+- Tailwind CSS 3 does not work.
+
 ## 0.1.0 - 2026-11-11
 
 The first version, with Tailwind CSS 4.3.5.

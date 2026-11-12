@@ -9,7 +9,31 @@
 //! - For `wasm32-wasip1`, this script uses the clang of a wasi-sdk
 //!   (`WASI_SDK_PATH`). With no wasi-sdk, the program has no JavaScript.
 
+/// Write `compat_patches.rs`: the table of the patch files of
+/// `assets/compat` (the plugin layer of each older version that the Rust
+/// compiler serves: `src/compat/js/bundles.rs`).
+fn compat_patches() {
+    use std::fmt::Write;
+    let directory = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("assets/compat");
+    println!("cargo:rerun-if-changed={}", directory.display());
+    let mut names: Vec<String> = std::fs::read_dir(&directory)
+        .map(|entries| entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect())
+        .unwrap_or_default();
+    names.retain(|name| name.ends_with(".patch"));
+    names.sort();
+    let mut text = String::from("pub static COMPAT_PATCHES: &[(&str, &[u8])] = &[\n");
+    for name in names {
+        let version = name.trim_end_matches(".patch");
+        let path = directory.join(&name);
+        writeln!(text, "    ({version:?}, include_bytes!({:?})),", path.display().to_string()).unwrap();
+    }
+    text.push_str("];\n");
+    let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("compat_patches.rs");
+    std::fs::write(out, text).unwrap();
+}
+
 fn main() {
+    compat_patches();
     println!("cargo:rustc-check-cfg=cfg(tw_js)");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=WASI_SDK_PATH");

@@ -26,7 +26,15 @@ pub fn register_legacy_utilities(design_system: &mut DesignSystem) {
     ] {
         utilities.r#static(format!("bg-gradient-to-{value}"), move |_, _| {
             Some(vec![
-                decl("--tw-gradient-position", format!("to {direction} in oklab")),
+                // (Before 4.0.2, the value had a comma at its end.)
+                decl(
+                    "--tw-gradient-position",
+                    if crate::switches::GRADIENT_POSITION_NO_COMMA.on() {
+                        format!("to {direction} in oklab")
+                    } else {
+                        format!("to {direction} in oklab,")
+                    },
+                ),
                 decl("background-image", "linear-gradient(var(--tw-gradient-stops))"),
             ])
         });
@@ -83,6 +91,10 @@ pub fn register_legacy_utilities(design_system: &mut DesignSystem) {
 
     // The `start` and `end` inset utilities. `inset-s` and `inset-e`
     // replace them.
+    // (Before 4.2.0, they were spacing utilities: `utilities/part1.rs`.)
+    if !crate::switches::START_END_ARE_OLD_UTILITIES.on() {
+        return;
+    }
     for (name, property) in [("start", "inset-inline-start"), ("end", "inset-inline-end")] {
         utilities.r#static(format!("{name}-auto"), move |_, _| Some(vec![decl(property, "auto")]));
         utilities.r#static(format!("{name}-full"), move |_, _| Some(vec![decl(property, "100%")]));
@@ -104,6 +116,16 @@ fn handle_inset(
     negative: bool,
 ) -> Option<Vec<AstNode>> {
     let negate = |value: String| if negative { format!("calc({value} * -1)") } else { value };
+
+    // Before 4.3.0, `start` and `end` with no value gave the value of
+    // `--inset` or `--spacing`.
+    if candidate.value.is_none() && !crate::switches::LEGACY_INSET_NEEDS_VALUE.on() {
+        if candidate.modifier.is_some() {
+            return None;
+        }
+        let value = design_system.theme.resolve(None, &["--inset", "--spacing"])?;
+        return Some(vec![decl(property, negate(value))]);
+    }
 
     let (named, fraction) = match candidate.value.as_ref()? {
         UtilityValue::Arbitrary { value, .. } => {

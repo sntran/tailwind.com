@@ -11,6 +11,8 @@
 //   --native FILE      the program for this computer (target/release/tailwind)
 //   --wasm FILE        tailwind.wasm, run in Node.js with the API of js/node.mjs
 //   --standalone FILE  the official standalone program (tests/standalone.sh --download)
+//   --script           also tailwind.com with its script engine (it needs the
+//                      package of the version of UPSTREAM: tailwind.com has it)
 //   --runs N           the timed runs of each workload (default 7)
 //   --only LIST        only these workloads
 //
@@ -42,6 +44,7 @@ function options() {
       case '--native': o.native = path.resolve(value()); break
       case '--wasm': o.wasm = path.resolve(value()); break
       case '--standalone': o.standalone = path.resolve(value()); break
+      case '--script': o.script = true; break
       case '--runs': o.runs = Number(value()); break
       case '--only': o.only = value().split(','); break
       default: throw new Error(`unknown argument: ${args[i]}`)
@@ -63,6 +66,17 @@ if (opts.program) {
   programs.push({
     name: 'tailwind.com',
     command: (args) => (windows || !opts.program.endsWith('.com') ? [opts.program, ...args] : ['sh', opts.program, ...args]),
+  })
+}
+// The same file with its second engine: the official compiler of the
+// package of this version, in the JavaScript engine of the file
+// (docs/VERSIONS.md). A version that is newer than the port has this
+// speed. tests/bench/versions.mjs measures the older versions.
+if (opts.program && opts.script) {
+  programs.push({
+    name: 'tailwind.com, script engine',
+    command: programs[0].command,
+    env: { TAILWIND_COM_ENGINE: 'script' },
   })
 }
 if (opts.native) programs.push({ name: 'native', command: (args) => [opts.native, ...args] })
@@ -170,7 +184,7 @@ const workloads = [
   },
   {
     name: 'large project',
-    what: '1000 HTML files with 30 classes each (about 18000 different classes)',
+    what: '1000 HTML files with 30 classes each (about 5600 different classes)',
     dir: largeProject,
     args: ['-i', 'app.css'],
   },
@@ -189,7 +203,7 @@ function run(program, workload, dir) {
   const start = process.hrtime.bigint()
   const result = spawnSync(command, args, {
     cwd: dir,
-    env: { ...process.env, NO_COLOR: '1', ...(workload.env ? workload.env(dir) : {}) },
+    env: { ...process.env, NO_COLOR: '1', ...(workload.env ? workload.env(dir) : {}), ...(program.env ?? {}) },
     maxBuffer: 512 * 1024 * 1024,
   })
   const ms = Number(process.hrtime.bigint() - start) / 1e6
@@ -209,7 +223,7 @@ function format(ms) {
 // median of 5 edits.
 async function watchLatency(program, dir) {
   const [command, ...args] = program.command(['-i', 'app.css', '-o', 'out.css', '--watch'])
-  const child = spawn(command, args, { cwd: dir, env: { ...process.env, NO_COLOR: '1' }, stdio: ['pipe', 'ignore', 'ignore'] })
+  const child = spawn(command, args, { cwd: dir, env: { ...process.env, NO_COLOR: '1', ...(program.env ?? {}) }, stdio: ['pipe', 'ignore', 'ignore'] })
   const out = path.join(dir, 'out.css')
   const read = () => {
     try {
@@ -327,7 +341,7 @@ function peakMemory(program, workload, dir) {
     'print(r if sys.platform == "darwin" else r * 1024)\n'
   const result = spawnSync('python3', ['-I', '-c', script, command, ...args], {
     cwd: dir,
-    env: { ...process.env, NO_COLOR: '1', ...(workload.env ? workload.env(dir) : {}) },
+    env: { ...process.env, NO_COLOR: '1', ...(workload.env ? workload.env(dir) : {}), ...(program.env ?? {}) },
   })
   const bytes = Number(result.stdout?.toString().trim())
   return result.status === 0 && bytes > 0 ? bytes : null
@@ -350,7 +364,7 @@ if (!windows && spawnSync('python3', ['-c', 'import resource']).status === 0) {
 // The sizes.
 const mb = (bytes) => (bytes === null ? '' : `${(bytes / 1048576).toFixed(1)} MB`)
 const sizes = programs.map((p) => {
-  if (p.name === 'tailwind.com') return mb(sizeOf(opts.program))
+  if (p.name.startsWith('tailwind.com')) return mb(sizeOf(opts.program))
   if (p.name === 'native') return mb(sizeOf(opts.native))
   if (p.wasm) return mb(sizeOf(opts.wasm))
   if (p.name === 'official standalone') return mb(sizeOf(opts.standalone))

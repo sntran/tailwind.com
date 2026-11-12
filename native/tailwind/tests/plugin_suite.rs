@@ -119,6 +119,7 @@ fn replay(record: &Record) -> Result<(), String> {
             test_mode: true,
             from: None,
             module_loader: Some(Rc::new(loader)),
+        version: None,
         },
     );
 

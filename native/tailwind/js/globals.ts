@@ -1,5 +1,7 @@
 // The globals of Node.js that plugins use: `console`, `process`, `Buffer`,
 // `URL`, the text encoders, the timers, `structuredClone`.
+import './intl'
+import './sort'
 import { denied } from './denied'
 import { base64Decode, base64Encode, TextDecoder, TextEncoder } from './encoding'
 import { host } from './host'

@@ -243,6 +243,11 @@ apply() {
     node $tools/gen-variants.mjs "$clone" native/tailwind/tests/fixtures/variants.json
     node $tools/gen-optimize.mjs "$clone" native/tailwind/tests/fixtures/optimize.json
 
+    # The version before this one is now an older version: its plugin
+    # layer becomes a patch file (docs/SWITCHES.md, "The plugin layer").
+    log "The plugin layer of each version that the Rust compiler serves"
+    sh scripts/compat.sh "$clone"
+
     log "The official output of the cases of the fuzzer"
     sh tests/fuzz/install.sh "$work/fuzz-official"
     node tests/fuzz/refresh.mjs "$work/fuzz-official"

@@ -370,6 +370,33 @@ pub const GLOBAL_PROPERTY_ORDER: &[&str] = &[
 /// The index of a property in `GLOBAL_PROPERTY_ORDER`: the first one, when
 /// the list has the property two times.
 pub fn property_index(property: &str) -> Option<usize> {
+    // Before 4.3.0, these properties had no place in the order. The
+    // sequence of the other properties is the same.
+    if matches!(property, "zoom" | "scrollbar-width" | "scrollbar-color" | "scrollbar-gutter" | "tab-size")
+        && !crate::switches::ZOOM_TAB_SCROLLBAR.on()
+    {
+        return None;
+    }
+    // Before 4.2.0, the same for these properties.
+    if property == "font-feature-settings" && !crate::switches::FONT_FEATURES.on() {
+        return None;
+    }
+    if (property.ends_with("-block-start")
+        || property.ends_with("-block-end")
+        || property.starts_with("border-block-start-")
+        || property.starts_with("border-block-end-"))
+        && !crate::switches::LOGICAL_UTILITIES.on()
+    {
+        return None;
+    }
+    // Before 4.1.0, the same for the properties of the masks.
+    if (property.starts_with("mask-") || property.starts_with("--tw-mask-")) && !crate::switches::MASK_UTILITIES.on() {
+        return None;
+    }
+    // Before 4.0.8, the same for this property.
+    if property == "--tw-translate-z" && !crate::switches::TRANSLATE_Z_PROPERTY_ORDER.on() {
+        return None;
+    }
     static INDEX: OnceLock<HashMap<&str, usize>> = OnceLock::new();
     INDEX
         .get_or_init(|| {

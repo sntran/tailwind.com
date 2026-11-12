@@ -5,6 +5,7 @@ use super::{functional_utility, property, spacing_utility, NamedValue, SpacingOp
 use crate::ast::{at_root, at_rule, decl, AstNode};
 use crate::candidate::{FunctionalCandidate, UtilityValue};
 use crate::design_system::DesignSystem;
+use crate::switches;
 use crate::theme::Theme;
 use crate::utils::compare_breakpoints::{compare_breakpoints, Direction};
 use crate::utils::infer_data_type::{
@@ -49,12 +50,36 @@ fn spacing_multiplier(value: &NamedValue, ds: &DesignSystem) -> Option<String> {
     Some(format!("--spacing({})", value.value))
 }
 
+/// A bare value of `auto-rows-*` and `auto-cols-*`.
+fn auto_track_spacing(value: &NamedValue, ds: &DesignSystem) -> Option<String> {
+    if !crate::switches::AUTO_TRACKS_BARE_SPACING.on() {
+        return None;
+    }
+    spacing_multiplier(value, ds)
+}
+
 /// A bare value for `grid-cols-*` and `grid-rows-*`.
 fn grid_repeat(value: &NamedValue, _: &DesignSystem) -> Option<String> {
-    is_strict_positive_integer(value.value).then(|| format!("repeat({}, minmax(0, 1fr))", value.value))
+    // Before 4.0.2, `grid-cols-0` and `grid-rows-0` were valid.
+    let valid = if crate::switches::GRID_TRACKS_NOT_ZERO.on() {
+        is_strict_positive_integer(value.value)
+    } else {
+        is_positive_integer(value.value)
+    };
+    valid.then(|| format!("repeat({}, minmax(0, 1fr))", value.value))
 }
 
 /// A description that sets one property.
+/// `col-*` and `row-*` take an integer and a negative value.
+/// (Before 4.0.10, only a theme value or an arbitrary value.)
+fn grid_line_numbers(description: UtilityDescription) -> UtilityDescription {
+    if switches::GRID_LINE_NUMBERS.on() {
+        description.negative().bare(integer)
+    } else {
+        description
+    }
+}
+
 fn one_property(property: &'static str) -> UtilityDescription {
     UtilityDescription::new(move |value, _, _| Some(vec![decl(property, value)]))
 }
@@ -100,12 +125,14 @@ fn scale_properties() -> AstNode {
 }
 
 fn transform_properties() -> AstNode {
+    // Before 4.1.4, each property had an initial value.
+    let initial = |value: &'static str| (!switches::TRANSFORM_EMPTY_FALLBACKS.on()).then_some(value);
     at_root(vec![
-        property("--tw-rotate-x", None, None),
-        property("--tw-rotate-y", None, None),
-        property("--tw-rotate-z", None, None),
-        property("--tw-skew-x", None, None),
-        property("--tw-skew-y", None, None),
+        property("--tw-rotate-x", initial("rotateX(0)"), None),
+        property("--tw-rotate-y", initial("rotateY(0)"), None),
+        property("--tw-rotate-z", initial("rotateZ(0)"), None),
+        property("--tw-skew-x", initial("skewX(0)"), None),
+        property("--tw-skew-y", initial("skewY(0)"), None),
     ])
 }
 
@@ -123,6 +150,19 @@ fn snap_properties() -> AstNode {
 
 const TRANSFORM_VALUE: &str =
     "var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, )";
+
+/// The value of `transform` before 4.1.4: no empty fallbacks.
+const TRANSFORM_VALUE_NO_FALLBACKS: &str =
+    "var(--tw-rotate-x) var(--tw-rotate-y) var(--tw-rotate-z) var(--tw-skew-x) var(--tw-skew-y)";
+
+/// The value of `transform`, as the selected version writes it.
+fn transform_value() -> &'static str {
+    if switches::TRANSFORM_EMPTY_FALLBACKS.on() {
+        super::empty_fallbacks(TRANSFORM_VALUE)
+    } else {
+        TRANSFORM_VALUE_NO_FALLBACKS
+    }
+}
 
 const TOUCH_ACTION: &str = "var(--tw-pan-x, ) var(--tw-pan-y, ) var(--tw-pinch-zoom, )";
 
@@ -144,6 +184,7 @@ fn handle_scale(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSystem) 
         }
         let value = match candidate.value.as_ref()? {
             UtilityValue::Arbitrary { value, .. } => {
+                let negative = negative && switches::SCALE_NEGATIVE_ARBITRARY.on();
                 return Some(vec![decl("scale", negate(value.clone(), negative))]);
             }
             UtilityValue::Named { value: named, .. } => {
@@ -180,6 +221,15 @@ fn handle_rotate(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSystem)
                 if is_vector {
                     return Some(vec![decl("rotate", format!("{value} var(--tw-rotate)"))]);
                 }
+                if !switches::ROTATE_NEGATIVE_ARBITRARY.on() {
+                    let is_angle = match data_type {
+                        Some(data_type) => data_type == "angle",
+                        None => infer_data_type(value, &[DataType::Angle, DataType::Vector]) == Some(DataType::Angle),
+                    };
+                    if !is_angle {
+                        return Some(vec![decl("rotate", value.as_str())]);
+                    }
+                }
                 value.clone()
             }
             UtilityValue::Named { value: named, .. } => {
@@ -195,9 +245,68 @@ fn handle_rotate(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSystem)
 }
 
 /// Register the utilities of this part.
+/// The utilities of `inline-size`, `block-size` and their `min-` and `max-`
+/// properties.
+fn register_logical_sizes(u: &mut Utilities) {
+    for (key, value) in [("full", "100%"), ("min", "min-content"), ("max", "max-content"), ("fit", "fit-content")] {
+
+        st(u, &format!("inline-{key}"), &[("inline-size", value)]);
+        st(u, &format!("block-{key}"), &[("block-size", value)]);
+        st(u, &format!("min-inline-{key}"), &[("min-inline-size", value)]);
+        st(u, &format!("min-block-{key}"), &[("min-block-size", value)]);
+        st(u, &format!("max-inline-{key}"), &[("max-inline-size", value)]);
+        st(u, &format!("max-block-{key}"), &[("max-block-size", value)]);
+    }
+
+    for (key, value) in [("svw", "100svw"), ("lvw", "100lvw"), ("dvw", "100dvw")] {
+        st(u, &format!("inline-{key}"), &[("inline-size", value)]);
+        st(u, &format!("min-inline-{key}"), &[("min-inline-size", value)]);
+        st(u, &format!("max-inline-{key}"), &[("max-inline-size", value)]);
+    }
+
+    for (key, value) in [("svh", "100svh"), ("lvh", "100lvh"), ("dvh", "100dvh")] {
+        st(u, &format!("block-{key}"), &[("block-size", value)]);
+        st(u, &format!("min-block-{key}"), &[("min-block-size", value)]);
+        st(u, &format!("max-block-{key}"), &[("max-block-size", value)]);
+    }
+
+    st(u, "inline-auto", &[("inline-size", "auto")]);
+    st(u, "block-auto", &[("block-size", "auto")]);
+    st(u, "min-inline-auto", &[("min-inline-size", "auto")]);
+    st(u, "min-block-auto", &[("min-block-size", "auto")]);
+
+    st(u, "block-lh", &[("block-size", "1lh")]);
+    st(u, "min-block-lh", &[("min-block-size", "1lh")]);
+    st(u, "max-block-lh", &[("max-block-size", "1lh")]);
+
+    st(u, "inline-screen", &[("inline-size", "100vw")]);
+    st(u, "min-inline-screen", &[("min-inline-size", "100vw")]);
+    st(u, "max-inline-screen", &[("max-inline-size", "100vw")]);
+    st(u, "block-screen", &[("block-size", "100vh")]);
+    st(u, "min-block-screen", &[("min-block-size", "100vh")]);
+    st(u, "max-block-screen", &[("max-block-size", "100vh")]);
+
+    st(u, "max-inline-none", &[("max-inline-size", "none")]);
+    st(u, "max-block-none", &[("max-block-size", "none")]);
+
+    let logical_sizes: [(&str, &[&'static str], &'static str); 6] = [
+        ("inline", &["--spacing", "--container"], "inline-size"),
+        ("min-inline", &["--spacing", "--container"], "min-inline-size"),
+        ("max-inline", &["--spacing", "--container"], "max-inline-size"),
+        ("block", &["--spacing"], "block-size"),
+        ("min-block", &["--spacing"], "min-block-size"),
+        ("max-block", &["--spacing"], "max-block-size"),
+    ];
+    for (name, namespaces, prop) in logical_sizes {
+        spacing_utility(u, name, namespaces, move |value, _| Some(vec![decl(prop, value)]), fractions());
+    }
+}
+
 pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     let u = utilities;
 
+    // Before 4.1.13, `sr-only` and `not-sr-only` had the `clip` property.
+    let clip_path = crate::switches::SR_ONLY_CLIP_PATH.on();
     st(
         u,
         "sr-only",
@@ -208,7 +317,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             ("padding", "0"),
             ("margin", "-1px"),
             ("overflow", "hidden"),
-            ("clip-path", "inset(50%)"),
+            if clip_path { ("clip-path", "inset(50%)") } else { ("clip", "rect(0, 0, 0, 0)") },
             ("white-space", "nowrap"),
             ("border-width", "0"),
         ],
@@ -223,7 +332,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             ("padding", "0"),
             ("margin", "0"),
             ("overflow", "visible"),
-            ("clip-path", "none"),
+            if clip_path { ("clip-path", "none") } else { ("clip", "auto") },
             ("white-space", "normal"),
         ],
     );
@@ -244,11 +353,19 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     st(u, "relative", &[("position", "relative")]);
     st(u, "sticky", &[("position", "sticky")]);
 
+    // The utilities of 4.2.0 (`switches::LOGICAL_UTILITIES`).
+    let logical_utilities = crate::switches::LOGICAL_UTILITIES.on();
+    // Before 4.2.0, `start` and `end` were spacing utilities as the others
+    // of this list. Now they are in `compat/legacy_utilities.rs`.
+    let start_end_here = !crate::switches::START_END_ARE_OLD_UTILITIES.on();
+
     // `inset`
     for (name, prop) in [
         ("inset", "inset"),
         ("inset-x", "inset-inline"),
         ("inset-y", "inset-block"),
+        ("start", "inset-inline-start"),
+        ("end", "inset-inline-end"),
         ("inset-s", "inset-inline-start"),
         ("inset-e", "inset-inline-end"),
         ("inset-bs", "inset-block-start"),
@@ -258,6 +375,11 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("bottom", "bottom"),
         ("left", "left"),
     ] {
+        match name {
+            "start" | "end" if !start_end_here => continue,
+            "inset-s" | "inset-e" | "inset-bs" | "inset-be" if !logical_utilities => continue,
+            _ => {}
+        }
         st(u, &format!("{name}-auto"), &[(prop, "auto")]);
         st(u, &format!("{name}-full"), &[(prop, "100%")]);
         st(u, &format!("-{name}-full"), &[(prop, "-100%")]);
@@ -287,16 +409,22 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             .negative()
             .bare(integer)
             .theme_keys(&["--order"])
-            .static_values(values("order", &[("first", "-9999"), ("last", "9999")])),
+            // (Before 4.0.4, the values were `calc(-infinity)` and `calc(infinity)`.)
+            .static_values(values(
+                "order",
+                if crate::switches::ORDER_FIRST_LAST_NUMBERS.on() {
+                    &[("first", "-9999"), ("last", "9999")]
+                } else {
+                    &[("first", "calc(-infinity)"), ("last", "calc(infinity)")]
+                },
+            )),
     );
 
     // `grid-column`
     functional_utility(
         u,
         "col",
-        one_property("grid-column")
-            .negative()
-            .bare(integer)
+        grid_line_numbers(one_property("grid-column"))
             .theme_keys(&["--grid-column"])
             .static_values(values("grid-column", &[("auto", "auto")])),
     );
@@ -330,9 +458,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     functional_utility(
         u,
         "row",
-        one_property("grid-row")
-            .negative()
-            .bare(integer)
+        grid_line_numbers(one_property("grid-row"))
             .theme_keys(&["--grid-row"])
             .static_values(values("grid-row", &[("auto", "auto")])),
     );
@@ -391,6 +517,9 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("mb", "margin-bottom"),
         ("ml", "margin-left"),
     ] {
+        if matches!(namespace, "mbs" | "mbe") && !logical_utilities {
+            continue;
+        }
         st(u, &format!("{namespace}-auto"), &[(prop, "auto")]);
         spacing_utility(u, namespace, &["--margin", "--spacing"], move |value, _| Some(vec![decl(prop, value)]), negative());
     }
@@ -461,7 +590,10 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
                 let fraction = value.fraction?;
                 let parts = segment(fraction, b'/');
                 let (lhs, rhs) = (parts[0], parts.get(1).copied().unwrap_or(""));
-                if !is_valid_spacing_multiplier(lhs) || !is_valid_spacing_multiplier(rhs) {
+                // Before 4.2.0, each part was an integer.
+                let is_valid_part =
+                    if crate::switches::ASPECT_FRACTION_DECIMALS.on() { is_valid_spacing_multiplier } else { is_positive_integer };
+                if !is_valid_part(lhs) || !is_valid_part(rhs) {
                     return None;
                 }
                 Some(fraction.to_string())
@@ -496,10 +628,18 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     st(u, "h-auto", &[("height", "auto")]);
     st(u, "min-w-auto", &[("min-width", "auto")]);
     st(u, "min-h-auto", &[("min-height", "auto")]);
+    // Before 4.0.10, also `max-w-auto` and `max-h-auto`: `auto` is not a
+    // value of these properties.
+    if !switches::NO_MAX_SIZE_AUTO.on() {
+        st(u, "max-w-auto", &[("max-width", "auto")]);
+        st(u, "max-h-auto", &[("max-height", "auto")]);
+    }
 
-    st(u, "h-lh", &[("height", "1lh")]);
-    st(u, "min-h-lh", &[("min-height", "1lh")]);
-    st(u, "max-h-lh", &[("max-height", "1lh")]);
+    if switches::HEIGHT_LH.on() {
+        st(u, "h-lh", &[("height", "1lh")]);
+        st(u, "min-h-lh", &[("min-height", "1lh")]);
+        st(u, "max-h-lh", &[("max-height", "1lh")]);
+    }
 
     st(u, "w-screen", &[("width", "100vw")]);
     st(u, "min-w-screen", &[("min-width", "100vw")]);
@@ -508,7 +648,15 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     st(u, "min-h-screen", &[("min-height", "100vh")]);
     st(u, "max-h-screen", &[("max-height", "100vh")]);
 
+    // Before 4.0.1, also `min-w-none` and `min-h-none`: `none` is not a
+    // value of these properties.
+    if !crate::switches::NO_MIN_SIZE_NONE.on() {
+        st(u, "min-w-none", &[("min-width", "none")]);
+    }
     st(u, "max-w-none", &[("max-width", "none")]);
+    if !crate::switches::NO_MIN_SIZE_NONE.on() {
+        st(u, "min-h-none", &[("min-height", "none")]);
+    }
     st(u, "max-h-none", &[("max-height", "none")]);
 
     spacing_utility(
@@ -532,56 +680,8 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     }
 
     // `inline-size`, `block-size` and their `min-` and `max-` properties
-    for (key, value) in [("full", "100%"), ("min", "min-content"), ("max", "max-content"), ("fit", "fit-content")] {
-        st(u, &format!("inline-{key}"), &[("inline-size", value)]);
-        st(u, &format!("block-{key}"), &[("block-size", value)]);
-        st(u, &format!("min-inline-{key}"), &[("min-inline-size", value)]);
-        st(u, &format!("min-block-{key}"), &[("min-block-size", value)]);
-        st(u, &format!("max-inline-{key}"), &[("max-inline-size", value)]);
-        st(u, &format!("max-block-{key}"), &[("max-block-size", value)]);
-    }
-
-    for (key, value) in [("svw", "100svw"), ("lvw", "100lvw"), ("dvw", "100dvw")] {
-        st(u, &format!("inline-{key}"), &[("inline-size", value)]);
-        st(u, &format!("min-inline-{key}"), &[("min-inline-size", value)]);
-        st(u, &format!("max-inline-{key}"), &[("max-inline-size", value)]);
-    }
-
-    for (key, value) in [("svh", "100svh"), ("lvh", "100lvh"), ("dvh", "100dvh")] {
-        st(u, &format!("block-{key}"), &[("block-size", value)]);
-        st(u, &format!("min-block-{key}"), &[("min-block-size", value)]);
-        st(u, &format!("max-block-{key}"), &[("max-block-size", value)]);
-    }
-
-    st(u, "inline-auto", &[("inline-size", "auto")]);
-    st(u, "block-auto", &[("block-size", "auto")]);
-    st(u, "min-inline-auto", &[("min-inline-size", "auto")]);
-    st(u, "min-block-auto", &[("min-block-size", "auto")]);
-
-    st(u, "block-lh", &[("block-size", "1lh")]);
-    st(u, "min-block-lh", &[("min-block-size", "1lh")]);
-    st(u, "max-block-lh", &[("max-block-size", "1lh")]);
-
-    st(u, "inline-screen", &[("inline-size", "100vw")]);
-    st(u, "min-inline-screen", &[("min-inline-size", "100vw")]);
-    st(u, "max-inline-screen", &[("max-inline-size", "100vw")]);
-    st(u, "block-screen", &[("block-size", "100vh")]);
-    st(u, "min-block-screen", &[("min-block-size", "100vh")]);
-    st(u, "max-block-screen", &[("max-block-size", "100vh")]);
-
-    st(u, "max-inline-none", &[("max-inline-size", "none")]);
-    st(u, "max-block-none", &[("max-block-size", "none")]);
-
-    let logical_sizes: [(&str, &[&'static str], &'static str); 6] = [
-        ("inline", &["--spacing", "--container"], "inline-size"),
-        ("min-inline", &["--spacing", "--container"], "min-inline-size"),
-        ("max-inline", &["--spacing", "--container"], "max-inline-size"),
-        ("block", &["--spacing"], "block-size"),
-        ("min-block", &["--spacing"], "min-block-size"),
-        ("max-block", &["--spacing"], "max-block-size"),
-    ];
-    for (name, namespaces, prop) in logical_sizes {
-        spacing_utility(u, name, namespaces, move |value, _| Some(vec![decl(prop, value)]), fractions());
+    if logical_utilities {
+        register_logical_sizes(u);
     }
 
     u.r#static("container", |_, ds| {
@@ -711,19 +811,32 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("left", "0"),
         ("top-left", "0 0"),
     ];
+    // Before 4.1.14, the values were the keywords.
+    const OLD_ORIGINS: [(&str, &str); 9] = [
+        ("center", "center"),
+        ("top", "top"),
+        ("top-right", "top right"),
+        ("right", "right"),
+        ("bottom-right", "bottom right"),
+        ("bottom", "bottom"),
+        ("bottom-left", "bottom left"),
+        ("left", "left"),
+        ("top-left", "top left"),
+    ];
+    let origins = if crate::switches::ORIGIN_PERCENTAGES.on() { &ORIGINS } else { &OLD_ORIGINS };
     functional_utility(
         u,
         "origin",
         one_property("transform-origin")
             .theme_keys(&["--transform-origin"])
-            .static_values(values("transform-origin", &ORIGINS)),
+            .static_values(values("transform-origin", origins)),
     );
     functional_utility(
         u,
         "perspective-origin",
         one_property("perspective-origin")
             .theme_keys(&["--perspective-origin"])
-            .static_values(values("perspective-origin", &ORIGINS)),
+            .static_values(values("perspective-origin", origins)),
     );
 
     // `perspective`
@@ -803,6 +916,18 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         },
         negative(),
     );
+    // Before 4.0.8, `translate-z-px` and `-translate-z-px` were static
+    // utilities two times: each gave two equal rules.
+    if !crate::switches::TRANSLATE_Z_PX_ONE_RULE.on() {
+        for (name, value) in [("-translate-z-px", "-1px"), ("translate-z-px", "1px")] {
+            st_with(
+                u,
+                name,
+                translate_properties,
+                &[("--tw-translate-z", value), ("translate", "var(--tw-translate-x) var(--tw-translate-y) var(--tw-translate-z)")],
+            );
+        }
+    }
 
     st_with(
         u,
@@ -848,7 +973,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
                 Some(vec![
                     transform_properties(),
                     decl(variable.as_str(), format!("{function}({value})")),
-                    decl("transform", TRANSFORM_VALUE),
+                    decl("transform", transform_value()),
                 ])
             })
             .negative()
@@ -866,7 +991,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
                 transform_properties(),
                 decl("--tw-skew-x", format!("skewX({value})")),
                 decl("--tw-skew-y", format!("skewY({value})")),
-                decl("transform", TRANSFORM_VALUE),
+                decl("transform", transform_value()),
             ])
         })
         .negative()
@@ -880,7 +1005,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             Some(vec![
                 transform_properties(),
                 decl("--tw-skew-x", format!("skewX({value})")),
-                decl("transform", TRANSFORM_VALUE),
+                decl("transform", transform_value()),
             ])
         })
         .negative()
@@ -894,7 +1019,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             Some(vec![
                 transform_properties(),
                 decl("--tw-skew-y", format!("skewY({value})")),
-                decl("transform", TRANSFORM_VALUE),
+                decl("transform", transform_value()),
             ])
         })
         .negative()
@@ -908,19 +1033,21 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             return None;
         }
         let value = match &candidate.value {
-            None => TRANSFORM_VALUE,
+            None => transform_value(),
             Some(UtilityValue::Arbitrary { value, .. }) => value.as_str(),
             Some(UtilityValue::Named { .. }) => return None,
         };
         Some(vec![transform_properties(), decl("transform", value)])
     });
 
-    st(u, "transform-cpu", &[("transform", TRANSFORM_VALUE)]);
-    st(u, "transform-gpu", &[("transform", &format!("translateZ(0) {TRANSFORM_VALUE}"))]);
+    st(u, "transform-cpu", &[("transform", transform_value())]);
+    st(u, "transform-gpu", &[("transform", &format!("translateZ(0) {}", transform_value()))]);
     st(u, "transform-none", &[("transform", "none")]);
 
     // `zoom`
-    functional_utility(u, "zoom", one_property("zoom").bare(integer_with("%")));
+    if crate::switches::ZOOM_TAB_SCROLLBAR.on() {
+        functional_utility(u, "zoom", one_property("zoom").bare(integer_with("%")));
+    }
 
     // `transform-style`
     st(u, "transform-flat", &[("transform-style", "flat")]);
@@ -991,7 +1118,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             u,
             &format!("touch-pan-{value}"),
             touch_properties,
-            &[("--tw-pan-x", &format!("pan-{value}")), ("touch-action", TOUCH_ACTION)],
+            &[("--tw-pan-x", &format!("pan-{value}")), ("touch-action", super::empty_fallbacks(TOUCH_ACTION))],
         );
     }
 
@@ -1000,7 +1127,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             u,
             &format!("touch-pan-{value}"),
             touch_properties,
-            &[("--tw-pan-y", &format!("pan-{value}")), ("touch-action", TOUCH_ACTION)],
+            &[("--tw-pan-y", &format!("pan-{value}")), ("touch-action", super::empty_fallbacks(TOUCH_ACTION))],
         );
     }
 
@@ -1008,7 +1135,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         u,
         "touch-pinch-zoom",
         touch_properties,
-        &[("--tw-pinch-zoom", "pinch-zoom"), ("touch-action", TOUCH_ACTION)],
+        &[("--tw-pinch-zoom", "pinch-zoom"), ("touch-action", super::empty_fallbacks(TOUCH_ACTION))],
     );
 
     // `user-select`
@@ -1059,6 +1186,9 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("scroll-mb", "scroll-margin-bottom"),
         ("scroll-ml", "scroll-margin-left"),
     ] {
+        if matches!(namespace, "scroll-mbs" | "scroll-mbe") && !logical_utilities {
+            continue;
+        }
         spacing_utility(
             u,
             namespace,
@@ -1082,6 +1212,9 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("scroll-pb", "scroll-padding-bottom"),
         ("scroll-pl", "scroll-padding-left"),
     ] {
+        if matches!(namespace, "scroll-pbs" | "scroll-pbe") && !logical_utilities {
+            continue;
+        }
         spacing_utility(
             u,
             namespace,
@@ -1154,7 +1287,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         "auto-cols",
         one_property("grid-auto-columns")
             .theme_keys(&["--grid-auto-columns"])
-            .bare(spacing_multiplier)
+            .bare(auto_track_spacing)
             .static_values(values("grid-auto-columns", &AUTO_TRACKS)),
     );
     functional_utility(
@@ -1162,7 +1295,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         "auto-rows",
         one_property("grid-auto-rows")
             .theme_keys(&["--grid-auto-rows"])
-            .bare(spacing_multiplier)
+            .bare(auto_track_spacing)
             .static_values(values("grid-auto-rows", &AUTO_TRACKS)),
     );
 

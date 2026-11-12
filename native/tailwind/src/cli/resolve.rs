@@ -1,6 +1,7 @@
 //! The resolver of `@import`: `loadStylesheet` of `@tailwindcss/node`, and
 //! the embedded files of the standalone program of Tailwind CSS.
 
+use super::engine::DirectoryPackage;
 use crate::index::Stylesheet;
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
@@ -14,8 +15,12 @@ const PREFLIGHT_CSS: &str = include_str!("../../assets/preflight.css");
 const UTILITIES_CSS: &str = include_str!("../../assets/utilities.css");
 
 /// An embedded stylesheet of Tailwind CSS, for an `@import` of
-/// `tailwindcss` or of `tailwindcss/NAME`.
-fn embedded(id: &str, base: &str) -> Option<Stylesheet> {
+/// `tailwindcss` or of `tailwindcss/NAME`. With a package (the script
+/// engine), `theme.css`, `preflight.css` and `utilities.css` are the files
+/// of the package. `index.css` is the file of the repository of Tailwind
+/// CSS, as the standalone program has it: it is the same file in each
+/// version 4, and the package has a bundled form of it.
+fn embedded(id: &str, base: &str, package: Option<&DirectoryPackage>) -> Option<Stylesheet> {
     let name = if id == "tailwindcss" {
         "index"
     } else if let Some(rest) = id.strip_prefix("tailwindcss/") {
@@ -26,18 +31,15 @@ fn embedded(id: &str, base: &str) -> Option<Stylesheet> {
         return None;
     };
     let name = name.strip_suffix(".css").unwrap_or(name);
-    let content = match name {
-        "index" => INDEX_CSS,
-        "theme" => THEME_CSS,
-        "preflight" => PREFLIGHT_CSS,
-        "utilities" => UTILITIES_CSS,
+    let content = match (name, package) {
+        ("index", _) => INDEX_CSS.to_string(),
+        ("theme" | "preflight" | "utilities", Some(package)) => package.read(&format!("{name}.css"))?,
+        ("theme", None) => THEME_CSS.to_string(),
+        ("preflight", None) => PREFLIGHT_CSS.to_string(),
+        ("utilities", None) => UTILITIES_CSS.to_string(),
         _ => return None,
     };
-    Some(Stylesheet {
-        path: format!("{EMBEDDED_BASE}/{name}.css"),
-        base: EMBEDDED_BASE.to_string(),
-        content: content.to_string(),
-    })
+    Some(Stylesheet { path: format!("{EMBEDDED_BASE}/{name}.css"), base: EMBEDDED_BASE.to_string(), content })
 }
 
 /// The file of a path: the path, the path with `.css`, or `index.css` in
@@ -192,8 +194,13 @@ pub fn resolve_css_id(id: &str, base: &str) -> Option<PathBuf> {
 
 /// Load the stylesheet of an `@import`. `on_dependency` gets the path of
 /// each file.
-pub fn load_stylesheet(id: &str, base: &str, on_dependency: &mut dyn FnMut(&Path)) -> Result<Stylesheet> {
-    if let Some(sheet) = embedded(id, base) {
+pub fn load_stylesheet(
+    id: &str,
+    base: &str,
+    package: Option<&DirectoryPackage>,
+    on_dependency: &mut dyn FnMut(&Path),
+) -> Result<Stylesheet> {
+    if let Some(sheet) = embedded(id, base, package) {
         return Ok(sheet);
     }
     let not_found = || Error::new(format!("Could not resolve '{id}' from '{base}'"));

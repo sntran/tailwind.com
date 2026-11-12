@@ -37,9 +37,17 @@ pub fn compare_breakpoints(a: &str, z: &str, direction: Direction) -> Ordering {
     }
 
     // In the same bucket, compare by value.
+    // Before 4.3.4: `parseInt`.
+    let number = |text: &str| {
+        if crate::switches::BREAKPOINT_DECIMAL_SORT.on() {
+            js_parse_float(text)
+        } else {
+            crate::utils::js::js_parse_int(text, 10)
+        }
+    };
     let order = match direction {
-        Direction::Asc => js_parse_float(a) - js_parse_float(z),
-        Direction::Desc => js_parse_float(z) - js_parse_float(a),
+        Direction::Asc => number(a) - number(z),
+        Direction::Desc => number(z) - number(a),
     };
 
     // The order is NaN when the contents are not numbers, for example with

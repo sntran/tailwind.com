@@ -193,6 +193,17 @@ pub fn parse(input: &str) -> Vec<ValueAstNode> {
     while i < len {
         let current = bytes[i];
         match current {
+            // Before 4.0.5, `\` was a normal character. (But `\)` with no
+            // open function stopped the old parser with an exception: this
+            // parser keeps the two characters there, as 4.0.5 does.)
+            BACKSLASH
+                if !crate::switches::VALUE_PARSER_ESCAPES.on()
+                    && !(stack.is_empty() && bytes.get(i + 1) == Some(&CLOSE_PAREN)) =>
+            {
+                buffer.push('\\');
+                i += 1;
+            }
+
             // The next character is escaped: keep the two characters.
             BACKSLASH => {
                 buffer.push('\\');

@@ -10,7 +10,7 @@ aarch64.
 [BEAM.com](https://github.com/sntran/BEAM.com). It takes the place of:
 
 - **The official `tailwindcss` program**: the same options, the same
-  output, in one file of about 19 MB for all the systems and both CPUs.
+  output, in one file of about 20 MB for all the systems and both CPUs.
 - **The Hex package `tailwind`** in a Phoenix project: this repository
   is also an Erlang and Elixir project with the application name
   `tailwind`, the module `Tailwind`, and the tasks `mix tailwind` and
@@ -19,6 +19,10 @@ aarch64.
 The compiler follows Tailwind CSS 4.3.5 file by file. The tests compare
 its output with the recorded output of the official compiler: see
 [Compatibility](#compatibility).
+
+The compiler can also compile as each older version of Tailwind CSS 4,
+from 4.0.0, and the file has the official compiler of each of these
+versions too: see [Versions of Tailwind CSS](#versions-of-tailwind-css).
 
 ## Quick start
 
@@ -72,6 +76,9 @@ config :tailwind,
     cd: Path.expand("..", __DIR__)
   ]
 ```
+
+`version` can be each version of Tailwind CSS 4, for example the
+`"4.3.0"` of a new Phoenix 1.8.9 project: the file has all of them.
 
 `mix tailwind.install` downloads `tailwind.com` to `_build/`, and
 `mix tailwind my_app` runs it. The watcher of the endpoint
@@ -129,6 +136,42 @@ Each release also publishes the package to GitHub Packages, with the
 name `@sntran/tailwind.com` (registry `https://npm.pkg.github.com`), and
 holds the package file itself.
 
+## Versions of Tailwind CSS
+
+One `tailwind.com` compiles for each version of Tailwind CSS 4. The
+variable `TAILWINDCSS_VERSION` selects the version, and the Erlang and
+Elixir modules set it from `version` of the configuration:
+
+```sh
+TAILWINDCSS_VERSION=4.1.18 sh ./tailwind.com -i app.css -o dist/app.css
+```
+
+The file has two engines:
+
+- **The native engine** is the Rust compiler. It follows version 4.3.5,
+  and it has a switch for each behavior that changed since 4.0.0, so it
+  serves each version from 4.0.0 to 4.3.5, also with JavaScript plugins
+  ([`docs/SWITCHES.md`](docs/SWITCHES.md)). It is the
+  fast one: about 12 ms for a Phoenix project, in each version.
+- **The script engine** is the official compiler of the npm package
+  `tailwindcss` of a version (one JavaScript file with no dependency),
+  with no change, in the QuickJS of the file. It needs about 83 ms for
+  the same project, and the official programs need 139 ms to 186 ms. The
+  package of each version is in the ZIP directory of the file: an APE
+  file is also a ZIP file. The file has the newest package in full, and
+  each older version as a small patch: the differences from the next
+  newer version. So the 48 versions from 4.0.0 to 4.3.5 are 0.37 MB of
+  the file.
+
+A new version of Tailwind CSS thus needs one line in the file
+[`PACKAGES`](PACKAGES), and no change of the code. The port to the
+native engine can come later.
+
+For another version than 4.3.5, the scanner and the optimizer are still
+the code of this file: with `--minify` or `--optimize`, the text can be
+different from the official program of that version in small details.
+See [`docs/VERSIONS.md`](docs/VERSIONS.md).
+
 ## Compatibility
 
 The output of the official compiler is the specification. `cargo test`
@@ -155,10 +198,10 @@ tests, and a TLA+ model of the watch.
 
 [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) compares the time, the memory
 and the size with the official npm CLI and the official standalone
-program. For example, the Phoenix project: 10 ms with `tailwind.com`,
-141 ms with the npm CLI and 123 ms with the standalone program. A
-project with daisyUI: 140 ms, 241 ms and 186 ms, with 13 MB of memory in
-place of 101 MB and 91 MB.
+program. For example, the Phoenix project: 12 ms with `tailwind.com`,
+186 ms with the npm CLI and 139 ms with the standalone program. A
+project with daisyUI: 182 ms, 310 ms and 251 ms, with 13 MB of memory in
+place of 103 MB and 89 MB.
 
 CI runs `tailwind.com` on Linux (x86_64 and aarch64), macOS (arm64 and
 x86_64), Windows (x86_64), FreeBSD, NetBSD and OpenBSD 7.3 (x86_64, in
@@ -231,6 +274,9 @@ differences.
   earlier.
 - `canonicalize`, the second command of the official program, is not
   there.
+- **Tailwind CSS 3** (a project with only `tailwind.config.js` and
+  `@tailwind` rules, and `version: "3.x"`) does not work: it is another
+  program. Use the official Hex package or program for it.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -246,6 +292,8 @@ WASI file system. It has the same JavaScript engine for `@plugin` and
 | File | What |
 |---|---|
 | [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) | The results against Tailwind CSS, and the known differences. |
+| [`docs/VERSIONS.md`](docs/VERSIONS.md) | The versions of Tailwind CSS in the file, and the two engines. |
+| [`docs/SWITCHES.md`](docs/SWITCHES.md) | The Rust compiler as an older version: how to write a switch, and the list of the changes of Tailwind CSS 4.3. |
 | [`docs/INTERNALS.md`](docs/INTERNALS.md) | The parts of the compiler and of the file, and how they relate to Tailwind CSS. |
 | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/TESTING.md`](docs/TESTING.md) | Build `tailwind.com`, and the tests. |
 | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) | The time, the memory and the size, against the official programs. |

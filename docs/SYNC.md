@@ -1,7 +1,18 @@
 # A new version of Tailwind CSS
 
+A new version of Tailwind CSS has two steps, and the first one is
+enough for a release:
+
+1. **Add the version to the file.** `sh scripts/packages.sh --record
+   4.4.0` writes one line into [`PACKAGES`](../PACKAGES). The next
+   build of `tailwind.com` has the official compiler of that version,
+   and the script engine runs it ([`VERSIONS.md`](VERSIONS.md)). No
+   code changes.
+2. **Port the version to the Rust compiler**, so that the native engine
+   (the fast one) has it. The rest of this document is about this step.
+
 The file [`UPSTREAM`](../UPSTREAM) names the version of Tailwind CSS that
-this repository follows. `scripts/sync-upstream.sh` moves the repository
+the Rust compiler follows. `scripts/sync-upstream.sh` moves the repository
 to another version. The script does all the mechanical work, and it
 gives a list for the work by hand.
 
@@ -43,7 +54,7 @@ file has no entry: add one (`port`, `gen`, `copy`, `dep` or `skip`).
 | The stylesheets | `native/tailwind/assets/*.css`, from the npm package |
 | The plugins of the standalone program | their versions in the lock file of Tailwind CSS go to `UPSTREAM` and to `tests/upstream/tools/package.json`, and `tests/upstream/tools/build-plugin-bundles.mjs` makes `native/tailwind/assets/plugins/` again |
 | The standalone program, for `tests/standalone.sh` | its SHA-256 from `sha256sums.txt` of the release goes to `UPSTREAM` |
-| The generated files | `property_order.rs`, `compat/default_theme.rs`, the JavaScript bundle of the plugin layer (`assets/compat.js`), and the TypeScript transform (`assets/typescript.js`) |
+| The generated files | `property_order.rs`, `compat/default_theme.rs`, the JavaScript bundle of the plugin layer (`assets/compat.js`, and `assets/compat/` for each older version that the Rust compiler serves: `scripts/compat.sh`), and the TypeScript transform (`assets/typescript.js`) |
 | The record of the official compiler | all of `tests/upstream` and `native/tailwind/tests/fixtures`: the unit tests of the new Tailwind CSS run with a recorder, the official program runs on the fixture projects, and its optimizer gives its warnings |
 
 Then it runs `cargo test`. The tests replay the new record, so each
@@ -61,6 +72,19 @@ The work is done when `cargo test`, `tests/cli.sh` and
 
 A new test file of Tailwind CSS needs no work: the recorder takes each
 `compile` call of all the unit tests.
+
+The Rust compiler also serves the older versions
+([`SWITCHES.md`](SWITCHES.md)). So each behavior that you change gets a
+switch: the new code is the port, and the code that was there stays in
+the other branch (`if switches::NAME.on() { new } else { old }`), with
+the version of the new release in `switches.rs`. Add a case to
+`tests/upstream/switches.jsonl` and record it with the official packages
+of the two versions. The plugin layer needs no switch: `apply` makes the
+plugin layer of the version before as a patch file
+(`scripts/compat.sh`). A change in the files of
+`native/tailwind/src/compat/` that are Rust needs a switch as each other
+code. Then add the version before to the job `switches` of
+`.github/workflows/fuzz.yml`.
 
 When `packages/@tailwindcss-standalone/src/index.ts` changes (the row
 of `PORT.md`): it has the list of the plugins in the standalone program
@@ -84,7 +108,8 @@ release" in [`BUILDING.md`](BUILDING.md).
 
 The workflow `.github/workflows/upstream.yml` runs each Monday. When
 Tailwind CSS has a release that is newer than `UPSTREAM`, it runs
-`report` and opens an issue with `PORT.md`.
+`report` and opens an issue with `PORT.md`. The issue also names the
+command of step 1.
 
 ## The other projects
 

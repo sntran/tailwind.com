@@ -44,7 +44,8 @@ pub struct CssSyntaxError {
 impl CssSyntaxError {
     fn new(message: impl Into<String>, loc: Option<SourceLocation>) -> Self {
         let mut message = message.into();
-        if let Some(loc) = &loc {
+        // Before 4.1.18, the message had no location.
+        if let Some(loc) = loc.as_ref().filter(|_| crate::switches::CSS_ERROR_LOCATION.on()) {
             let start = LineTable::new(&loc.source.code).find(loc.start);
             let file = loc.source.file.as_deref().unwrap_or("null");
             message = format!("{}:{}:{}: {}", file, start.line, start.column + 1, message);
@@ -141,9 +142,13 @@ fn utf8_len(lead: u8) -> usize {
 /// The result is `None` when the comment has no end.
 #[inline]
 fn comment_end(bytes: &[u8], start: usize) -> Option<usize> {
+    // Before 4.3.4, a `\` in a comment escaped the next character.
+    let escapes = !crate::switches::COMMENT_BACKSLASH_END.on();
     let mut j = start + 2;
     while j + 1 < bytes.len() {
-        if bytes[j] == ASTERISK && bytes[j + 1] == SLASH {
+        if escapes && bytes[j] == BACKSLASH {
+            j += 1;
+        } else if bytes[j] == ASTERISK && bytes[j + 1] == SLASH {
             return Some(j + 1);
         }
         j += 1;
@@ -169,6 +174,11 @@ pub fn parse(input: &str) -> Result<Vec<AstNode>, CssSyntaxError> {
 /// not empty), each node has its source location, and the message of an
 /// error starts with `file:line:column: `.
 pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>, CssSyntaxError> {
+    // Before 4.1.6 the parser replaced each `\r\n` of the input first.
+    if !crate::switches::CRLF_STAYS.on() && input.contains("\r\n") {
+        return parse_with_source(&input.replace("\r\n", "\n"), from);
+    }
+
     let bytes = input.as_bytes();
     let len = bytes.len();
 
@@ -189,7 +199,8 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
 
     // Upstream replaces a byte order mark with a space, and then ignores
     // the space. Thus the parse starts after the mark.
-    let mut i = if input.starts_with('\u{FEFF}') { 3 } else { 0 };
+    // (Before 4.0.9, the mark was a part of the first rule or declaration.)
+    let mut i = if input.starts_with('\u{FEFF}') && crate::switches::BOM_IS_SKIPPED.on() { 3 } else { 0 };
 
     while i < len {
         let current = bytes[i];
@@ -249,6 +260,7 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
             // `<!--` and `-->` between the nodes of the root.
             else if stack.is_empty()
                 && buffer.is_empty()
+                && crate::switches::HTML_COMMENT_MARKS.on()
                 && ((current == DASH && bytes[i + 1..].starts_with(b"->"))
                     || (current == LESS_THAN && bytes[i + 1..].starts_with(b"!--")))
             {
@@ -264,6 +276,10 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
                 // comments after it.
                 let mut value_end = 0;
                 let mut end: Option<usize> = None;
+                let complete_at_eof = crate::switches::CUSTOM_PROPERTY_AT_EOF.on();
+                // Before 4.1.9, a string had no special meaning here: a
+                // `;` in a string ended the value.
+                let strings = crate::switches::CUSTOM_PROPERTY_STRINGS.on();
 
                 let mut j = i + 2;
                 while j < len {
@@ -271,7 +287,7 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
 
                     if peek == BACKSLASH {
                         j += 1;
-                    } else if peek == SINGLE_QUOTE || peek == DOUBLE_QUOTE {
+                    } else if (peek == SINGLE_QUOTE || peek == DOUBLE_QUOTE) && strings {
                         j = parse_string(input, j, peek, source)?;
                     } else if peek == SLASH && at(bytes, j + 1) == Some(ASTERISK) {
                         if let Some(end) = comment_end(bytes, j) {
@@ -291,7 +307,9 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
                         brackets.push(CLOSE_BRACKET);
                     } else if peek == OPEN_CURLY {
                         brackets.push(CLOSE_CURLY);
-                    } else if peek == CLOSE_CURLY && brackets.is_empty() {
+                    } else if (peek == CLOSE_CURLY || (j == len - 1 && !complete_at_eof)) && brackets.is_empty() {
+                        // Before 4.3.4, the last character of the input
+                        // ended the property too, and was not a part of it.
                         end = Some(j);
                         i = j - 1;
                         break;
@@ -312,10 +330,13 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
                 // the input.
                 let text = match end {
                     Some(end) => &input[start..end],
-                    None => {
+                    None if complete_at_eof => {
                         i = len;
                         &input[start..]
                     }
+                    // Before 4.3.4: no text, and the parser reads the
+                    // characters after the first `-` again.
+                    None => "",
                 };
 
                 let Some(declaration) = parse_declaration(text, colon_idx, value_end) else {
@@ -338,6 +359,11 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
                     Some(declaration) => attach(&mut stack, &mut ast, track(source, declaration, buffer_start, i)),
                     None => {
                         if buffer.is_empty() {
+                            // Before 4.1.12, a `;` with no declaration
+                            // before it was an error.
+                            if !crate::switches::EXTRA_SEMICOLON_IGNORED.on() {
+                                return Err(CssSyntaxError::new("Unexpected semicolon", None));
+                            }
                             break 'step;
                         }
                         return Err(invalid_declaration(&buffer, location(source, buffer_start, i)));
@@ -417,7 +443,7 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
     }
     // A declaration with no `;` at the end of the input. Open brackets
     // make the declaration incomplete.
-    else if !buffer.is_empty() && closing_bracket_stack.is_empty() {
+    else if !buffer.is_empty() && closing_bracket_stack.is_empty() && crate::switches::DECLARATION_AT_EOF.on() {
         if let Some(declaration) = parse_declaration(&buffer, buffer.find(':'), buffer.len()) {
             attach(&mut stack, &mut ast, track(source, declaration, buffer_start, len));
         }
@@ -474,8 +500,10 @@ pub fn parse_at_rule(buffer: &str, nodes: Vec<AstNode>) -> AtRule {
         start
     };
 
+    // Before 4.1.15, a tab did not end the name.
+    let tab_ends_name = crate::switches::AT_RULE_NAME_ENDS_AT_TAB.on();
     for (i, &current) in bytes.iter().enumerate().skip(start) {
-        if current == SPACE || current == TAB || current == OPEN_PAREN {
+        if current == SPACE || (current == TAB && tab_ends_name) || current == OPEN_PAREN {
             name = &buffer[..i];
             params = &buffer[i..];
             break;
@@ -490,10 +518,41 @@ pub fn parse_at_rule(buffer: &str, nodes: Vec<AstNode>) -> AtRule {
     }
 }
 
+/// Before 4.0.2, a text with no `:` was a declaration too: the property
+/// was the text with no last character, and the value was the text (`foo;`
+/// gave `fo: foo`). A declaration with no property is not valid CSS: for
+/// that one, the result is the error of 4.0.2.
+fn declaration_with_no_colon(buffer: &str) -> Option<AstNode> {
+    if crate::switches::DECLARATION_NEEDS_COLON.on() {
+        return None;
+    }
+    let mut characters = buffer.chars();
+    characters.next_back();
+    let property = js_trim(characters.as_str());
+    if property.is_empty() {
+        return None;
+    }
+    let important = buffer.find(IMPORTANT);
+    let value = js_trim(&buffer[..important.unwrap_or(buffer.len())]);
+    Some(decl_full(property, Some(value.to_string()), important.is_some()))
+}
+
 /// A declaration from its text. `colon_idx` is the offset of the `:`.
 /// `value_end` is the end of the value without comments after it.
 fn parse_declaration(buffer: &str, colon_idx: Option<usize>, value_end: usize) -> Option<AstNode> {
-    let colon_idx = colon_idx?;
+    let Some(colon_idx) = colon_idx else { return declaration_with_no_colon(buffer) };
+
+    // Before 4.3.4: the first `!important` after the colon is the flag,
+    // and it ends the value. (The text can be shorter than the place of
+    // the colon: see `CUSTOM_PROPERTY_AT_EOF`.)
+    if !crate::switches::IMPORTANT_AT_THE_END.on() {
+        let property = js_trim(buffer.get(..colon_idx).unwrap_or(buffer));
+        let rest = buffer.get(colon_idx + 1..).unwrap_or("");
+        let important = rest.find(IMPORTANT);
+        let value = js_trim(&rest[..important.unwrap_or(rest.len())]);
+        return Some(decl_full(property, Some(value.to_string()), important.is_some()));
+    }
+
     let property = js_trim(&buffer[..colon_idx]);
     let value_start = colon_idx + 1;
     let value_end = value_end.clamp(value_start, buffer.len());

@@ -7,7 +7,7 @@ use super::{
     static_decls, static_utility, with_alpha, NamedValue, SpacingOptions, StaticPart, Utilities, UtilityDescription,
 };
 use crate::ast::{at_root, decl, decl_full, rule, style_rule, AstNode};
-use crate::candidate::{UtilityValue, ValueKind};
+use crate::candidate::{FunctionalCandidate, UtilityValue, ValueKind};
 use crate::design_system::DesignSystem;
 use crate::theme::Theme;
 use crate::utils::infer_data_type::{
@@ -146,9 +146,10 @@ fn mask_angle(v: &NamedValue, negative: bool) -> Option<String> {
     }
     let number = js_number(v.value);
     let sign = if negative { "-" } else { "" };
-    Some(if number == 0.0 {
+    let fold = crate::switches::MASK_ANGLE_FOLD.on();
+    Some(if fold && number == 0.0 {
         "0deg".to_string()
-    } else if number == 1.0 {
+    } else if fold && number == 1.0 {
         format!("{sign}1deg")
     } else {
         format!("calc(1deg * {sign}{})", v.value)
@@ -166,7 +167,7 @@ fn integer_with_unit(unit: &'static str) -> impl Fn(&NamedValue, &DesignSystem) 
 }
 
 fn filter_properties() -> AstNode {
-    at_root(vec![
+    let mut properties = vec![
         property("--tw-blur", None, None),
         property("--tw-brightness", None, None),
         property("--tw-contrast", None, None),
@@ -176,11 +177,20 @@ fn filter_properties() -> AstNode {
         property("--tw-opacity", None, None),
         property("--tw-saturate", None, None),
         property("--tw-sepia", None, None),
-        property("--tw-drop-shadow", None, None),
-        property("--tw-drop-shadow-color", None, None),
-        property("--tw-drop-shadow-alpha", Some("100%"), Some("<percentage>")),
-        property("--tw-drop-shadow-size", None, None),
-    ])
+    ];
+    // Before 4.0.7, the drop shadow had no `@property` rule.
+    if crate::switches::DROP_SHADOW_PROPERTY.on() {
+        properties.push(property("--tw-drop-shadow", None, None));
+    }
+    // Before 4.1.0, a drop shadow had no color, alpha or size variable.
+    if crate::switches::DROP_SHADOW_COLOR.on() {
+        properties.extend([
+            property("--tw-drop-shadow-color", None, None),
+            property("--tw-drop-shadow-alpha", Some("100%"), Some("<percentage>")),
+            property("--tw-drop-shadow-size", None, None),
+        ]);
+    }
+    at_root(properties)
 }
 
 fn backdrop_filter_properties() -> AstNode {
@@ -202,7 +212,7 @@ fn filter_nodes(name: &str, function: &str, value: &str) -> Vec<AstNode> {
     vec![
         filter_properties(),
         decl(format!("--tw-{name}"), format!("{function}({value})")),
-        decl("filter", CSS_FILTER_VALUE),
+        decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE)),
     ]
 }
 
@@ -211,8 +221,8 @@ fn backdrop_filter_nodes(name: &str, function: &str, value: &str) -> Vec<AstNode
     vec![
         backdrop_filter_properties(),
         decl(format!("--tw-backdrop-{name}"), format!("{function}({value})")),
-        decl("-webkit-backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
-        decl("backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
+        decl("-webkit-backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
+        decl("backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
     ]
 }
 
@@ -295,6 +305,10 @@ fn alpha_replaced_drop_shadow_properties(
 
 /// The value of `--tw-drop-shadow` for a shadow of the theme.
 fn drop_shadow_list(resolved: &str) -> String {
+    // Before 4.1.2, all the text was in one `drop-shadow(…)`.
+    if !crate::switches::DROP_SHADOW_LIST.on() {
+        return format!("drop-shadow({resolved})");
+    }
     segment(resolved, b',').into_iter().map(|v| format!("drop-shadow({v})")).collect::<Vec<_>>().join(" ")
 }
 
@@ -304,12 +318,22 @@ fn drop_shadow_size_nodes(value: &str, alpha: Option<&str>, drop_shadow: String)
         format!("var(--tw-drop-shadow-color, {color})")
     }));
     nodes.push(decl("--tw-drop-shadow", drop_shadow));
-    nodes.push(decl("filter", CSS_FILTER_VALUE));
+    nodes.push(decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE)));
     nodes
 }
 
 /// Register the utilities of this part.
 pub fn register(utilities: &mut Utilities, _theme: &Theme) {
+    // The utilities of 4.1.0 (`switches::MASK_UTILITIES`).
+    if crate::switches::MASK_UTILITIES.on() {
+        register_gradient_masks(utilities);
+    }
+    register_after_masks(utilities);
+}
+
+/// Register the masks with a gradient: `mask-t-from-*`, `mask-linear-*`,
+/// `mask-radial-*` and `mask-conic-*`.
+fn register_gradient_masks(utilities: &mut Utilities) {
     // Edge masks. The edges are: top, right, bottom, left.
     mask_edge_utility(utilities, "mask-x-from", "from", [false, true, false, true]);
     mask_edge_utility(utilities, "mask-x-to", "to", [false, true, false, true]);
@@ -404,7 +428,10 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         .negative_bare(|v, _| mask_angle(v, true)),
     );
     mask_gradient_stop_utilities(utilities, "conic");
+}
 
+/// Register the utilities from `box-decoration-break` to the filters.
+fn register_after_masks(utilities: &mut Utilities) {
     // `box-decoration-break`
     static_decls(
         utilities,
@@ -497,7 +524,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         }
 
         // A modifier is only valid as the opacity of a color.
-        if candidate.modifier.is_some() {
+        if candidate.modifier.is_some() && crate::switches::UNUSED_MODIFIER_IS_INVALID.on() {
             return None;
         }
 
@@ -521,17 +548,25 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         "object",
         UtilityDescription::new(|value, _, _| Some(vec![decl("object-position", value)]))
             .theme_keys(&["--object-position"])
-            .static_values(vec![
-                ("top", vec![decl("object-position", "top")]),
-                ("top-left", vec![decl("object-position", "left top")]),
-                ("top-right", vec![decl("object-position", "right top")]),
-                ("bottom", vec![decl("object-position", "bottom")]),
-                ("bottom-left", vec![decl("object-position", "left bottom")]),
-                ("bottom-right", vec![decl("object-position", "right bottom")]),
-                ("left", vec![decl("object-position", "left")]),
-                ("right", vec![decl("object-position", "right")]),
-                ("center", vec![decl("object-position", "center")]),
-            ]),
+            .static_values(
+                [
+                    ("top", "top"),
+                    ("top-left", "left top"),
+                    ("top-right", "right top"),
+                    ("bottom", "bottom"),
+                    ("bottom-left", "left bottom"),
+                    ("bottom-right", "right bottom"),
+                    ("left", "left"),
+                    ("right", "right"),
+                    ("center", "center"),
+                ]
+                .into_iter()
+                // Before 4.1.0, a corner had only the names of the old
+                // utilities: `object-left-top`.
+                .filter(|(name, _)| !name.contains('-') || crate::switches::CORNER_POSITION_NAMES.on())
+                .map(|(name, value)| (name, vec![decl("object-position", value)]))
+                .collect(),
+            ),
     );
 
     for (name, property) in [
@@ -547,6 +582,10 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         ("pb", "padding-bottom"),
         ("pl", "padding-left"),
     ] {
+        // The utilities of 4.2.0 (`switches::LOGICAL_UTILITIES`).
+        if matches!(name, "pbs" | "pbe") && !crate::switches::LOGICAL_UTILITIES.on() {
+            continue;
+        }
         spacing_utility(
             utilities,
             name,
@@ -628,11 +667,13 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
     });
 
     // `font-feature-settings`
-    functional_utility(
-        utilities,
-        "font-features",
-        UtilityDescription::new(|value, _, _| Some(vec![decl("font-feature-settings", value)])),
-    );
+    if crate::switches::FONT_FEATURES.on() {
+        functional_utility(
+            utilities,
+            "font-features",
+            UtilityDescription::new(|value, _, _| Some(vec![decl("font-feature-settings", value)])),
+        );
+    }
 
     static_decls(utilities, "uppercase", &[("text-transform", "uppercase")]);
     static_decls(utilities, "lowercase", &[("text-transform", "lowercase")]);
@@ -668,7 +709,12 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         }),
     );
 
-    color_utility(utilities, "placeholder", &["--placeholder-color", "--color"], |value, _| {
+    let placeholder_keys: &[&str] = if crate::switches::PLACEHOLDER_COLOR_KEY.on() {
+        &["--placeholder-color", "--color"]
+    } else {
+        &["--background-color", "--color"]
+    };
+    color_utility(utilities, "placeholder", placeholder_keys, |value, _| {
         Some(vec![style_rule("&::placeholder", vec![decl("--tw-sort", "placeholder-color"), decl("color", value)])])
     });
 
@@ -741,7 +787,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             return None;
         }
         match &candidate.value {
-            None => Some(vec![filter_properties(), decl("filter", CSS_FILTER_VALUE)]),
+            None => Some(vec![filter_properties(), decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE))]),
             Some(UtilityValue::Arbitrary { value, .. }) => Some(vec![decl("filter", value.as_str())]),
             Some(UtilityValue::Named { value, .. }) if value == "none" => Some(vec![decl("filter", "none")]),
             Some(UtilityValue::Named { .. }) => None,
@@ -755,8 +801,8 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         match &candidate.value {
             None => Some(vec![
                 backdrop_filter_properties(),
-                decl("-webkit-backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
-                decl("backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
+                decl("-webkit-backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
+                decl("backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
             ]),
             Some(UtilityValue::Arbitrary { value, .. }) => {
                 Some(vec![decl("-webkit-backdrop-filter", value.as_str()), decl("backdrop-filter", value.as_str())])
@@ -775,7 +821,7 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             .theme_keys(&["--blur"])
             .static_values(vec![(
                 "none",
-                vec![filter_properties(), decl("--tw-blur", " "), decl("filter", CSS_FILTER_VALUE)],
+                vec![filter_properties(), decl("--tw-blur", " "), decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE))],
             )]),
     );
 
@@ -789,8 +835,8 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
                 vec![
                     backdrop_filter_properties(),
                     decl("--tw-backdrop-blur", " "),
-                    decl("-webkit-backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
-                    decl("backdrop-filter", CSS_BACKDROP_FILTER_VALUE),
+                    decl("-webkit-backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
+                    decl("backdrop-filter", super::empty_fallbacks(CSS_BACKDROP_FILTER_VALUE)),
                 ],
             )]),
     );
@@ -817,17 +863,17 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         vec![
             StaticPart::Node(Box::new(filter_properties)),
             StaticPart::Decl("--tw-drop-shadow", " "),
-            StaticPart::Decl("filter", CSS_FILTER_VALUE),
+            StaticPart::Decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE)),
         ],
     );
 
-    utilities.functional("drop-shadow", |candidate, ds| {
+    fn drop_shadow(candidate: &FunctionalCandidate, ds: &DesignSystem) -> Option<Vec<AstNode>> {
         let theme = &ds.theme;
         let mut alpha: Option<String> = None;
         if let Some(modifier) = &candidate.modifier {
             if modifier.kind == ValueKind::Arbitrary {
                 alpha = Some(modifier.value.clone());
-            } else if is_valid_opacity_value(&modifier.value) {
+            } else if super::is_shadow_alpha(&modifier.value) {
                 alpha = Some(format!("{}%", modifier.value));
             }
         }
@@ -841,7 +887,8 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
             None => {
                 let value = theme.get(&["--drop-shadow"])?;
                 let resolved = theme.resolve(None, &["--drop-shadow"])?;
-                if bad_modifier {
+                // The two other checks of `bad_modifier` are older.
+                if bad_modifier && crate::switches::UNUSED_MODIFIER_IS_INVALID.on() {
                     return None;
                 }
                 return Some(drop_shadow_size_nodes(&value, alpha, drop_shadow_list(&resolved)));
@@ -883,11 +930,30 @@ pub fn register(utilities: &mut Utilities, _theme: &Theme) {
         // The color of the shadow.
         let value =
             resolve_theme_color(candidate, theme, &["--drop-shadow-color", "--color"]).filter(|v| !v.is_empty())?;
-        if value == "inherit" {
+        if value == "inherit" && crate::switches::SHADOW_INHERIT.on() {
             return Some(color_nodes("inherit".to_string()));
         }
         Some(color_nodes(with_alpha(&value, "var(--tw-drop-shadow-alpha)")))
-    });
+    }
+    if crate::switches::DROP_SHADOW_COLOR.on() {
+        utilities.functional("drop-shadow", drop_shadow);
+    } else {
+        // Before 4.1.0, `drop-shadow-*` took only a theme value or an
+        // arbitrary value, with one `drop-shadow(…)` for each shadow.
+        functional_utility(
+            utilities,
+            "drop-shadow",
+            UtilityDescription::new(|value, _, _| {
+                let shadows = segment(value, b',').into_iter().map(|v| format!("drop-shadow({v})")).collect::<Vec<_>>();
+                Some(vec![
+                    filter_properties(),
+                    decl("--tw-drop-shadow", shadows.join(" ")),
+                    decl("filter", super::empty_fallbacks(CSS_FILTER_VALUE)),
+                ])
+            })
+            .theme_keys(&["--drop-shadow"]),
+        );
+    }
 
     functional_utility(
         utilities,

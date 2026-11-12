@@ -30,14 +30,19 @@ fn ignored_theme_keys(namespace: &str) -> &'static [&'static str] {
             "--text-shadow",
             "--text-underline-offset",
         ],
-        "--grid-column" => &["--grid-column-start", "--grid-column-end"],
-        "--grid-row" => &["--grid-row-start", "--grid-row-end"],
+        // Before 4.1.14, `col-*` and `row-*` also read these keys.
+        "--grid-column" if crate::switches::GRID_LINE_THEME_KEYS.on() => &["--grid-column-start", "--grid-column-end"],
+        "--grid-row" if crate::switches::GRID_LINE_THEME_KEYS.on() => &["--grid-row-start", "--grid-row-end"],
         _ => &[],
     }
 }
 
 fn is_ignored_theme_key(theme_key: &str, namespace: &str) -> bool {
     ignored_theme_keys(namespace).iter().any(|ignored| {
+        // Before 4.1.0, `--text-shadow-*` was a key of `--text`.
+        if *ignored == "--text-shadow" && !crate::switches::TEXT_SHADOW.on() {
+            return false;
+        }
         theme_key == *ignored
             || (theme_key.starts_with(ignored) && theme_key.as_bytes().get(ignored.len()) == Some(&b'-'))
     })
@@ -147,6 +152,10 @@ impl Theme {
     }
 
     pub fn get_options(&self, key: &str) -> ThemeOptions {
+        // Before 4.0.5, the key was the text as it is.
+        if !crate::switches::THEME_OPTIONS_KEY_WITH_PREFIX.on() {
+            return self.values.borrow().get(key).map_or(NONE, |v| v.options);
+        }
         let key = self.unprefix_key(key);
         let key = unescape(&key);
         self.values.borrow().get(key.as_ref()).map_or(NONE, |v| v.options)
@@ -198,6 +207,22 @@ impl Theme {
 
     fn resolve_key(&self, candidate_value: Option<&str>, theme_keys: &[&str]) -> Option<String> {
         let values = self.values.borrow();
+        // Before 4.0.2, the keys of the theme were the text of the
+        // stylesheet, with its escapes. The key of a value was the escaped
+        // name, with `_` for each `.`.
+        if !crate::switches::THEME_KEYS_UNESCAPED.on() {
+            for namespace in theme_keys {
+                let theme_key = match candidate_value {
+                    Some(v) => escape(&format!("{namespace}-{}", v.replace('.', "_"))).into_owned(),
+                    None => namespace.to_string(),
+                };
+                if !values.contains_key(&theme_key) || is_ignored_theme_key(&theme_key, namespace) {
+                    continue;
+                }
+                return Some(theme_key);
+            }
+            return None;
+        }
         for namespace in theme_keys {
             let mut theme_key = match candidate_value {
                 Some(v) => format!("{namespace}-{v}"),
@@ -229,8 +254,10 @@ impl Theme {
         // A reference theme does not emit its variables, so the `var()`
         // needs a fallback.
         let prefixed = self.prefix_key(theme_key);
-        let name = escape(&prefixed);
-        if value.options & REFERENCE != 0 && !value.value.is_empty() {
+        // (Before 4.0.2, the key had its escapes.)
+        let name = if crate::switches::THEME_KEYS_UNESCAPED.on() { escape(&prefixed) } else { prefixed.as_str().into() };
+        // (Before 4.0.9, no fallback.)
+        if value.options & REFERENCE != 0 && !value.value.is_empty() && crate::switches::REFERENCE_VAR_FALLBACK.on() {
             Some(format!("var({name}, {})", value.value))
         } else {
             Some(format!("var({name})"))

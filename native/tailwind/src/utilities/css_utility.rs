@@ -50,7 +50,12 @@ pub fn create_css_utility(node: &AtRule) -> Option<RegisterUtility> {
 /// name at the time of this call.
 pub fn create_css_utility_shared(node: SharedAtRule) -> Option<RegisterUtility> {
     // The name can have escapes: `@utility foo-1\/2` is `foo-1/2`.
-    let name = unescape(&node.borrow().params).into_owned();
+    // (Before 4.2.0, the name was the text as it was.)
+    let name = if crate::switches::UTILITY_NAME_ESCAPES.on() {
+        unescape(&node.borrow().params).into_owned()
+    } else {
+        node.borrow().params.clone()
+    };
 
     if is_valid_functional_utility_name(&name) {
         return Some(Box::new(move |design_system: &mut DesignSystem| {
@@ -151,7 +156,7 @@ fn normalize_argument(arg: &str) -> String {
     let arg = js_trim(arg);
 
     // The value of `--default(…)` goes to the output as it is.
-    if arg.starts_with("--default(") {
+    if arg.starts_with("--default(") && crate::switches::DEFAULT_FN_WHITESPACE.on() {
         return arg.to_string();
     }
 
@@ -168,7 +173,9 @@ fn normalize_argument(arg: &str) -> String {
     let mut arg = collapse_wildcards(&arg);
 
     // A theme key ends in `-*`.
-    if arg.starts_with("--") && !arg.contains('(') && !arg.contains("-*") {
+    // (Before 4.3.0, `--default(…)` was a theme key as each other.)
+    let is_function = arg.contains('(') && crate::switches::CSS_UTILITY_DEFAULT.on();
+    if arg.starts_with("--") && !is_function && !arg.contains("-*") {
         arg.push_str("-*");
     }
 
@@ -257,9 +264,27 @@ struct CompileState<'a> {
     /// tree: `true` when a `--value(…)` that is not a ratio has a result
     /// in it.
     resolved_declarations: Vec<bool>,
+    /// The number of times that the functions of the declaration of the
+    /// walk asked for its removal.
+    removals: usize,
+    /// Before 4.0.4 (`switches::CSS_UTILITY_RESULT_NOT_VISITED`): the
+    /// number of results that the walk can visit again. `None`: the walk
+    /// does not visit a result.
+    revisits_left: Option<usize>,
+    /// The walk visited results without end.
+    endless: bool,
 }
 
+/// The limit of `CompileState::revisits_left` for one declaration.
+const REVISIT_LIMIT: usize = 1000;
+
 fn compile_functional(node: &AtRule, candidate: &FunctionalCandidate, design_system: &DesignSystem) -> Compiled {
+    // Before 4.3.0, a functional utility needed a value.
+    let has_default = crate::switches::CSS_UTILITY_DEFAULT.on();
+    if candidate.value.is_none() && !has_default {
+        return Compiled::Undefined;
+    }
+
     let mut at_rule = node.clone();
     let mut state = CompileState {
         value: candidate.value.as_ref(),
@@ -271,12 +296,17 @@ fn compile_functional(node: &AtRule, candidate: &FunctionalCandidate, design_sys
         resolved_modifier_fn: false,
         resolved_ratio_value: false,
         resolved_declarations: Vec::new(),
+        removals: 0,
+        revisits_left: None,
+        endless: false,
     };
 
     resolve_declarations(&mut at_rule.nodes, true, &mut state);
 
     // One `--value(…)` must have a result.
-    if !state.used_value_fn || !state.resolved_value_fn {
+    // (Before 4.3.0, a utility with no `--value(…)` was valid.)
+    let needs_value = crate::switches::CSS_UTILITY_NEEDS_VALUE.on();
+    if (needs_value || state.used_value_fn) && !(state.used_value_fn && state.resolved_value_fn) {
         return Compiled::Null;
     }
 
@@ -318,8 +348,46 @@ fn resolve_declarations(nodes: &mut Vec<AstNode>, parent_is_rule: bool, state: &
                 if parent_is_rule {
                     if let Some(value) = declaration.value.as_deref().filter(|v| !v.is_empty()) {
                         let mut value_ast = value_parser::parse(value);
-                        if !resolve_value_functions(&mut value_ast, state, &mut resolved) {
-                            nodes.remove(index);
+                        state.removals = 0;
+                        if crate::switches::CSS_UTILITY_RESULT_NOT_VISITED.on() {
+                            resolve_value_functions(&mut value_ast, state, &mut resolved);
+                        } else {
+                            // Before 4.0.4, the walk visited the nodes of
+                            // each result again: a `--value(…)` in an
+                            // arbitrary value of the candidate got a result
+                            // too. Where that has no end, upstream did not
+                            // stop: the result is then the result of 4.0.4.
+                            let flags = (
+                                state.used_value_fn,
+                                state.resolved_value_fn,
+                                state.used_modifier_fn,
+                                state.resolved_modifier_fn,
+                                state.resolved_ratio_value,
+                            );
+                            state.revisits_left = Some(REVISIT_LIMIT);
+                            state.endless = false;
+                            resolve_value_functions(&mut value_ast, state, &mut resolved);
+                            state.revisits_left = None;
+                            if state.endless {
+                                (
+                                    state.used_value_fn,
+                                    state.resolved_value_fn,
+                                    state.used_modifier_fn,
+                                    state.resolved_modifier_fn,
+                                    state.resolved_ratio_value,
+                                ) = flags;
+                                state.removals = 0;
+                                resolved = false;
+                                value_ast = value_parser::parse(value);
+                                resolve_value_functions(&mut value_ast, state, &mut resolved);
+                            }
+                        }
+                        if state.removals > 0 {
+                            // Before 4.0.15, a declaration could ask for
+                            // its removal more than one time. Each more
+                            // time removed the node after it.
+                            let end = (index + state.removals).min(nodes.len());
+                            nodes.drain(index..end);
                             continue;
                         }
                         declaration.value = Some(value_parser::to_css(&value_ast));
@@ -338,8 +406,9 @@ fn resolve_declarations(nodes: &mut Vec<AstNode>, parent_is_rule: bool, state: &
     }
 }
 
-/// Replace each `--value(…)` and `--modifier(…)` with its result. The result
-/// is `false` when a function has no result: the walk stops there.
+/// Replace each `--value(…)` and `--modifier(…)` with its result. A function
+/// with no result asks for the removal of the declaration
+/// (`CompileState::removals`). The result is `false` when the walk stops.
 fn resolve_value_functions(nodes: &mut Vec<ValueAstNode>, state: &mut CompileState, resolved_declaration: &mut bool) -> bool {
     let mut index = 0;
     while index < nodes.len() {
@@ -352,6 +421,7 @@ fn resolve_value_functions(nodes: &mut Vec<ValueAstNode>, state: &mut CompileSta
             state.used_value_fn = true;
             let Some(resolved) = resolve_value_function(state.value.map(FunctionValue::from), function, state.design_system)
             else {
+                state.removals += 1;
                 return false;
             };
             state.resolved_value_fn = true;
@@ -362,17 +432,43 @@ fn resolve_value_functions(nodes: &mut Vec<ValueAstNode>, state: &mut CompileSta
             }
             let count = resolved.nodes.len();
             nodes.splice(index..=index, resolved.nodes);
-            index += count;
+            match &mut state.revisits_left {
+                None => index += count,
+                Some(0) => {
+                    state.endless = true;
+                    return false;
+                }
+                Some(left) => *left -= 1,
+            }
         } else if function.value == "--modifier" {
+            // Before 4.3.0, a candidate with no modifier removed the
+            // declaration here: there was no default.
+            if state.modifier.is_none() && !crate::switches::CSS_UTILITY_DEFAULT.on() {
+                state.removals += 1;
+                if crate::switches::CSS_UTILITY_ONE_REMOVAL.on() {
+                    return false;
+                }
+                // Before 4.0.15, the walk went on with the next node.
+                index += 1;
+                continue;
+            }
             state.used_modifier_fn = true;
             let Some(resolved) = resolve_value_function(state.modifier.map(FunctionValue::from), function, state.design_system)
             else {
+                state.removals += 1;
                 return false;
             };
             state.resolved_modifier_fn = true;
             let count = resolved.nodes.len();
             nodes.splice(index..=index, resolved.nodes);
-            index += count;
+            match &mut state.revisits_left {
+                None => index += count,
+                Some(0) => {
+                    state.endless = true;
+                    return false;
+                }
+                Some(left) => *left -= 1,
+            }
         } else {
             if !resolve_value_functions(&mut function.nodes, state, resolved_declaration) {
                 return false;
@@ -476,7 +572,8 @@ fn resolve_value_function(
 
         if value.named {
             // A literal: `--modifier('closest-side')`.
-            if quoted(arg) == Some(value.value) {
+            // (Before 4.0.16, a literal matched nothing.)
+            if crate::switches::CSS_UTILITY_LITERALS.on() && quoted(arg) == Some(value.value) {
                 return Resolved::parse(value.value);
             }
 
@@ -524,6 +621,14 @@ fn resolve_value_function(
 
             match data_type {
                 // A ratio is `<integer>/<integer>`.
+                // (Before 4.2.0, the result was the text of the candidate.)
+                DataType::Ratio if !crate::switches::RATIO_VALUE_SPACES.on() => {
+                    let parts = segment(resolved, b'/');
+                    if !parts.first().is_some_and(|p| is_positive_integer(p)) || !parts.get(1).is_some_and(|p| is_positive_integer(p)) {
+                        continue;
+                    }
+                    return Some(Resolved { nodes: value_parser::parse(resolved), ratio: true });
+                }
                 DataType::Ratio => {
                     let parts = segment(resolved, b'/');
                     let is_integer = |part: Option<&&str>| {
@@ -598,9 +703,21 @@ fn utility_root_length(name: &str) -> Option<usize> {
     Some(pos)
 }
 
+/// The name check before 4.2.0: `/^-?[a-z][a-zA-Z0-9/%._-]*$/`. A
+/// functional name had `-*` after this text.
+fn is_old_utility_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    let start = usize::from(bytes.first() == Some(&b'-'));
+    bytes.get(start).is_some_and(u8::is_ascii_lowercase)
+        && bytes[start + 1..].iter().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'%' | b'.' | b'_' | b'-'))
+}
+
 /// `true` for the name of a static utility: `tab-size`, `p-1.5`, `w-50%`,
 /// `text-xs/8`.
 pub fn is_valid_static_utility_name(name: &str) -> bool {
+    if !crate::switches::UTILITY_NAME_SCANNER_RULES.on() {
+        return is_old_utility_name(name);
+    }
     let Some(root_length) = utility_root_length(name) else { return false };
     let (root, value) = name.as_bytes().split_at(root_length);
 
@@ -651,7 +768,11 @@ pub fn is_valid_static_utility_name(name: &str) -> bool {
 /// `true` for the name of a functional utility: `tab-size-*`.
 pub fn is_valid_functional_utility_name(name: &str) -> bool {
     let Some(name) = name.strip_suffix("-*") else { return false };
+    if !crate::switches::UTILITY_NAME_SCANNER_RULES.on() {
+        return is_old_utility_name(name);
+    }
     // The root is the full name. A root that ends in `-` is valid, so a
     // candidate such as `foo--bar` is possible.
-    utility_root_length(name) == Some(name.len())
+    // (4.2.0 did not permit that end.)
+    utility_root_length(name) == Some(name.len()) && (!name.ends_with('-') || crate::switches::UTILITY_ROOT_ENDING_DASH.on())
 }

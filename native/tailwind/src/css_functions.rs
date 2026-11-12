@@ -56,9 +56,9 @@ fn spacing(design_system: &DesignSystem, args: &[&str]) -> Result<String> {
         }
     };
 
-    if let Some((number, _)) = dimensions(value) {
+    if let Some((number, _)) = dimensions(value).filter(|_| crate::switches::SPACING_FN_FOLD.on()) {
         if number == 0.0 {
-            return Ok("0px".to_string());
+            return Ok(if crate::switches::SPACING_ZERO_PX.on() { "0px" } else { "0" }.to_string());
         }
         if number == 1.0 {
             return Ok(multiplier);
@@ -74,6 +74,12 @@ fn theme(design_system: &DesignSystem, source: &AstNode, args: &[&str]) -> Resul
 
     if !path.starts_with("--") {
         return Err(Error::new("The --theme(…) function can only be used with CSS variables from your theme."));
+    }
+
+    // Before 4.0.15, `--theme(…)` gave the value of the variable, as
+    // `theme(…)` does.
+    if !crate::switches::THEME_FN_GIVES_VARIABLE.on() {
+        return legacy_theme(design_system, args);
     }
 
     let mut inline = false;
@@ -154,8 +160,13 @@ pub fn substitute_functions(ast: &mut Vec<AstNode>, design_system: &DesignSystem
     let mut features = FEATURES_NONE;
     let mut error: Option<Error> = None;
 
+    // Before 4.0.4, a walk did not go into an at-root node (the
+    // `@keyframes` rules of the theme).
+    let enters_at_root = crate::switches::WALK_ENTERS_AT_ROOT.on();
+
     walk(ast, |node, _| {
         let new_value = match &*node {
+            AstNode::AtRoot(_) if !enters_at_root => return WalkAction::Skip,
             // A declaration: `color: theme(--color-red-500)`.
             AstNode::Declaration(d) => match &d.value {
                 Some(value) if has_theme_function_invocation(value) => {

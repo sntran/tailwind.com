@@ -5,6 +5,7 @@
 //! the new tree in an arena: each node and each list of children has an id.
 //! `handle_nesting` uses paths of child indices into its result.
 
+use crate::switches;
 use crate::ast::{self, at_rule, style_rule, AstNode, AtRule, ContextMap, ContextValue, Declaration, Loc};
 use crate::source_maps::SourceLocation;
 use crate::design_system::DesignSystem;
@@ -22,6 +23,12 @@ use std::rc::Rc;
 /// At-rules that can go to the top of the tree.
 const HOISTABLE_AT_RULES: [&str; 8] =
     ["@container", "@layer", "@media", "@page", "@scope", "@starting-style", "@supports", "@view-transition"];
+
+/// True for an at-rule that goes out of a rule. Before 4.3.4, `@scope`
+/// was not one of them.
+fn is_hoistable(name: &str) -> bool {
+    HOISTABLE_AT_RULES.contains(&name) && (name != "@scope" || switches::SCOPE_HOISTING.on())
+}
 
 /// At-rules that have no effect when they have no nodes.
 const DROPPABLE_IF_EMPTY_AT_RULES: [&str; 7] =
@@ -64,7 +71,13 @@ const STANDARD_PSEUDO_ELEMENTS: [&str; 32] = [
 ];
 
 /// The params of the `@supports` rule that holds the `@property` fallbacks.
-const AT_PROPERTY_SUPPORTS: &str = "((-webkit-hyphens: none) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b))))";
+fn at_property_supports() -> &'static str {
+    if switches::AT_PROPERTY_SUPPORTS_BLOCK.on() {
+        "((-webkit-hyphens: none) and (not (margin-trim: block))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b))))"
+    } else {
+        "((-webkit-hyphens: none) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b))))"
+    }
+}
 
 // ---------------------------------------------------------------------------
 // optimize_ast
@@ -179,9 +192,36 @@ struct Optimizer<'a> {
     /// The `@keyframes` rules of the theme.
     keyframes: Vec<(Id, String)>,
     used_keyframe_names: HashSet<String>,
+    /// Only in 4.0.8 (`switches::REFERENCE_IMPORT_THEME_IS_NORMAL`): the
+    /// rule of the first `@theme`, when the tree has one.
+    first_theme_rule: Option<AstNode>,
     property_fallbacks_root: Vec<AstNode>,
     property_fallbacks_universal: Vec<AstNode>,
     variable_dependencies: IndexMap<String, IndexSet<String>>,
+    removal: Removal,
+}
+
+/// How the theme variables with no use are removed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Removal {
+    /// Before 4.0.5, and in 4.0.6 and 4.0.7: each variable stays.
+    No,
+    /// In 4.0.5: see `switches::UNUSED_THEME_VARIABLES_REMOVED_FIRST`.
+    First,
+    /// From 4.0.8.
+    WithDependencies,
+}
+
+impl Removal {
+    fn now() -> Self {
+        if switches::UNUSED_THEME_VARIABLES_REMOVED.on() {
+            Removal::WithDependencies
+        } else if switches::UNUSED_THEME_VARIABLES_REMOVED_FIRST.on() && !switches::UNUSED_THEME_VARIABLES_KEPT.on() {
+            Removal::First
+        } else {
+            Removal::No
+        }
+    }
 }
 
 impl Optimizer<'_> {
@@ -195,13 +235,15 @@ impl Optimizer<'_> {
                 let is_theme_variable = context.theme && decl.property.starts_with("--");
 
                 // A theme variable with the value `initial` gives no output.
-                if is_theme_variable && value == "initial" {
+                // (Before 4.0.15, it was a declaration as each other one.)
+                if is_theme_variable && value == "initial" && switches::THEME_INITIAL_NOT_EMITTED.on() {
                     return;
                 }
 
                 if value.contains("var(") {
                     // A variable that uses a variable is a dependency, not a use.
-                    if is_theme_variable {
+                    // (Before 4.0.8, it was a use.)
+                    if is_theme_variable && self.removal == Removal::WithDependencies {
                         for variable in extract_used_variables(value) {
                             self.variable_dependencies.entry(variable).or_default().insert(decl.property.clone());
                         }
@@ -218,26 +260,75 @@ impl Optimizer<'_> {
 
                 let needs_color_mix = self.polyfills & crate::POLYFILLS_COLOR_MIX != 0
                     && !context.supports_color_mix
-                    && !context.keyframes
+                    // Before 4.1.18, also in `@keyframes`.
+                    && !(context.keyframes && switches::KEYFRAMES_NO_COLOR_MIX_FALLBACK.on())
                     && value.contains("color-mix(");
 
                 let id = self.arena.add(Item::Node(node.clone()));
-                self.arena.attach(parent, id);
-                if is_theme_variable && !context.keyframes {
+                // (In 4.0.5, also a custom property in `@keyframes`.)
+                if is_theme_variable && (!context.keyframes || self.removal == Removal::First) {
                     self.css_theme_variables.entry(parent).or_default().push(id);
                 }
-                if needs_color_mix {
+
+                // Before 4.1.4, the fallback was made here, before the
+                // removal of the unused theme variables. A theme variable
+                // with a fallback is then not in its list.
+                if needs_color_mix && !switches::COLOR_MIX_FALLBACK_LAST.on() {
+                    if let Some(fallback_value) = color_mix_fallback(value, &self.design_system.theme) {
+                        let fallback = self.arena.add(Item::Node(AstNode::Declaration(Declaration {
+                            property: decl.property.clone(),
+                            value: Some(fallback_value),
+                            important: decl.important,
+                            loc: Loc::default(),
+                        })));
+                        let query = self.arena.add(Item::AtRule {
+                            name: "@supports".to_string(),
+                            params: "(color: color-mix(in lab, red, red))".to_string(),
+                            nodes: vec![id],
+                            loc: Loc::default(),
+                        });
+                        self.arena.entries[id].parent = Some(query);
+                        self.arena.attach(parent, fallback);
+                        self.arena.attach(parent, query);
+                        return;
+                    }
+                }
+
+                self.arena.attach(parent, id);
+                if needs_color_mix && switches::COLOR_MIX_FALLBACK_LAST.on() {
                     self.color_mix_declarations.entry(parent).or_default().push(id);
                 }
             }
 
             AstNode::Rule(rule) => {
+                // Before 4.1.13, a rule with the selector `&` gave each
+                // child a list of its own, and the nodes of that list went
+                // to the parent. A later change of that list (the removal
+                // of an unused theme variable, a `color-mix(…)` fallback)
+                // has no effect on the tree.
+                if rule.selector == "&" && !switches::EQUAL_DECLARATIONS_REMOVED.on() {
+                    for child in &rule.nodes {
+                        let list = self.arena.add(Item::List(Vec::new()));
+                        self.transform(child, list, context, depth + 1);
+                        for id in self.arena.children(list).clone() {
+                            self.arena.attach(parent, id);
+                        }
+                    }
+                    return;
+                }
+
                 let copy = self.arena.add(Item::Rule { selector: rule.selector.clone(), nodes: Vec::new(), loc: rule.loc.clone() });
                 for child in &rule.nodes {
                     self.transform(child, copy, context, depth + 1);
                 }
-                if !self.arena.children(copy).is_empty() {
-                    self.arena.attach(parent, copy);
+                // Before 4.1.13, equal declarations stayed in a rule.
+                if switches::NESTING_PASS.on() || !switches::EQUAL_DECLARATIONS_REMOVED.on() {
+                    // (Before 4.0.2, an empty rule stayed in the output.)
+                    if !self.arena.children(copy).is_empty() || !switches::EMPTY_RULES_REMOVED.on() {
+                        self.arena.attach(parent, copy);
+                    }
+                } else {
+                    self.finish_rule_without_nesting_pass(parent, copy);
                 }
             }
 
@@ -278,7 +369,12 @@ impl Optimizer<'_> {
             AstNode::AtRule(rule) => {
                 if rule.name == "@keyframes" {
                     context.keyframes = true;
-                } else if rule.name == "@supports" && rule.params.contains("color-mix(") {
+                } else if rule.name == "@supports"
+                    && rule.params.contains("color-mix(")
+                    && crate::switches::SUPPORTS_COLOR_MIX_NO_FALLBACK.on()
+                {
+                    // Before 4.2.0, a declaration in this rule got a
+                    // fallback as each other.
                     context.supports_color_mix = true;
                 }
 
@@ -291,8 +387,13 @@ impl Optimizer<'_> {
                     self.keyframes.push((copy, rule.params.clone()));
                 }
 
+                // Before 4.0.2, each at-rule stayed in the output. Only in
+                // 4.0.2, an `@import` rule with no body was removed.
                 if !self.arena.children(copy).is_empty()
-                    || matches!(rule.name.as_str(), "@layer" | "@charset" | "@custom-media" | "@namespace" | "@import" | "@apply")
+                    || matches!(rule.name.as_str(), "@layer" | "@charset" | "@custom-media" | "@namespace")
+                    || (rule.name == "@import" && switches::EMPTY_IMPORT_STAYS.on())
+                    || (rule.name == "@apply" && switches::APPLY_CSS_MIXINS.on())
+                    || !switches::EMPTY_RULES_REMOVED.on()
                 {
                     self.arena.attach(parent, copy);
                 }
@@ -312,10 +413,27 @@ impl Optimizer<'_> {
 
             AstNode::Context(node) => {
                 if node.context.get("reference").is_some_and(ContextValue::truthy) {
+                    // In 4.0.8, a reference import gave the rule of
+                    // the first `@theme`, in the at-rules that are above
+                    // that rule in the import. When the rule was not in
+                    // the import, it was a copy with no at-rule.
+                    // (Before 4.0.8, a reference import gave nothing.)
+                    if !switches::REFERENCE_IMPORT_THEME.on() && switches::REFERENCE_IMPORT_THEME_IS_NORMAL.on() {
+                        if let Some(first_theme_rule) = self.first_theme_rule.clone() {
+                            let mut at_rules = Vec::new();
+                            find_at_rules_above(&node.nodes, &mut at_rules);
+                            let mut child = first_theme_rule;
+                            for (name, params) in at_rules.into_iter().rev() {
+                                child = ast::at_rule(name, params, vec![child]);
+                            }
+                            self.transform(&child, parent, context.merge(&node.context), depth);
+                        }
+                    }
                     return;
                 }
                 let merged = context.merge(&node.context);
-                if node.context.get("source").is_some_and(ContextValue::truthy) {
+                // Before 4.3.4, no pass used the source of a subtree.
+                if node.context.get("source").is_some_and(ContextValue::truthy) && switches::SCOPE_HOISTING.on() {
                     let copy = self.arena.add(Item::Context { context: node.context.clone(), nodes: Vec::new() });
                     for child in &node.nodes {
                         self.transform(child, copy, merged, depth);
@@ -337,6 +455,70 @@ impl Optimizer<'_> {
         }
     }
 
+    /// The end of a style rule as before the nesting pass
+    /// (`switches::NESTING_PASS`): remove the declarations that are equal
+    /// to a later declaration of the rule, and replace a rule with the
+    /// selector `&` by its children.
+    ///
+    /// Upstream made a new list for these two changes, but the lists of
+    /// the theme variables and of the `color-mix(…)` declarations kept the
+    /// first list. So the later steps (the removal of unused theme
+    /// variables, the fallbacks of `color-mix(…)`) changed a list that was
+    /// not in the tree. Here `copy` stays as that first list, with no
+    /// parent, and the tree gets a new rule.
+    fn finish_rule_without_nesting_pass(&mut self, parent: Id, copy: Id) {
+        let children = self.arena.children(copy).clone();
+        if children.is_empty() {
+            return;
+        }
+
+        // Keep the last declaration of each group of equal declarations.
+        // The key is one text, as upstream.
+        let key = |decl: &Declaration| format!("{}:{}:{}", decl.property, decl.value.as_deref().unwrap_or("undefined"), decl.important);
+        let mut last: HashMap<String, Id> = HashMap::new();
+        let mut declarations = 0;
+        for id in &children {
+            if let Item::Node(AstNode::Declaration(decl)) = &self.arena.entries[*id].item {
+                declarations += 1;
+                last.insert(key(decl), *id);
+            }
+        }
+        let has_duplicates = last.len() < declarations;
+        let is_nesting_selector =
+            matches!(&self.arena.entries[copy].item, Item::Rule { selector, .. } if selector == "&");
+
+        if !has_duplicates && !is_nesting_selector {
+            self.arena.attach(parent, copy);
+            return;
+        }
+
+        let kept: Vec<Id> = if has_duplicates {
+            children
+                .into_iter()
+                .filter(|id| match &self.arena.entries[*id].item {
+                    Item::Node(AstNode::Declaration(decl)) => last.get(&key(decl)) == Some(id),
+                    _ => true,
+                })
+                .collect()
+        } else {
+            children
+        };
+
+        if is_nesting_selector {
+            for id in kept {
+                self.arena.attach(parent, id);
+            }
+        } else {
+            let Item::Rule { selector, loc, .. } = &self.arena.entries[copy].item else { unreachable!("the copy is a rule") };
+            let rule = Item::Rule { selector: selector.clone(), nodes: Vec::new(), loc: loc.clone() };
+            let rule = self.arena.add(rule);
+            for id in kept {
+                self.arena.attach(rule, id);
+            }
+            self.arena.attach(parent, rule);
+        }
+    }
+
     fn copy_at_rule(&mut self, rule: &AtRule) -> Id {
         self.arena.add(Item::AtRule {
             name: rule.name.clone(),
@@ -355,18 +537,28 @@ impl Optimizer<'_> {
 
     /// Remove the theme variables that have no use.
     fn remove_unused_theme_variables(&mut self, root: Id) {
-        let animate_prefix = self.design_system.theme.prefix_key("--animate-");
+        // Before 4.0.10, the name had no prefix: with a prefix, no
+        // `--animate-*` variable marked its keyframes as used.
+        let animate_prefix = if switches::ANIMATE_KEYFRAMES_WITH_PREFIX.on() {
+            self.design_system.theme.prefix_key("--animate-")
+        } else {
+            "--animate-".to_string()
+        };
         let lists = std::mem::take(&mut self.css_theme_variables);
 
         for (parent, declarations) in lists {
             for declaration in declarations {
                 let decl = self.declaration(declaration);
-                let used = is_variable_used(
-                    &decl.property,
-                    &self.design_system.theme,
-                    &self.variable_dependencies,
-                    &mut HashSet::new(),
-                );
+                let used = if self.removal == Removal::First {
+                    self.design_system.theme.get_options(&decl.property) & (theme::STATIC | theme::USED) != 0
+                } else {
+                    is_variable_used(
+                        &decl.property,
+                        &self.design_system.theme,
+                        &self.variable_dependencies,
+                        &mut HashSet::new(),
+                    )
+                };
                 if used {
                     if decl.property.starts_with(&animate_prefix) {
                         let names: Vec<String> =
@@ -395,7 +587,18 @@ impl Optimizer<'_> {
                 // rule in the tree, remove the rule, and each at-rule above
                 // it. Upstream does not examine the other children of these
                 // at-rules.
-                if matches!(self.arena.entries[parent].item, Item::Rule { .. }) && self.is_in_tree(parent, root) {
+                // (In 4.0.5, only a rule at the top level was removed: a
+                // rule in an at-rule stayed, with no declaration.)
+                if self.removal == Removal::First {
+                    if matches!(self.arena.entries[parent].item, Item::Rule { .. })
+                        && self.arena.entries[parent].parent == Some(root)
+                    {
+                        let list = self.arena.children_mut(root);
+                        if let Some(idx) = list.iter().position(|id| *id == parent) {
+                            list.remove(idx);
+                        }
+                    }
+                } else if matches!(self.arena.entries[parent].item, Item::Rule { .. }) && self.is_in_tree(parent, root) {
                     let mut node = parent;
                     while let Some(remove_from) = self.arena.entries[node].parent {
                         let is_root_or_at_rule =
@@ -450,13 +653,21 @@ impl Optimizer<'_> {
                     loc.clear_identity();
                 }
                 let fallback = self.arena.add(Item::Node(fallback));
+                // Only in 4.1.15, the declaration was in a `&` rule.
+                let content = if switches::COLOR_MIX_FALLBACK_NO_AMPERSAND.on() || !switches::COLOR_MIX_FALLBACK_AMPERSAND.on() {
+                    declaration
+                } else {
+                    let rule = self.arena.add(Item::Rule { selector: "&".to_string(), nodes: vec![declaration], loc: Loc::default() });
+                    self.arena.entries[declaration].parent = Some(rule);
+                    rule
+                };
                 let query = self.arena.add(Item::AtRule {
                     name: "@supports".to_string(),
                     params: "(color: color-mix(in lab, red, red))".to_string(),
-                    nodes: vec![declaration],
+                    nodes: vec![content],
                     loc: query_loc,
                 });
-                self.arena.entries[declaration].parent = Some(query);
+                self.arena.entries[content].parent = Some(query);
                 self.arena.entries[fallback].parent = Some(parent);
                 self.arena.entries[query].parent = Some(parent);
                 self.arena.children_mut(parent).splice(idx..=idx, [fallback, query]);
@@ -465,8 +676,56 @@ impl Optimizer<'_> {
     }
 }
 
+/// The rule of the first `@theme` (`index.rs`): a rule `:root, :host`
+/// whose one child is the context node of the theme.
+fn is_first_theme_rule(node: &AstNode) -> bool {
+    let AstNode::Rule(rule) = node else { return false };
+    rule.selector == crate::index::theme_rule_selector()
+        && matches!(&rule.nodes[..], [AstNode::Context(inner)]
+            if inner.context.len() == 1 && inner.context.get("theme").is_some_and(ContextValue::truthy))
+}
+
+fn find_first_theme_rule(nodes: &[AstNode]) -> Option<&AstNode> {
+    nodes.iter().find_map(|node| {
+        if is_first_theme_rule(node) {
+            return Some(node);
+        }
+        node.children().and_then(|children| find_first_theme_rule(children))
+    })
+}
+
+/// The name and the parameters of each at-rule above the rule of the first
+/// `@theme` in these nodes, from the outer one. The result is false when
+/// the rule is not in these nodes.
+fn find_at_rules_above(nodes: &[AstNode], at_rules: &mut Vec<(String, String)>) -> bool {
+    for node in nodes {
+        if is_first_theme_rule(node) {
+            return true;
+        }
+        let Some(children) = node.children() else { continue };
+        if let AstNode::AtRule(rule) = node {
+            at_rules.push((rule.name.clone(), rule.params.clone()));
+            if find_at_rules_above(children, at_rules) {
+                return true;
+            }
+            at_rules.pop();
+        } else if find_at_rules_above(children, at_rules) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Make the tree ready for the printer.
 pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: crate::Polyfills) -> Vec<AstNode> {
+    // Before 4.1.0, the compiler had no polyfills.
+    let mut polyfills = polyfills;
+    if !switches::AT_PROPERTY_FALLBACKS.on() {
+        polyfills &= !crate::POLYFILLS_AT_PROPERTY;
+    }
+    if !switches::COLOR_MIX_FALLBACK.on() {
+        polyfills &= !crate::POLYFILLS_COLOR_MIX;
+    }
     let mut arena = Arena::default();
     let root = arena.add(Item::List(Vec::new()));
     let at_roots = arena.add(Item::List(Vec::new()));
@@ -480,21 +739,33 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
         color_mix_declarations: IndexMap::new(),
         keyframes: Vec::new(),
         used_keyframe_names: HashSet::new(),
+        first_theme_rule: if switches::REFERENCE_IMPORT_THEME.on() || !switches::REFERENCE_IMPORT_THEME_IS_NORMAL.on() {
+            None
+        } else {
+            find_first_theme_rule(ast).cloned()
+        },
         property_fallbacks_root: Vec::new(),
         property_fallbacks_universal: Vec::new(),
         variable_dependencies: IndexMap::new(),
+        removal: Removal::now(),
     };
 
     for node in ast {
         optimizer.transform(node, root, Ctx::default(), 0);
     }
 
-    optimizer.remove_unused_theme_variables(root);
+    // In 4.0.6 and 4.0.7, and before 4.0.5, each theme variable and each
+    // `@keyframes` rule of the theme stayed in the output.
+    let remove_unused = optimizer.removal != Removal::No;
+    if remove_unused {
+        optimizer.remove_unused_theme_variables(root);
+    }
 
     // Remove the keyframes that have no use. A rule that is not in the
     // at-roots has the index -1 upstream: `splice(-1, 1)` removes the last
     // node of the at-roots.
-    for (keyframe, params) in std::mem::take(&mut optimizer.keyframes) {
+    let keyframes = if remove_unused { std::mem::take(&mut optimizer.keyframes) } else { Vec::new() };
+    for (keyframe, params) in keyframes {
         if !optimizer.used_keyframe_names.contains(&params) {
             let list = optimizer.arena.children_mut(at_roots);
             match list.iter().position(|id| *id == keyframe) {
@@ -511,6 +782,9 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
     // Upstream makes a new array here (`concat`). A later change of the old
     // root list has no effect on the result.
     let mut new_ast: Vec<Id> = optimizer.arena.children(root).clone();
+    // Before 4.1.2, the at-roots were added after the fallbacks of
+    // `@property`, so the fallbacks went before them.
+    let before_at_roots = new_ast.len();
     new_ast.extend(optimizer.arena.children(at_roots).iter().copied());
 
     if polyfills & crate::POLYFILLS_COLOR_MIX != 0 {
@@ -534,7 +808,26 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
             );
         }
 
-        if !fallback_ast.is_empty() {
+        if !fallback_ast.is_empty() && !switches::PROPERTIES_LAYER.on() {
+            // Before 4.1.2: one `@supports` rule with `@layer base`, near
+            // the start. From 4.1.1 it goes after the comments, the
+            // `@charset` rules, the `@import` rules and the `@layer` rules
+            // with no body, or at the end. Before 4.1.1 it goes after the
+            // comments, or at the start.
+            let after_imports = switches::FALLBACKS_AFTER_IMPORTS.on();
+            let first_valid_node_index = new_ast[..before_at_roots].iter().position(|node| match node {
+                AstNode::Comment(_) => false,
+                AstNode::AtRule(rule) if after_imports => {
+                    rule.name != "@charset" && rule.name != "@import" && !(rule.name == "@layer" && rule.nodes.is_empty())
+                }
+                _ => true,
+            });
+            let index = first_valid_node_index.unwrap_or(if after_imports { before_at_roots } else { 0 });
+            new_ast.insert(
+                index,
+                at_rule("@supports", at_property_supports(), vec![at_rule("@layer", "base", fallback_ast)]),
+            );
+        } else if !fallback_ast.is_empty() {
             // The empty `@layer properties;` goes after the comments, the
             // `@charset` and the `@import` rules at the start.
             let first_valid_node_index = new_ast.iter().position(|node| match node {
@@ -552,14 +845,18 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
                 at_rule(
                     "@layer",
                     "properties",
-                    vec![at_rule("@supports", AT_PROPERTY_SUPPORTS, fallback_ast).with_src(src)],
+                    vec![at_rule("@supports", at_property_supports(), fallback_ast).with_src(src)],
                 )
                 .with_src(src),
             );
         }
     }
 
-    handle_nesting(new_ast)
+    if switches::NESTING_PASS.on() {
+        handle_nesting(new_ast)
+    } else {
+        new_ast
+    }
 }
 
 /// True when the variable is in use, or a variable that uses it is in use.
@@ -587,9 +884,21 @@ fn is_variable_used(
     false
 }
 
+/// JavaScript `value.split(/\s+/)`.
+pub fn split_at_white_space(value: &str) -> Vec<&str> {
+    split_at(value, false)
+}
+
 /// JavaScript `value.split(/[\s,]+/)`.
+/// (Before 4.0.16, a comma was not a separator: `value.split(/\s+/)`.)
 fn extract_keyframe_names(value: &str) -> Vec<&str> {
-    let is_separator = |c: char| c == ',' || is_js_whitespace(c);
+    split_at(value, crate::switches::KEYFRAME_NAMES_AFTER_COMMA.on())
+}
+
+/// The parts of the text between runs of white space (and of commas, with
+/// `comma`).
+fn split_at(value: &str, comma: bool) -> Vec<&str> {
+    let is_separator = |c: char| (comma && c == ',') || is_js_whitespace(c);
     let mut names = Vec::new();
     let mut start = 0;
     let mut chars = value.char_indices().peekable();
@@ -646,14 +955,45 @@ fn color_mix_fallback(value: &str, theme: &Theme) -> Option<String> {
 
         // The interpolation method is optional. Without it, there is no
         // fallback. A comment can be before `in`.
-        let mut args = value_parser::to_css(&function.nodes);
-        if args.contains("/*") {
-            args = replace_comments(&args);
-            function.nodes = value_parser::parse(&args);
+        if switches::COLOR_MIX_NEEDS_METHOD.on() {
+            let mut args = value_parser::to_css(&function.nodes);
+            if args.contains("/*") {
+                args = replace_comments(&args);
+                function.nodes = value_parser::parse(&args);
+            }
+            if !starts_with_in(js_trim_start(&args)) {
+                return WalkAction::Continue;
+            }
         }
-        if !starts_with_in(js_trim_start(&args)) {
+
+        // Before 4.1.2: only a variable with a value in the theme gave a
+        // fallback, `currentcolor` gave none, and each `color-mix(…)` of
+        // the value got `srgb`.
+        if !switches::COLOR_MIX_FALLBACK_FOR_EACH_COLOR.on() {
+            walk(&mut function.nodes, |node, _| {
+                let ValueAstNode::Function(var) = node else { return WalkAction::Continue };
+                if var.value != "var" {
+                    return WalkAction::Continue;
+                }
+                let Some(ValueAstNode::Word(first_child)) = var.nodes.first() else { return WalkAction::Continue };
+                match theme.resolve_value(None, &[&first_child.value]) {
+                    Some(color) if !color.is_empty() => {
+                        requires_polyfill = true;
+                        WalkAction::Replace(vec![value_parser::word(color)])
+                    }
+                    _ => WalkAction::Continue,
+                }
+            });
+            if let Some(ValueAstNode::Word(colorspace)) = function.nodes.get_mut(2) {
+                if matches!(colorspace.value.as_str(), "oklab" | "oklch" | "lab" | "lch") {
+                    colorspace.value = "srgb".to_string();
+                }
+            }
             return WalkAction::Continue;
         }
+
+        // Before 4.1.4: the value of a variable was not examined.
+        let follows_variables = switches::COLOR_MIX_VARIABLE_CHAIN.on();
 
         let mut contains_unresolvable_vars = false;
         let mut contains_currentcolor = false;
@@ -692,6 +1032,9 @@ fn color_mix_fallback(value: &str, theme: &Theme) -> Option<String> {
                         return WalkAction::Continue;
                     }
                 };
+                if !follows_variables {
+                    break;
+                }
                 if js_to_lower_case(&inlined_color) == "currentcolor" {
                     contains_currentcolor = true;
                     return WalkAction::Continue;
@@ -721,7 +1064,12 @@ fn color_mix_fallback(value: &str, theme: &Theme) -> Option<String> {
             // The fallback uses `srgb`: old browsers do not know `oklab(…)`.
             // The color space is the second node after the first node that
             // is not a separator. With no such node, upstream reads index 1.
-            let index = function.nodes.iter().position(|node| !node.is_separator()).map_or(1, |idx| idx + 2);
+            // Before 4.3.5: always the third node.
+            let index = if switches::COLOR_MIX_NEEDS_METHOD.on() {
+                function.nodes.iter().position(|node| !node.is_separator()).map_or(1, |idx| idx + 2)
+            } else {
+                2
+            };
             if let Some(ValueAstNode::Word(colorspace)) = function.nodes.get_mut(index) {
                 if matches!(colorspace.value.as_str(), "oklab" | "oklch" | "lab" | "lch") {
                     colorspace.value = "srgb".to_string();
@@ -804,9 +1152,16 @@ fn nodes_at<'a>(mut nodes: &'a mut Vec<AstNode>, path: &[usize]) -> &'a mut Vec<
 
 /// True when the subtree has an `@scope` rule.
 fn contains_at_scope(nodes: &[AstNode]) -> bool {
+    if !switches::SCOPE_HOISTING.on() {
+        return false;
+    }
+    contains_at_scope_rule(nodes)
+}
+
+fn contains_at_scope_rule(nodes: &[AstNode]) -> bool {
     nodes.iter().any(|node| match node.children() {
         None => false,
-        Some(children) => node.is_at_rule("@scope") || contains_at_scope(children),
+        Some(children) => node.is_at_rule("@scope") || contains_at_scope_rule(children),
     })
 }
 
@@ -962,6 +1317,14 @@ fn substitute_level(
 
 /// True when no selector of the tree can match an element.
 fn can_never_match(ast: &[SelectorAstNode]) -> bool {
+    // Before 4.3.4, the pass had no such check.
+    if !switches::DEAD_PSEUDO_ELEMENT_RULES.on() {
+        return false;
+    }
+    can_never_match_selector(ast)
+}
+
+fn can_never_match_selector(ast: &[SelectorAstNode]) -> bool {
     !ast.is_empty() && ast.iter().all(is_dead_selector)
 }
 
@@ -1007,7 +1370,7 @@ fn is_dead_selector(node: &SelectorAstNode) -> bool {
         }
         SelectorAstNode::Compound(compound) => compound.nodes.iter().any(is_dead_selector),
         SelectorAstNode::Function(function) => {
-            (function.value == ":is" || function.value == ":where") && can_never_match(&function.nodes)
+            (function.value == ":is" || function.value == ":where") && can_never_match_selector(&function.nodes)
         }
         _ => false,
     }
@@ -1153,17 +1516,19 @@ impl Nesting {
                         self.selector_stack = dead;
                         return;
                     }
-                    if rule.nodes.is_empty() || !HOISTABLE_AT_RULES.contains(&rule.name.as_str()) {
+                    if rule.nodes.is_empty() || !is_hoistable(&rule.name) {
                         return;
                     }
                 }
 
-                if rule.nodes.is_empty() && !DROPPABLE_IF_EMPTY_AT_RULES.contains(&rule.name.as_str()) {
+                if rule.nodes.is_empty()
+                    && !(DROPPABLE_IF_EMPTY_AT_RULES.contains(&rule.name.as_str()) && (rule.name != "@scope" || switches::SCOPE_HOISTING.on()))
+                {
                     self.emit(AstNode::AtRule(rule));
                     return;
                 }
 
-                if !HOISTABLE_AT_RULES.contains(&rule.name.as_str()) {
+                if !is_hoistable(&rule.name) {
                     self.emit(AstNode::AtRule(rule));
                     return;
                 }

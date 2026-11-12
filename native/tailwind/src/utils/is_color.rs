@@ -199,6 +199,7 @@ fn is_color_fn(value: &str) -> bool {
         Some(paren) => {
             let name = &value[..paren];
             COLOR_FUNCTIONS.iter().any(|f| name.eq_ignore_ascii_case(f))
+                && (crate::switches::ALPHA_FN_IS_COLOR.on() || !name.eq_ignore_ascii_case("--alpha"))
         }
         None => false,
     }

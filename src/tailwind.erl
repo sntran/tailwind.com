@@ -4,11 +4,12 @@ Install and run tailwind.com, the Tailwind CSS compiler in one file.
 
 Configuration (the application environment of `tailwind`):
 
-- `{version, "4.3.5"}`: the version of Tailwind CSS to download.
+- `{version, "4.3.5"}`: the version of Tailwind CSS. One tailwind.com has
+  each version of Tailwind CSS 4.
 - `{path, "PATH"}`: the path of tailwind.com (default:
   `"_build/tailwind.com"`).
-- `{url, "URL"}`: the URL of the download. `$version` in it is the
-  version.
+- `{url, "URL"}`: the URL of the download. `$program` in it is the
+  version of this package, and `$version` is the version of Tailwind CSS.
 - `{sha256, "HEX"}`: the SHA-256 that the download must have.
 - `{PROFILE, [{args, [...]}, {cd, "DIR"}, {env, #{...}}]}`: the arguments
   of a profile for `run/2`.
@@ -31,13 +32,15 @@ The module needs Erlang/OTP 29 or later.
 ]).
 
 -define(LATEST, "4.3.5").
--define(BASE_URL, "https://github.com/sntran/tailwind.com/releases/download/v$version/tailwind.com").
+-define(BASE_URL, "https://github.com/sntran/tailwind.com/releases/download/v$program/tailwind.com").
+%% The variable that gives the version of Tailwind CSS to tailwind.com.
+-define(VERSION_VARIABLE, "TAILWINDCSS_VERSION").
 
 -type profile() :: atom().
 
 -doc """
-The version of Tailwind CSS that this package installs when the
-configuration has no version.
+The version of Tailwind CSS when the configuration has no version: the
+version of the Rust compiler of tailwind.com.
 """.
 -spec latest_version() -> string().
 latest_version() -> ?LATEST.
@@ -49,7 +52,12 @@ The version of the configuration.
 configured_version() ->
     to_list(application:get_env(tailwind, version, ?LATEST)).
 
--doc "The default URL of the download. `$version` in it is the version.".
+-doc """
+The default URL of the download. `$program` in it is the version of this
+package, and `$version` is the version of Tailwind CSS of the
+configuration. One file has each version of Tailwind CSS 4, so the default
+URL has only `$program`.
+""".
 -spec default_base_url() -> string().
 default_base_url() -> ?BASE_URL.
 
@@ -111,7 +119,9 @@ is_ape(Path) ->
     end.
 
 -doc """
-The version of Tailwind CSS of the installed file.
+The version of Tailwind CSS that the installed file uses for the version
+of the configuration. The result is `error` when the file is not there,
+or when it does not have that version.
 """.
 -spec bin_version() -> {ok, string()} | error.
 bin_version() ->
@@ -119,9 +129,10 @@ bin_version() ->
         false ->
             error;
         true ->
-            try exec(["--help"], [], fun(Data, Acc) -> [Acc, Data] end, []) of
+            Options = [{env, [{?VERSION_VARIABLE, configured_version()}]}],
+            try exec(["--version"], Options, fun(Data, Acc) -> [Acc, Data] end, []) of
                 {0, Out} ->
-                    case re:run(Out, "tailwindcss v([^\\s\\e]+)", [{capture, all_but_first, list}]) of
+                    case re:run(Out, "tailwindcss v([0-9][^\\s\\e,)]*)", [{capture, all_but_first, list}]) of
                         {match, [Vsn]} -> {ok, Vsn};
                         nomatch -> error
                     end;
@@ -136,6 +147,10 @@ bin_version() ->
 Run tailwind.com with the arguments of the profile and the extra
 arguments.
 
+The program compiles for the version of Tailwind CSS of the
+configuration: it gets the variable `TAILWINDCSS_VERSION`, unless the
+`env` of the profile has that variable.
+
 The output goes to the group leader. The result is the exit status. When
 this process ends, the standard input of the program closes, and a watch
 (`--watch`) stops.
@@ -143,7 +158,7 @@ this process ends, the standard input of the program closes, and a watch
 -spec run(profile(), [string()]) -> non_neg_integer().
 run(Profile, ExtraArgs) when is_atom(Profile), is_list(ExtraArgs) ->
     #{args := Args, cd := Cd, env := Env} = config_for(Profile),
-    Options = [{cd, Cd}, {env, maps:to_list(Env)}],
+    Options = [{cd, Cd}, {env, maps:to_list(maps:merge(#{?VERSION_VARIABLE => configured_version()}, Env))}],
     Print = fun(Data, Acc) -> io:put_chars(Data), Acc end,
     {Status, _} = exec(Args ++ [to_list(A) || A <- ExtraArgs], Options, Print, ok),
     Status.
@@ -172,7 +187,8 @@ install() ->
 -doc "Download tailwind.com to `bin_path/0`, from this URL.".
 -spec install(string() | binary()) -> ok | {error, term()}.
 install(BaseUrl) ->
-    Url = re:replace(to_list(BaseUrl), "\\$version", configured_version(), [global, {return, list}]),
+    Url0 = re:replace(to_list(BaseUrl), "\\$version", configured_version(), [global, {return, list}]),
+    Url = re:replace(Url0, "\\$program", program_version(), [global, {return, list}]),
     Path = bin_path(),
     Tmp = Path ++ ".download",
     maybe
@@ -182,6 +198,14 @@ install(BaseUrl) ->
         ok ?= file:write_file(Tmp, Body),
         ok ?= file:change_mode(Tmp, 8#755),
         file:rename(Tmp, Path)
+    end.
+
+%% The version of this package: the release that has its tailwind.com.
+program_version() ->
+    _ = application:load(tailwind),
+    case application:get_key(tailwind, vsn) of
+        {ok, Vsn} -> to_list(Vsn);
+        undefined -> erlang:error(no_tailwind_application)
     end.
 
 check_sha256(Body) ->

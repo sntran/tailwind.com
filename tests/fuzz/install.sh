@@ -1,13 +1,15 @@
 #!/bin/sh
-# Install the official npm packages of the version of UPSTREAM in DIR, for
-# tests/fuzz/fuzz.mjs.
+# Install the official npm packages of a version of Tailwind CSS in DIR,
+# for tests/fuzz/fuzz.mjs. The default is the version of UPSTREAM.
 #
-# Usage: sh tests/fuzz/install.sh DIR
+# Usage: sh tests/fuzz/install.sh DIR [VERSION]
 set -eu
-dir=${1:?Usage: sh tests/fuzz/install.sh DIR}
+dir=${1:?Usage: sh tests/fuzz/install.sh DIR [VERSION]}
 root=$(cd "$(dirname "$0")/../.." && pwd)
 # shellcheck disable=SC1091
 . "$root/UPSTREAM"
+native=$TAILWINDCSS_VERSION
+TAILWINDCSS_VERSION=${2:-$native}
 mkdir -p "$dir"
 cd "$dir"
 [ -f package.json ] || echo '{"private": true}' > package.json
@@ -24,9 +26,15 @@ npm install --silent --no-audit --no-fund --legacy-peer-deps \
 # The stylesheets of the Tailwind CSS repository, as the standalone program
 # and this program have them. The npm package has another index.css (the
 # text of theme.css and preflight.css in another format).
-for f in index theme preflight utilities; do
-    cp "$root/tests/upstream/css/$f.css" node_modules/tailwindcss/$f.css
-done
+# index.css of the repository is the same file in each version 4, and the
+# other files of a package are the files of the repository.
+if [ "$TAILWINDCSS_VERSION" = "$native" ]; then
+    for f in index theme preflight utilities; do
+        cp "$root/tests/upstream/css/$f.css" node_modules/tailwindcss/$f.css
+    done
+else
+    cp "$root/tests/upstream/css/index.css" node_modules/tailwindcss/index.css
+fi
 # The daisyUI bundle of the fixtures (a file of Phoenix 1.8.5).
 mkdir -p vendor
 cp "$root/tests/upstream/cli-js/daisyui-bundle/project/vendor/daisyui.js" vendor/daisyui.js

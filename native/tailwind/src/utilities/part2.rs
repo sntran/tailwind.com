@@ -38,6 +38,9 @@ fn is_positive_integer_without_last(value: &str) -> bool {
 
 /// `true` when a space value is zero.
 fn is_zero_space(value: &str) -> bool {
+    if !crate::switches::SPACE_ZERO.on() {
+        return false;
+    }
     if value == "--spacing(0)" || value == "--spacing(-0)" {
         return true;
     }
@@ -201,6 +204,27 @@ fn linear_gradient_direction(value: &str) -> Option<&'static str> {
     })
 }
 
+/// The value of `--tw-gradient-position`. Before 4.0.2, it had the comma
+/// that follows the position in the gradient.
+fn gradient_position(value: &str) -> String {
+    if crate::switches::GRADIENT_POSITION_NO_COMMA.on() {
+        value.to_string()
+    } else {
+        format!("{value},")
+    }
+}
+
+/// The value of `--tw-gradient-stops`. Before 4.0.2, the comma after the
+/// position was in the value of `--tw-gradient-position`, and the `var()`
+/// had an empty fallback.
+fn gradient_stops() -> &'static str {
+    if crate::switches::GRADIENT_POSITION_NO_COMMA.on() {
+        "var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))"
+    } else {
+        "var(--tw-gradient-via-stops, var(--tw-gradient-position,) var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))"
+    }
+}
+
 fn handle_bg_linear(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSystem) -> Option<Vec<AstNode>> {
     move |candidate, _| {
         let named = match candidate.value.as_ref()? {
@@ -215,7 +239,7 @@ fn handle_bg_linear(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyst
                     _ => value.clone(),
                 };
                 return Some(vec![
-                    decl("--tw-gradient-position", value.as_str()),
+                    decl("--tw-gradient-position", gradient_position(&value)),
                     decl("background-image", format!("linear-gradient(var(--tw-gradient-stops,{value}))")),
                 ]);
             }
@@ -236,6 +260,14 @@ fn handle_bg_linear(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyst
 
         let interpolation_method = resolve_interpolation_modifier(candidate.modifier.as_ref());
 
+        // Before 4.1.0, there was no fallback with no method.
+        if !crate::switches::GRADIENT_POSITION_FALLBACK.on() {
+            return Some(vec![
+                decl("--tw-gradient-position", gradient_position(&format!("{value} {interpolation_method}"))),
+                decl("background-image", "linear-gradient(var(--tw-gradient-stops))"),
+            ]);
+        }
+
         Some(vec![
             decl("--tw-gradient-position", value.as_str()),
             rule(
@@ -254,7 +286,7 @@ fn handle_bg_conic(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyste
                 return None;
             }
             return Some(vec![
-                decl("--tw-gradient-position", value.as_str()),
+                decl("--tw-gradient-position", gradient_position(value)),
                 decl("background-image", format!("conic-gradient(var(--tw-gradient-stops,{value}))")),
             ]);
         }
@@ -263,7 +295,7 @@ fn handle_bg_conic(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyste
 
         let Some(candidate_value) = &candidate.value else {
             return Some(vec![
-                decl("--tw-gradient-position", interpolation_method),
+                decl("--tw-gradient-position", gradient_position(&interpolation_method)),
                 decl("background-image", "conic-gradient(var(--tw-gradient-stops))"),
             ]);
         };
@@ -272,10 +304,15 @@ fn handle_bg_conic(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyste
         if !is_positive_integer(value) {
             return None;
         }
-        let value = if negative { format!("calc({value}deg * -1)") } else { format!("{value}deg") };
+        let value = match negative {
+            // Before 4.0.15, the negative angle had no unit.
+            true if !crate::switches::BG_CONIC_NEGATIVE_ANGLE.on() => format!("calc({value} * -1)"),
+            true => format!("calc({value}deg * -1)"),
+            false => format!("{value}deg"),
+        };
 
         Some(vec![
-            decl("--tw-gradient-position", format!("from {value} {interpolation_method}")),
+            decl("--tw-gradient-position", gradient_position(&format!("from {value} {interpolation_method}"))),
             decl("background-image", "conic-gradient(var(--tw-gradient-stops))"),
         ])
     }
@@ -440,6 +477,22 @@ fn value_utility(utilities: &mut Utilities, class_root: &str, css_property: &'st
     );
 }
 
+/// False for a static utility of this part that the selected version
+/// does not have.
+fn has_static_utility(name: &str) -> bool {
+    // The utilities of 4.1.0.
+    if name.ends_with("-safe") || name.ends_with("-baseline-last") {
+        return crate::switches::SAFE_AND_LAST_BASELINE_ALIGNMENT.on();
+    }
+    if name.starts_with("wrap-") {
+        return crate::switches::WRAP_UTILITIES.on();
+    }
+    if matches!(name, "bg-top-left" | "bg-top-right" | "bg-bottom-left" | "bg-bottom-right") {
+        return crate::switches::CORNER_POSITION_NAMES.on();
+    }
+    true
+}
+
 /// Register the utilities of this part.
 pub fn register(utilities: &mut Utilities, theme: &Theme) {
     let u = utilities;
@@ -447,7 +500,9 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
     // Register static utilities that set one property.
     fn group(u: &mut Utilities, css_property: &'static str, values: &[(&str, &'static str)]) {
         for (name, value) in values {
-            static_decls(u, name, &[(css_property, value)]);
+            if has_static_utility(name) {
+                static_decls(u, name, &[(css_property, value)]);
+            }
         }
     }
 
@@ -584,7 +639,13 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
     static_decls(u, "accent-auto", &[("accent-color", "auto")]);
     color_utility(u, "accent", &["--accent-color", "--color"], |value, _| Some(vec![decl("accent-color", value)]));
     color_utility(u, "caret", &["--caret-color", "--color"], |value, _| Some(vec![decl("caret-color", value)]));
-    color_utility(u, "divide", &["--divide-color", "--border-color", "--color"], |value, _| {
+    // Before 4.1.12, `divide-*` did not read `--border-color`.
+    let divide_keys: &[&'static str] = if crate::switches::DIVIDE_BORDER_COLOR_KEY.on() {
+        &["--divide-color", "--border-color", "--color"]
+    } else {
+        &["--divide-color", "--color"]
+    };
+    color_utility(u, "divide", divide_keys, |value, _| {
         Some(vec![style_rule(CHILDREN, vec![decl("--tw-sort", "divide-color"), decl("border-color", value)])])
     });
 
@@ -643,36 +704,40 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
     }
 
     group(u, "scroll-behavior", &[("scroll-auto", "auto"), ("scroll-smooth", "smooth")]);
-    group(
-        u,
-        "scrollbar-width",
-        &[("scrollbar-auto", "auto"), ("scrollbar-thin", "thin"), ("scrollbar-none", "none")],
-    );
+    let new_utilities = crate::switches::ZOOM_TAB_SCROLLBAR.on();
+    // The utilities of 4.3.0 (`switches::ZOOM_TAB_SCROLLBAR`).
+    if new_utilities {
+        group(
+            u,
+            "scrollbar-width",
+            &[("scrollbar-auto", "auto"), ("scrollbar-thin", "thin"), ("scrollbar-none", "none")],
+        );
 
-    for (name, variable) in
-        [("scrollbar-thumb", "--tw-scrollbar-thumb"), ("scrollbar-track", "--tw-scrollbar-track")]
-    {
-        color_utility(u, name, &["--color"], move |value, _| {
-            Some(vec![
-                at_root(vec![
-                    property("--tw-scrollbar-thumb", Some("#0000"), Some("<color>")),
-                    property("--tw-scrollbar-track", Some("#0000"), Some("<color>")),
-                ]),
-                decl(variable, value),
-                decl("scrollbar-color", "var(--tw-scrollbar-thumb) var(--tw-scrollbar-track)"),
-            ])
-        });
+        for (name, variable) in
+            [("scrollbar-thumb", "--tw-scrollbar-thumb"), ("scrollbar-track", "--tw-scrollbar-track")]
+        {
+            color_utility(u, name, &["--color"], move |value, _| {
+                Some(vec![
+                    at_root(vec![
+                        property("--tw-scrollbar-thumb", Some("#0000"), Some("<color>")),
+                        property("--tw-scrollbar-track", Some("#0000"), Some("<color>")),
+                    ]),
+                    decl(variable, value),
+                    decl("scrollbar-color", "var(--tw-scrollbar-thumb) var(--tw-scrollbar-track)"),
+                ])
+            });
+        }
+
+        group(
+            u,
+            "scrollbar-gutter",
+            &[
+                ("scrollbar-gutter-auto", "auto"),
+                ("scrollbar-gutter-stable", "stable"),
+                ("scrollbar-gutter-both", "stable both-edges"),
+            ],
+        );
     }
-
-    group(
-        u,
-        "scrollbar-gutter",
-        &[
-            ("scrollbar-gutter-auto", "auto"),
-            ("scrollbar-gutter-stable", "stable"),
-            ("scrollbar-gutter-both", "stable both-edges"),
-        ],
-    );
 
     static_decls(u, "truncate", &[("overflow", "hidden"), ("text-overflow", "ellipsis"), ("white-space", "nowrap")]);
 
@@ -695,12 +760,14 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         ],
     );
 
-    functional_utility(
-        u,
-        "tab",
-        UtilityDescription::new(|value, _, _| Some(vec![decl("tab-size", value)]))
-            .bare(|v, _| is_positive_integer(v.value).then(|| v.value.to_string())),
-    );
+    if new_utilities {
+        functional_utility(
+            u,
+            "tab",
+            UtilityDescription::new(|value, _, _| Some(vec![decl("tab-size", value)]))
+                .bare(|v, _| is_positive_integer(v.value).then(|| v.value.to_string())),
+        );
+    }
 
     group(
         u,
@@ -762,6 +829,10 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         ("border-b", "-bottom"),
         ("border-l", "-left"),
     ] {
+        // The utilities of 4.2.0 (`switches::LOGICAL_UTILITIES`).
+        if matches!(root, "border-bs" | "border-be") && !crate::switches::LOGICAL_UTILITIES.on() {
+            continue;
+        }
         let (style, width, color): (&'static str, &'static str, &'static str) = match side {
             "" => ("border-style", "border-width", "border-color"),
             "-inline" => ("border-inline-style", "border-inline-width", "border-inline-color"),
@@ -810,7 +881,11 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
     }
 
     group(u, "background-size", &[("bg-auto", "auto"), ("bg-cover", "cover"), ("bg-contain", "contain")]);
-    value_utility(u, "bg-size", "background-size");
+    // The utilities of 4.1.0 (`switches::BG_SIZE_AND_POSITION`).
+    let bg_size_and_position = crate::switches::BG_SIZE_AND_POSITION.on();
+    if bg_size_and_position {
+        value_utility(u, "bg-size", "background-size");
+    }
 
     group(u, "background-attachment", &[("bg-fixed", "fixed"), ("bg-local", "local"), ("bg-scroll", "scroll")]);
 
@@ -829,7 +904,9 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
             ("bg-center", "center"),
         ],
     );
-    value_utility(u, "bg-position", "background-position");
+    if bg_size_and_position {
+        value_utility(u, "bg-position", "background-position");
+    }
 
     group(
         u,
@@ -854,7 +931,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
 
     u.functional("bg-radial", |candidate, _| match &candidate.value {
         None => Some(vec![
-            decl("--tw-gradient-position", resolve_interpolation_modifier(candidate.modifier.as_ref())),
+            decl("--tw-gradient-position", gradient_position(&resolve_interpolation_modifier(candidate.modifier.as_ref()))),
             decl("background-image", "radial-gradient(var(--tw-gradient-stops))"),
         ]),
         Some(UtilityValue::Arbitrary { value, .. }) => {
@@ -862,7 +939,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 return None;
             }
             Some(vec![
-                decl("--tw-gradient-position", value.as_str()),
+                decl("--tw-gradient-position", gradient_position(value)),
                 decl("background-image", format!("radial-gradient(var(--tw-gradient-stops,{value}))")),
             ])
         }
@@ -918,7 +995,6 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
         Some(vec![decl("background-image", value)])
     });
 
-    const STOPS: &str = "var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))";
 
     gradient_stop_utility(
         u,
@@ -928,7 +1004,7 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 gradient_stop_properties(),
                 decl("--tw-sort", "--tw-gradient-from"),
                 decl("--tw-gradient-from", value),
-                decl("--tw-gradient-stops", STOPS),
+                decl("--tw-gradient-stops", gradient_stops()),
             ]
         },
         |value| vec![gradient_stop_properties(), decl("--tw-gradient-from-position", value)],
@@ -944,7 +1020,11 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 decl("--tw-gradient-via", value),
                 decl(
                     "--tw-gradient-via-stops",
-                    "var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position)",
+                    if crate::switches::GRADIENT_POSITION_NO_COMMA.on() {
+                        "var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position)"
+                    } else {
+                        "var(--tw-gradient-position,) var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position)"
+                    },
                 ),
                 decl("--tw-gradient-stops", "var(--tw-gradient-via-stops)"),
             ]
@@ -959,11 +1039,17 @@ pub fn register(utilities: &mut Utilities, theme: &Theme) {
                 gradient_stop_properties(),
                 decl("--tw-sort", "--tw-gradient-to"),
                 decl("--tw-gradient-to", value),
-                decl("--tw-gradient-stops", STOPS),
+                decl("--tw-gradient-stops", gradient_stops()),
             ]
         },
         |value| vec![gradient_stop_properties(), decl("--tw-gradient-to-position", value)],
     );
+
+    // The utilities of 4.1.0 (`switches::MASK_UTILITIES`): all the rest of
+    // this part.
+    if !crate::switches::MASK_UTILITIES.on() {
+        return;
+    }
 
     // mask-image
     static_decls(u, "mask-none", &[("mask-image", "none")]);

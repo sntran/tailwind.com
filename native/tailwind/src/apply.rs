@@ -12,7 +12,9 @@
 //! that gives the new nodes to the utility.
 
 use crate::ast::{rule, AstNode, AtRule};
+use crate::candidate::Candidate;
 use crate::compile::compile_candidates;
+use crate::design_system::{CompileAstFlags, COMPILE_NONE, COMPILE_RESPECT_IMPORTANT};
 use crate::source_maps::{utf16_len, SourceLocation};
 use crate::design_system::DesignSystem;
 use crate::to_css::to_css;
@@ -20,7 +22,7 @@ use crate::utils::js::is_js_whitespace;
 use crate::utils::segment::segment;
 use crate::{Error, Features, Result, FEATURES_AT_APPLY};
 use indexmap::{IndexMap, IndexSet};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// The path of a node: the index at each level, from the root.
 type Path = Vec<usize>;
@@ -87,8 +89,16 @@ fn substitute(
     }
     let sorted = sorter.sorted;
 
+    // From 4.0.10 to 4.1.5.
+    if !crate::switches::APPLY_NESTED_WALK.on() && crate::switches::APPLY_IN_ITS_OWN_PARENT.on() {
+        substitute_direct_children(tree, sorted, &collected, design_system, on_utility_change)?;
+        return Ok(collected.features);
+    }
+
     // Substitute in the sorted sequence. The substitution of a node also
     // does all its descendants.
+    // Before 4.0.10, the walk was the same, but the new nodes were the
+    // nodes of the cache of the compiler (`State::shared`).
     let mut done: Vec<Path> = Vec::new();
     for path in sorted {
         if done.iter().any(|ancestor| path.len() > ancestor.len() && path.starts_with(ancestor)) {
@@ -100,6 +110,7 @@ fn substitute(
             design_system,
             on_utility_change,
             next_utility: collected.utilities_before.get(&path).copied().unwrap_or(0),
+            shared: !crate::switches::APPLY_IN_ITS_OWN_PARENT.on(),
         };
         match node {
             AstNode::AtRule(utility) if utility.name == "@utility" => {
@@ -121,6 +132,98 @@ fn substitute(
     }
 
     Ok(collected.features)
+}
+
+/// The substitution before 4.1.6: for each parent in the sorted sequence,
+/// only the `@apply` rules that are children of the parent.
+///
+/// A utility that an `@apply` compiles before the substitution of its
+/// nested rules keeps the nested `@apply` rules, and the cache of the
+/// compiler keeps that result. An `@apply` that stays is not in the
+/// output: the last pass of the compiler drops an at-rule with no
+/// children.
+fn substitute_direct_children(
+    tree: &mut [AstNode],
+    sorted: Vec<Path>,
+    collected: &Collected,
+    design_system: &DesignSystem,
+    on_utility_change: &mut Option<OnUtilityChange>,
+) -> Result<()> {
+    // The `@utility` rule that contains each parent: the length of its
+    // path, and its position in all the `@utility` rules. A substitution
+    // moves the nodes after it, so the paths change, but not the lengths.
+    let utility_paths: HashSet<&Path> = collected.definitions.values().flatten().collect();
+    let utilities: Vec<Option<(usize, usize)>> = sorted
+        .iter()
+        .map(|path| {
+            (1..=path.len()).find(|length| utility_paths.contains(&path[..*length].to_vec())).and_then(|length| {
+                collected.utilities_before.get(&path[..length]).map(|ordinal| (length, *ordinal))
+            })
+        })
+        .collect();
+
+    // A path is `None` when a substitution removed its node.
+    let mut sorted: Vec<Option<Path>> = sorted.into_iter().map(Some).collect();
+    for position in 0..sorted.len() {
+        let Some(path) = sorted[position].clone() else { continue };
+        // Upstream has the rule above a context node as the parent, and
+        // the `@apply` is not a child of that rule: no substitution. An
+        // `@apply` at the top level of a stylesheet is such a rule.
+        let Some(nodes) = node_at_mut(tree, &path)
+            .filter(|node| !matches!(node, AstNode::Context(_)))
+            .and_then(AstNode::children_mut)
+        else {
+            continue;
+        };
+
+        let mut changed = false;
+        let mut index = 0;
+        while index < nodes.len() {
+            let AstNode::AtRule(child) = &nodes[index] else {
+                index += 1;
+                continue;
+            };
+            if child.name != "@apply" {
+                index += 1;
+                continue;
+            }
+            let Some(new_nodes) = apply(child, design_system, None)? else {
+                index += 1;
+                continue;
+            };
+            let count = new_nodes.len();
+            nodes.splice(index..=index, new_nodes);
+            changed = true;
+
+            // The nodes after the `@apply` rule have a new index.
+            for later in sorted[position + 1..].iter_mut() {
+                let Some(other) = later else { continue };
+                if other.len() <= path.len() || !other.starts_with(&path) {
+                    continue;
+                }
+                let at = &mut other[path.len()];
+                if *at == index {
+                    *later = None;
+                } else if *at > index {
+                    *at = *at + count - 1;
+                }
+            }
+
+            // As the loop of upstream: the next index, also when the new
+            // nodes start there.
+            index += 1;
+        }
+
+        if !changed {
+            continue;
+        }
+        if let (Some((length, ordinal)), Some(callback)) = (utilities[position], on_utility_change.as_mut()) {
+            if let Some(AstNode::AtRule(utility)) = node_at(tree, &path[..length]) {
+                callback(ordinal, utility);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn node_at<'a>(tree: &'a [AstNode], path: &[usize]) -> Option<&'a AstNode> {
@@ -209,6 +312,12 @@ fn for_each_apply(nodes: &[AstNode], f: &mut dyn FnMut(&AtRule) -> Result<()>) -
 /// The first walk: find the `@utility` definitions and the `@apply` rules.
 fn collect(nodes: &[AstNode], path: &mut Path, design_system: &DesignSystem, out: &mut Collected) -> Result<()> {
     for (index, node) in nodes.iter().enumerate() {
+        // Before 4.0.4, a walk did not go into an at-root node (the
+        // `@keyframes` rules of the theme).
+        if matches!(node, AstNode::AtRoot(_)) && !crate::switches::WALK_ENTERS_AT_ROOT.on() {
+            continue;
+        }
+
         path.push(index);
 
         if let AstNode::AtRule(at) = node {
@@ -247,7 +356,9 @@ fn collect(nodes: &[AstNode], path: &mut Path, design_system: &DesignSystem, out
 
                 for dependency in resolve_apply_dependencies(at, design_system) {
                     // Each parent in the path depends on that utility.
-                    for length in 1..path.len() {
+                    // Before 4.1.6: only the parent of the `@apply` rule.
+                    let first = if crate::switches::APPLY_NESTED_WALK.on() { 1 } else { path.len() - 1 };
+                    for length in first..path.len() {
                         let ancestor = &path[..length];
                         if !out.parents.contains(ancestor) {
                             continue;
@@ -352,6 +463,20 @@ struct State<'a, 'c> {
     on_utility_change: &'a mut Option<OnUtilityChange<'c>>,
     /// The position of the next `@utility` rule that the walk finds.
     next_utility: usize,
+    /// Before 4.0.10: the nodes that replace an `@apply` rule are the nodes
+    /// of the cache of the compiler. A substitution in such a node also
+    /// changes the cache, so the candidate of the build gets it too. A
+    /// substitution of such a node itself (an `@apply` rule that is a
+    /// child of the rule of a utility) changes only the tree.
+    shared: bool,
+}
+
+/// The place of a node of an `@apply` rule in the cache of the compiler.
+struct Origin {
+    flags: CompileAstFlags,
+    rule: (*const Candidate, usize),
+    /// The index of the node in the rule. `None`: the node is the rule.
+    child: Option<usize>,
 }
 
 /// Substitute each `@apply` rule in the nodes and in their descendants. The
@@ -361,15 +486,23 @@ struct State<'a, 'c> {
 fn substitute_in(nodes: &mut Vec<AstNode>, state: &mut State) -> Result<bool> {
     let mut changed = false;
     let mut index = 0;
+    // With `State::shared`: the origin of each new node that the walk did
+    // not visit, from the node at `index`.
+    let mut origins: VecDeque<Origin> = VecDeque::new();
     while index < nodes.len() {
+        let origin = origins.pop_front();
         match &mut nodes[index] {
             AstNode::AtRule(child) if child.name == "@apply" => {
-                match apply(child, state.design_system)? {
+                let mut new_origins = Vec::new();
+                match apply(child, state.design_system, state.shared.then_some(&mut new_origins))? {
                     // A CSS mixin stays as it is, and the walk skips its body.
                     None => index += 1,
                     // The walk visits the new nodes.
                     Some(new_nodes) => {
                         nodes.splice(index..=index, new_nodes);
+                        for origin in new_origins.into_iter().rev() {
+                            origins.push_front(origin);
+                        }
                         changed = true;
                     }
                 }
@@ -387,7 +520,12 @@ fn substitute_in(nodes: &mut Vec<AstNode>, state: &mut State) -> Result<bool> {
             }
             node => {
                 if let Some(children) = node.children_mut() {
-                    changed |= substitute_in(children, state)?;
+                    if substitute_in(children, state)? {
+                        changed = true;
+                        if let Some(origin) = origin {
+                            state.design_system.replace_compiled_node(origin.flags, origin.rule, origin.child, node.clone());
+                        }
+                    }
                 }
                 index += 1;
             }
@@ -408,8 +546,9 @@ fn array_index(key: &str) -> Option<u32> {
     key.parse::<u64>().ok().filter(|n| *n < u64::from(u32::MAX)).map(|n| n as u32)
 }
 
-/// The nodes for one `@apply` rule. `None` is a CSS mixin.
-fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstNode>>> {
+/// The nodes for one `@apply` rule. `None` is a CSS mixin. `origins` gets
+/// the place of each node in the cache of the compiler.
+fn apply(child: &AtRule, design_system: &DesignSystem, mut origins: Option<&mut Vec<Origin>>) -> Result<Option<Vec<AstNode>>> {
     let parts = split_with_separators(&child.params);
     let mut candidates: IndexSet<&str> = IndexSet::new();
     let mut normal_idents: Vec<&str> = Vec::new();
@@ -437,7 +576,7 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
         }
     }
 
-    if !dashed_idents.is_empty() {
+    if !dashed_idents.is_empty() && crate::switches::APPLY_CSS_MIXINS.on() {
         // Only dashed identifiers: this is a CSS mixin, and it stays.
         // https://drafts.csswg.org/css-mixins-1/#apply-rule
         if normal_idents.is_empty() {
@@ -451,13 +590,16 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
         )));
     }
 
-    if !child.nodes.is_empty() && !normal_idents.is_empty() {
+    if !child.nodes.is_empty() && !normal_idents.is_empty() && crate::switches::APPLY_BODY_ERROR.on() {
         let list = normal_idents.join(" ");
         return Err(Error::new(format!("The rule `@apply {list}` must not have a body.")));
     }
 
     // The keys of a JavaScript object: the array indices first, in the
     // sequence of the numbers.
+    // Before 4.1.6 the candidates were a list, in the sequence of the text.
+    let as_keys = crate::switches::APPLY_CANDIDATES_AS_KEYS.on();
+    let array_index = |key: &str| if as_keys { array_index(key) } else { None };
     let mut numeric: Vec<(u32, &str)> = candidates.iter().filter_map(|c| array_index(c).map(|n| (n, *c))).collect();
     numeric.sort();
     let candidates: Vec<String> = numeric
@@ -466,6 +608,11 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
         .chain(candidates.iter().filter(|c| array_index(c).is_none()).map(|c| c.to_string()))
         .collect();
 
+    // Before 4.1.12, `@apply` followed the `important` option. The rules
+    // of a candidate were then in the same cache as the rules of the
+    // build.
+    let respect_important = !crate::switches::APPLY_IGNORES_IMPORTANT_OPTION.on();
+    let flags = if respect_important { COMPILE_RESPECT_IMPORTANT } else { COMPILE_NONE };
     let mut error: Option<Error> = None;
     design_system.variants.take_error();
     let compiled = compile_candidates(
@@ -476,7 +623,7 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
                 error = Some(invalid_candidate_error(candidate, design_system));
             }
         },
-        false,
+        respect_important,
     );
     if let Some(error) = error {
         return Err(error);
@@ -508,8 +655,18 @@ fn apply(child: &AtRule, design_system: &DesignSystem) -> Result<Option<Vec<AstN
             set_src(std::slice::from_mut(&mut sorted.node), candidate_src.as_ref());
         }
         match sorted.node {
-            AstNode::Rule(rule) => new_nodes.extend(rule.nodes),
-            node => new_nodes.push(node),
+            AstNode::Rule(rule) => {
+                if let Some(origins) = origins.as_deref_mut() {
+                    origins.extend((0..rule.nodes.len()).map(|child| Origin { flags, rule: sorted.origin, child: Some(child) }));
+                }
+                new_nodes.extend(rule.nodes)
+            }
+            node => {
+                if let Some(origins) = origins.as_deref_mut() {
+                    origins.push(Origin { flags, rule: sorted.origin, child: None });
+                }
+                new_nodes.push(node)
+            }
         }
     }
 
@@ -532,6 +689,10 @@ fn set_src(nodes: &mut [AstNode], src: Option<&SourceLocation>) {
 
 /// The error for a candidate of `@apply` that gives no rule.
 fn invalid_candidate_error(candidate: &str, design_system: &DesignSystem) -> Error {
+    if !crate::switches::APPLY_ERROR_REASONS.on() {
+        return Error::new(format!("Cannot apply unknown utility class: {candidate}"));
+    }
+
     // With a prefix, the candidate must have the prefix.
     if let Some(prefix) = design_system.theme.prefix.as_deref().filter(|p| !p.is_empty()) {
         if !candidate.starts_with(prefix) {

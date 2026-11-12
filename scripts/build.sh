@@ -19,6 +19,10 @@
 #   COSMOCC_VERSION  cosmocc release to download (default 4.0.2)
 #   RUST_NIGHTLY     The nightly Rust for aarch64 (default nightly-2026-11-01)
 #   CPUS             The CPUs of the file (default "x86_64 aarch64")
+#   PACKAGES         The versions of Tailwind CSS whose npm package goes into
+#                    the ZIP directory tailwindcss/ of the file, for the
+#                    script engine: "all" (default: each version of the
+#                    file PACKAGES), "none", or a list ("4.2.4 4.3.0")
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${1:-$root/build/tailwind.com}
@@ -110,5 +114,28 @@ case "$CPUS" in
 esac
 log "Linking $OUT with $cc"
 (cd "$work" && sh "$C/bin/$cc" -O2 -o tailwind.com main.c tailwind.o)
+
+# The packages of the script engine. An APE file is also a ZIP file: the
+# program reads the directory tailwindcss/ of its own file (/zip).
+if [ "${PACKAGES:-all}" != none ]; then
+    command -v zip >/dev/null 2>&1 || { log "The program zip is not there. Install it, or build with PACKAGES=none."; exit 1; }
+    packages=$root/build/packages
+    case "${PACKAGES:-all}" in
+        all) versions=$(grep -v '^#' "$root/PACKAGES" | cut -d' ' -f1) ;;
+        *) versions=$PACKAGES ;;
+    esac
+    # shellcheck disable=SC2086
+    sh "$root/scripts/packages.sh" "$packages" $versions
+    # The newest version in full, and each older version as a patch: the
+    # differences from the next newer version (tools/twpatch). The tool
+    # reads each version back and compares it with its package.
+    versions=$(echo $versions | tr ' ' '\n' | sort -t. -k1,1n -k2,2n -k3,3n | tr '\n' ' ')
+    cargo build -q --release --manifest-path "$root/tools/twpatch/Cargo.toml"
+    # shellcheck disable=SC2086
+    "$root/tools/twpatch/target/release/twpatch" pack "$packages" "$work/zip/tailwindcss" $versions
+    log "Adding the packages of $(echo $versions | wc -w | tr -d ' ') versions of Tailwind CSS"
+    (cd "$work/zip" && zip -q -9 -r -X "$work/tailwind.com" tailwindcss)
+fi
+
 cp "$work/tailwind.com" "$OUT"
 log "wrote $OUT ($(wc -c < "$OUT") bytes)"

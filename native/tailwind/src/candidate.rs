@@ -2,6 +2,7 @@
 //!
 //! A candidate is the text of a class, for example `md:hover:bg-red-500/50`.
 
+use crate::switches;
 use crate::design_system::DesignSystem;
 use crate::utils::decode_arbitrary_value::decode_arbitrary_value;
 use crate::utils::is_valid_arbitrary::is_valid_arbitrary;
@@ -175,6 +176,10 @@ impl Candidate {
 
 /// `/^[a-zA-Z0-9_.%-]+$/`
 fn is_valid_named_value(value: &str) -> bool {
+    // Before 4.1.18, there was no check.
+    if !crate::switches::NAMED_VALUE_CHARACTERS.on() {
+        return true;
+    }
     !value.is_empty()
         && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'%' | b'-'))
 }
@@ -237,7 +242,7 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
 
     // The modifier is after the only `/` at the top level.
     let parts = segment(base, b'/');
-    if parts.len() > 2 {
+    if has_extra_modifier(&parts) {
         return result;
     }
     let mut base_without_modifier = parts[0];
@@ -315,10 +320,14 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
         let (data_type, value) = if parts.len() == 2 { (Some(parts[0]), parts[1]) } else { (None, inner) };
 
         // The value must be a CSS variable.
-        if !value.starts_with("--") {
-            return result;
-        }
-        if !is_valid_arbitrary(value) {
+        if switches::PAREN_VALUE_NEEDS_TWO_DASHES.on() {
+            if !value.starts_with("--") {
+                return result;
+            }
+            if !is_valid_arbitrary(value) {
+                return result;
+            }
+        } else if !has_a_dash_at_the_start(value) {
             return result;
         }
         let value = match data_type {
@@ -376,7 +385,11 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
                     continue;
                 }
                 if typehint.as_deref() == Some("") {
-                    continue;
+                    // Before 4.1.16, an empty data type was no data type.
+                    if crate::switches::EMPTY_DATA_TYPE_IS_INVALID.on() {
+                        continue;
+                    }
+                    typehint = None;
                 }
                 candidate.value = Some(UtilityValue::Arbitrary { data_type: typehint, value: arbitrary });
             }
@@ -400,6 +413,26 @@ pub fn parse_candidate(input: &str, design_system: &DesignSystem) -> Vec<Candida
     result
 }
 
+/// `value[0] !== '-' && value[1] !== '-'` is false: the check of the
+/// short form of a variable before 4.1.6. One `-` in the first two
+/// characters was sufficient: `w-(-x)`, `w-(a-b)`.
+fn has_a_dash_at_the_start(value: &str) -> bool {
+    value.as_bytes().iter().take(2).any(|b| *b == b'-')
+}
+
+/// True when the text in `(…)` can be the short form of a variable: it
+/// starts with `--`. Before 4.1.6: see `has_a_dash_at_the_start`.
+/// (Before 4.0.1, a modifier and the value of a variant had no check.)
+fn is_variable_short_form(value: &str) -> bool {
+    if switches::PAREN_VALUE_NEEDS_TWO_DASHES.on() {
+        value.starts_with("--")
+    } else if switches::PAREN_MODIFIER_NEEDS_DASH.on() {
+        has_a_dash_at_the_start(value)
+    } else {
+        true
+    }
+}
+
 fn parse_modifier(modifier: &str) -> Option<CandidateModifier> {
     if modifier.starts_with('[') && modifier.ends_with(']') && modifier.len() >= 2 {
         let arbitrary = decode_valid_arbitrary_value(&modifier[1..modifier.len() - 1])?;
@@ -411,8 +444,16 @@ fn parse_modifier(modifier: &str) -> Option<CandidateModifier> {
 
     if modifier.starts_with('(') && modifier.ends_with(')') && modifier.len() >= 2 {
         let inner = &modifier[1..modifier.len() - 1];
+        if !switches::PAREN_MODIFIER_KEEPS_UNDERSCORES.on() {
+            // Before 4.1.6: decode first, then add `var(…)`.
+            let arbitrary = decode_valid_arbitrary_value(inner)?;
+            if blank(&arbitrary) || !is_variable_short_form(&arbitrary) {
+                return None;
+            }
+            return Some(CandidateModifier { kind: ValueKind::Arbitrary, value: format!("var({arbitrary})") });
+        }
         // The value must be a CSS variable.
-        if !inner.starts_with("--") {
+        if !is_variable_short_form(inner) {
             return None;
         }
         if !is_valid_arbitrary(inner) {
@@ -456,7 +497,7 @@ pub fn parse_variant(variant: &str, design_system: &DesignSystem) -> Option<Vari
     // ^^^^^^^^^^^            -> Variant without modifier
     //             ^^^^^^^^^^ -> Modifier
     let parts = segment(variant, b'/');
-    if parts.len() > 2 {
+    if has_extra_modifier(&parts) {
         return None;
     }
     let variant_without_modifier = parts[0];
@@ -508,7 +549,7 @@ pub fn parse_variant(variant: &str, design_system: &DesignSystem) -> Option<Vari
                     if blank(&arbitrary) {
                         return None;
                     }
-                    if !arbitrary.starts_with("--") {
+                    if !is_variable_short_form(&arbitrary) {
                         return None;
                     }
                     return Some(Variant::Functional {
@@ -535,8 +576,12 @@ pub fn parse_variant(variant: &str, design_system: &DesignSystem) -> Option<Vari
 
                 // `not-group-hover/name` is `not-*` of `group-hover/name`:
                 // the modifier belongs to the inner variant.
+                // (Before 4.1.15, it stayed on `not-*`, which takes none.)
                 if let Some(m) = &modifier {
-                    if !m.is_empty() && (root == "not" || root == "has" || root == "in") {
+                    if !m.is_empty()
+                        && (root == "not" || root == "has" || root == "in")
+                        && crate::switches::COMPOUND_MODIFIER_TO_INNER_VARIANT.on()
+                    {
                         value = format!("{value}/{m}");
                         modifier = None;
                     }
@@ -588,7 +633,8 @@ fn find_roots(input: &str, exists: &dyn Fn(&str) -> bool) -> Vec<(String, Option
                 break;
             }
             // `@-[200px]` is not valid: the `@` root does not take a dash.
-            if maybe_root == "@" && exists("@") && bytes[i] == b'-' {
+            // Before 4.1.13, `@-md` was `@md`.
+            if maybe_root == "@" && exists("@") && bytes[i] == b'-' && switches::AT_DASH_IS_INVALID.on() {
                 break;
             }
             roots.push((maybe_root.to_string(), Some(value.to_string())));
@@ -596,15 +642,32 @@ fn find_roots(input: &str, exists: &dyn Fn(&str) -> bool) -> Vec<(String, Option
         idx = input[..i].rfind('-');
     }
 
-    // The `@` root has no dash: `@md`, `@[200px]`.
-    if bytes.first() == Some(&b'@') && exists("@") {
+    // The `@` root has no dash: `@md`, `@[200px]`. Before 4.1.4, an input
+    // with a dash did not get the `@` root.
+    let at_root = switches::AT_ROOT_WITH_DASH.on() || !input.contains('-');
+    if at_root && bytes.first() == Some(&b'@') && exists("@") {
         roots.push(("@".to_string(), Some(input[1..].to_string())));
     }
 
     roots
 }
 
+/// True when the parts at `/` have more than one modifier. Before 4.3.4,
+/// only a third part that is not empty was an error.
+fn has_extra_modifier(parts: &[&str]) -> bool {
+    if switches::EMPTY_EXTRA_MODIFIER_IS_INVALID.on() {
+        parts.len() > 2
+    } else {
+        parts.get(2).is_some_and(|extra| !extra.is_empty())
+    }
+}
+
 fn decode_valid_arbitrary_value(raw: &str) -> Option<String> {
+    // Before 4.3.4, the check was on the decoded value.
+    if !switches::BALANCED_ARBITRARY_VALUE.on() {
+        let decoded = decode_arbitrary_value(raw);
+        return is_valid_arbitrary(&decoded).then(|| decoded.into_owned());
+    }
     if is_valid_arbitrary(raw) {
         Some(decode_arbitrary_value(raw).into_owned())
     } else {

@@ -41,6 +41,17 @@ jobs:
           submodules: true
       - name: The versions of UPSTREAM
         run: sh scripts/sync-upstream.sh check
+      # The plugin layer of each version (native/tailwind/assets/compat.js
+      # and compat/) must be the files that scripts/compat.sh makes from
+      # the source of Tailwind CSS.
+      - name: The plugin layer of each version, from the source of Tailwind CSS
+        run: |
+          . ./UPSTREAM
+          git clone -q --depth 1 --branch "v$TAILWINDCSS_VERSION" https://github.com/tailwindlabs/tailwindcss.git "$RUNNER_TEMP/tailwindcss"
+          (cd tests/upstream/tools && npm ci --no-audit --no-fund --legacy-peer-deps --ignore-scripts)
+          sh scripts/compat.sh "$RUNNER_TEMP/tailwindcss"
+          git diff --exit-code -- native/tailwind/assets
+          test -z "$(git status --porcelain -- native/tailwind/assets)"
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: The tests, against the record of Tailwind CSS
@@ -53,6 +64,20 @@ jobs:
         run: CASES=tests/upstream/cli-js sh tests/cli.sh target/release/tailwind
       - name: The program with --map, against the record
         run: CASES=tests/upstream/cli-map sh tests/cli.sh target/release/tailwind
+      # The second engine: the official compiler of a package, in the
+      # JavaScript engine of the program (docs/VERSIONS.md). With the
+      # package of the version of UPSTREAM, it must give the same records.
+      - name: The script engine, against the same records
+        run: |
+          sh scripts/packages.sh build/packages
+          export TAILWIND_COM_PACKAGES=$PWD/build/packages TAILWIND_COM_ENGINE=script
+          sh tests/cli.sh target/release/tailwind
+          CASES=tests/upstream/cli-js sh tests/cli.sh target/release/tailwind
+          CASES=tests/upstream/cli-map sh tests/cli.sh target/release/tailwind
+      - name: Each version of PACKAGES, with its own compiler
+        run: TAILWIND_COM_PACKAGES=$PWD/build/packages sh tests/versions.sh target/release/tailwind
+      - name: The sort and Intl.ListFormat of the runtime, against V8
+        run: node --experimental-strip-types tests/v8.mjs
       - name: The watch, with the poll
         run: sh tests/watch.sh target/release/tailwind
 
@@ -180,6 +205,15 @@ jobs:
       # WATCH_EXPECT=events: the watch must use the events of the system
       # (inotify, kqueue, ReadDirectoryChangesW), and builds must start at
       # an event. A watch that polls in their place is an error.
+      # The packages of the other versions are in the ZIP directory of
+      # the file: each system must read them there.
+      - name: The versions of Tailwind CSS in the file
+        run: sh tests/versions.sh build/tailwind.com
+      - name: The script engine, against the record of the official program
+        run: |
+          export TAILWIND_COM_ENGINE=script
+          sh tests/cli.sh build/tailwind.com
+          CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com
       - name: The watch, with the file events of the system
         run: WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com
       - name: The watch, with the poll
@@ -222,14 +256,22 @@ jobs:
       # The packages of QEMU for the VM actions, with time limits: when the
       # Ubuntu archives do not answer, the job stops before its own limit,
       # with this step in the log. The VM action then finds the packages.
+      # The runner has a list of mirrors, and the first one (the Azure
+      # mirror) sometimes does not answer for hours: after a failure, the
+      # step removes it from the list, so that apt uses the next mirror.
       - name: Install QEMU
         run: |
-          for try in 1 2; do
+          mirrors=/etc/apt/apt-mirrors.txt
+          for try in 1 2 3; do
             sudo timeout 120 apt-get update -q &&
               sudo timeout 600 apt-get install -y -q -o Acquire::Retries=3 --no-install-recommends \
                 qemu-utils qemu-system-x86 ovmf &&
               exit 0
             echo "Try $try to install QEMU failed."
+            if [ -f "$mirrors" ] && [ "$(grep -c . "$mirrors")" -gt 1 ]; then
+              echo "The mirrors were:"; cat "$mirrors"
+              sudo sed -i 1d "$mirrors"
+            fi
             sleep 10
           done
           exit 1
@@ -245,6 +287,7 @@ jobs:
             sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com || exit 1
+            sh tests/versions.sh build/tailwind.com || exit 1
             WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com || exit 1
             WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100 || exit 1
             # The action copies the work directory back from the VM: the
@@ -269,6 +312,7 @@ jobs:
             sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com || exit 1
+            sh tests/versions.sh build/tailwind.com || exit 1
             WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com || exit 1
             WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100 || exit 1
             rm -rf build
@@ -290,6 +334,7 @@ jobs:
             sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com || exit 1
             CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com || exit 1
+            sh tests/versions.sh build/tailwind.com || exit 1
             WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com || exit 1
             WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100 || exit 1
             echo "== Through sh"
@@ -359,7 +404,7 @@ jobs:
           fi
           # shellcheck disable=SC2086
           node tests/bench/run.mjs --official "$RUNNER_TEMP/official" \
-            --program build/tailwind.com --wasm build/tailwind.wasm $standalone | tee bench.md
+            --program build/tailwind.com --script --wasm build/tailwind.wasm $standalone | tee bench.md
           { echo "### Benchmarks: ${{ matrix.os }}"; echo; cat bench.md; } >> "$GITHUB_STEP_SUMMARY"
 
   npm:

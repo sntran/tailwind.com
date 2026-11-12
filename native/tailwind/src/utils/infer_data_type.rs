@@ -117,6 +117,10 @@ pub fn is_url(value: &str) -> bool {
 }
 
 pub fn is_line_width(value: &str) -> bool {
+    // Before 4.0.15, a line width was one of the three keywords.
+    if !crate::switches::LINE_WIDTH_LIST.on() {
+        return matches!(value, "thin" | "medium" | "thick");
+    }
     segment(value, b' ')
         .iter()
         .all(|value| is_length(value) || is_number(value) || matches!(*value, "thin" | "medium" | "thick"))
@@ -263,11 +267,19 @@ pub fn is_fraction(value: &str) -> bool {
     fn matches(value: &str) -> bool {
         let bytes = value.as_bytes();
         let Some(end) = number_end(bytes, 0) else { return false };
-        let slash = skip_whitespace(value, end);
+        // Before 4.2.2, the pattern had `s*` where `\s*` was necessary.
+        let skip = |start: usize| {
+            if crate::switches::FRACTION_WHITE_SPACE.on() {
+                skip_whitespace(value, start)
+            } else {
+                start + bytes[start..].iter().take_while(|byte| **byte == b's').count()
+            }
+        };
+        let slash = skip(end);
         if bytes.get(slash) != Some(&b'/') {
             return false;
         }
-        let start = skip_whitespace(value, slash + 1);
+        let start = skip(slash + 1);
         number_end(bytes, start) == Some(bytes.len())
     }
     matches(value) || has_math_fn(value)
@@ -292,11 +304,22 @@ fn is_number_with_unit(value: &str, units: &[&str]) -> bool {
 /// `/^(--spacing)\(/i`
 fn is_length_fn(value: &str) -> bool {
     let bytes = value.as_bytes();
-    bytes.len() >= 10 && bytes[..9].eq_ignore_ascii_case(b"--spacing") && bytes[9] == b'('
+    crate::switches::SPACING_FN_IS_LENGTH.on()
+        && bytes.len() >= 10
+        && bytes[..9].eq_ignore_ascii_case(b"--spacing")
+        && bytes[9] == b'('
 }
 
+/// The units of 4.3.4.
+const NEW_LENGTH_UNITS: [&str; 18] = [
+    "cap", "ic", "rex", "rch", "rcap", "ric", "svi", "svb", "svmin", "svmax", "lvi", "lvb", "lvmin", "lvmax", "dvi", "dvb", "dvmin",
+    "dvmax",
+];
+
 pub fn is_length(value: &str) -> bool {
-    is_number_with_unit(value, &LENGTH_UNITS) || is_length_fn(value) || has_math_fn(value)
+    let unit = is_number_with_unit(value, &LENGTH_UNITS)
+        && (crate::switches::MORE_LENGTH_UNITS.on() || !is_number_with_unit(value, &NEW_LENGTH_UNITS));
+    unit || is_length_fn(value) || has_math_fn(value)
 }
 
 pub fn is_background_position(value: &str) -> bool {

@@ -7,10 +7,15 @@
 // gets JSON text and returns JSON text or `undefined`.
 import type { AstNode } from 'tailwindcss-src/ast'
 import { applyCompatibilityHooks } from 'tailwindcss-src/compat/apply-compat-hooks'
+import colors from 'tailwindcss-src/compat/colors'
+import defaultTheme from 'tailwindcss-src/compat/default-theme'
+import flattenColorPalette from 'tailwindcss-src/compat/flatten-color-palette'
+import createPlugin from 'tailwindcss-src/plugin'
 import { createDesignSystem } from './design-system'
 import './globals'
-import { callbacks, decode, encode, host, setTracking } from './host'
-import { loadModule, moduleSource } from './modules'
+import { callbacks, decode, encode, setTracking } from './host'
+import { withCauses } from './causes'
+import { loadModule, moduleSource, setTailwindModules } from './modules'
 import { drainTimers } from './timers'
 
 declare function __await<T>(promise: Promise<T>): T
@@ -24,28 +29,12 @@ global.__tw_track = (text: string) => {
   setTracking(text === 'true')
 }
 
-// The official program prints the `cause` chain of an error. Give the
-// host the text of each cause of the exception, as `${cause}`.
-function withCauses<T>(fn: () => T): T {
-  try {
-    return fn()
-  } catch (error) {
-    let causes: string[] = []
-    let seen = new Set<unknown>()
-    let current: any = error
-    while (typeof current === 'object' && current !== null && 'cause' in current && current.cause != null) {
-      if (seen.add(current).has(current.cause)) break
-      current = current.cause
-      try {
-        causes.push(`${current}`)
-      } catch {
-        causes.push('[object]')
-      }
-    }
-    host('error.causes', causes)
-    throw error
-  }
-}
+setTailwindModules({
+  'tailwindcss/plugin': () => createPlugin,
+  'tailwindcss/colors': () => colors,
+  'tailwindcss/defaultTheme': () => defaultTheme,
+  'tailwindcss/lib/util/flattenColorPalette': () => flattenColorPalette,
+})
 
 // Run `applyCompatibilityHooks` on the tree of the stylesheet.
 global.__tw_compat = (text: string) =>

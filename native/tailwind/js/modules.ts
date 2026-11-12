@@ -22,10 +22,6 @@
 // The three plugins that the standalone program of Tailwind CSS has in
 // its file (`@tailwindcss/forms`, `@tailwindcss/typography`,
 // `@tailwindcss/aspect-ratio`) are in the program too: see `loadModule`.
-import colors from 'tailwindcss-src/compat/colors'
-import defaultTheme from 'tailwindcss-src/compat/default-theme'
-import flattenColorPalette from 'tailwindcss-src/compat/flatten-color-palette'
-import createPlugin from 'tailwindcss-src/plugin'
 import { deniedModule } from './denied'
 import { host } from './host'
 import assert from './node-assert'
@@ -46,11 +42,11 @@ type Format = 'esm' | 'cjs' | 'json' | 'unknown'
 type CachedModule = { exports: any; loaded: boolean }
 
 // The modules that are in the program. The value is `module.exports`.
+// The entry of the bundle gives the modules of the package `tailwindcss`
+// (`setTailwindModules`): the compatibility bundle has them from the
+// source of Tailwind CSS, and the script bundle reads them from the
+// package of the selected version.
 const BUILTIN: Record<string, () => any> = {
-  'tailwindcss/plugin': () => createPlugin,
-  'tailwindcss/colors': () => colors,
-  'tailwindcss/defaultTheme': () => defaultTheme,
-  'tailwindcss/lib/util/flattenColorPalette': () => flattenColorPalette,
   'tailwindcss/package.json': () => ({ name: 'tailwindcss', version: host('version') }),
   assert: () => assert,
   'assert/strict': () => assert.strict,
@@ -80,6 +76,11 @@ for (let name of ['dgram', 'dns', 'http', 'http2', 'https', 'net', 'tls']) {
   BUILTIN[name] = () => module
 }
 
+// Give the modules `tailwindcss/NAME` of the program.
+export function setTailwindModules(modules: Record<string, () => any>) {
+  for (let [name, load] of Object.entries(modules)) BUILTIN[name] = load
+}
+
 function builtinName(name: string): string | null {
   if (name.startsWith('node:')) name = name.slice(5)
   if (name.startsWith('tailwindcss/') && name.endsWith('.js')) name = name.slice(0, -3)
@@ -96,11 +97,7 @@ function loadEmbedded(id: string): any {
   if (!embedded.has(id)) {
     let source = __host('asset', `plugin:${id}`)
     if (typeof source !== 'string') throw new Error(`The plugin '${id}' is not in this program.`)
-    let file = `/$tailwindcss/${id}.js`
-    let module = { exports: {} as any, id: file, filename: file, loaded: false }
-    compileCommonJs(source, file).call(module.exports, module.exports, createRequire(file), module, file, dirname(file))
-    module.loaded = true
-    embedded.set(id, module.exports)
+    embedded.set(id, runProgramFile(source, `/$tailwindcss/${id}.js`))
   }
   return embedded.get(id)
 }
@@ -115,6 +112,14 @@ let detectedEsm = new Set<string>()
 function compileCommonJs(source: string, file: string): Function {
   if (source.startsWith('#!')) source = '//' + source
   return __compile(`(function (exports, require, module, __filename, __dirname) {${source}\n})`, file)
+}
+
+// Run the CommonJS text of a file of the program, and give its exports.
+export function runProgramFile(source: string, file: string): any {
+  let module = { exports: {} as any, id: file, filename: file, loaded: false }
+  compileCommonJs(source, file).call(module.exports, module.exports, createRequire(file), module, file, dirname(file))
+  module.loaded = true
+  return module.exports
 }
 
 function runCommonJs(file: string, fn: Function): any {

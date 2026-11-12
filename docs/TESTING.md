@@ -184,6 +184,25 @@ TLC found a real error with this model. The first version of the watch
 recorded the stamps of the files of a new compiler after it read them.
 An edit between the read and the stamp was then lost.
 
+The model takes one thing as given: the output of a compiler is a
+function of its input and of the set of candidates, and the sequence of
+the builds does not change it. The code must keep this as each version
+of Tailwind CSS, also where a switch copies a fault of an old version
+that keeps state between builds (the one cache of compiled candidates
+before 4.1.12, the shared nodes of fixed values in 4.1.14). Two checks
+hold it:
+
+- The test `builds_in_a_sequence_give_the_result_of_one_build_as_each_version`
+  (`tests/switches.rs`): for each recorded case and version, builds in
+  two parts, one candidate at a time, and in the other direction give
+  the result of one build. One case is the exception, and the official
+  compiler does the same: before 4.3.4, two candidates that differ only
+  in an empty second modifier (`group-hover/foo//bar:flex`,
+  `group-hover/foo/:flex`) keep the sequence in which they came.
+- The fuzzer: about one third of its compiler cases make two builds on
+  one compiler, and the result must be that of the official compiler of
+  the version (next section).
+
 ## The Erlang and Elixir modules
 
 `mix test` (ExUnit, `tests/*_test.exs`) runs the program of
@@ -212,7 +231,10 @@ them). Two kinds of cases:
   prefix, `important`) and random candidates (the class list, the
   variants, arbitrary values, edge cases, and small random changes of
   them). `compile()` and `build()` of the npm package against
-  `examples/fuzz_build.rs` of this crate.
+  `examples/fuzz_build.rs` of this crate. About one third of these cases
+  make two builds on the one compiler, as the watch does when the
+  source files get new candidates: some candidates, then the other
+  ones. The result is the text of the second build.
 - **project**: a directory with `app.css` and HTML, HEEx and JavaScript
   files with random classes. The official command line program against
   this program, with the same arguments (also `--minify` and
@@ -266,6 +288,18 @@ A fault made on purpose (a builder that changes the value of
 `underline`) shows that the fuzzer finds a difference, and reduces a
 case of 16 candidates to two lines of stylesheet.
 
+The fuzzer in CI found a fault of the sort of the variants. Tailwind CSS
+sorts them with a compare function that is not consistent (two
+breakpoints of `screens` with `min` and `max` have no value, and each
+one is "more" than the other one). Then the result depends on the sort
+algorithm, and the Rust compiler did not have the algorithm of V8. With
+few variants the results were the same; one case in about 3,000 with a
+JavaScript config was different. `src/utils/v8_sort.rs` is now the
+algorithm of V8 (as `js/sort.ts` for the script engine), and the sort
+has an entry for each text that is not a variant, as upstream.
+`tests/v8_sort.rs` replays 180 sorts that Node.js recorded
+(`node tests/v8.mjs --record tests/upstream/v8-sort.jsonl`).
+
 The fuzzer found two faults of the JavaScript support:
 
 - The message of an error of the engine. QuickJS has other words than
@@ -279,11 +313,64 @@ The fuzzer found two faults of the JavaScript support:
   with no message of a plugin. The case `cli-js/error-daisyui-apply`
   keeps it fixed.
 
+## The versions of Tailwind CSS and the script engine
+
+The script engine runs the official compiler of a package in QuickJS
+([`VERSIONS.md`](VERSIONS.md)). Its tests:
+
+| Test | What it shows |
+|---|---|
+| `TAILWIND_COM_ENGINE=script sh tests/cli.sh PROGRAM`, also with `CASES` for `cli-js` and `cli-map` | With the package of the version of `UPSTREAM`, the script engine gives the records of the official program: the 150 projects, with plugins, errors and source maps. |
+| `sh tests/versions.sh PROGRAM` | Each version of `PACKAGES` builds a project with a plugin with its own compiler; the two engines give the same output for the version of `UPSTREAM`; a version that is not there is an error. CI runs it with `tailwind.com` on each system, so each system reads the ZIP directory of the file. |
+| `node tests/v8.mjs [CASES]` | The sort of the runtime makes the same calls of the compare function as V8 (Node.js), also for compare functions that are not consistent, and `Intl.ListFormat` gives the same text. |
+| `FUZZ_ENGINE=script node tests/fuzz/fuzz.mjs ... --projects 0` | The fuzzer with the script engine as the builder: the official compiler of one version in QuickJS against the same compiler in Node.js. `sh tests/fuzz/install.sh DIR VERSION` installs the official packages of a version. The job `script` of `.github/workflows/fuzz.yml` runs it for 4.0.17, 4.1.18, 4.2.4, 4.3.0 and 4.3.5. |
+
+The switches of the Rust compiler ([`SWITCHES.md`](SWITCHES.md)) have
+`tests/upstream/switches.jsonl`: cases with the result of the official
+compiler of the version before a change and of the version with it.
+`cargo test --test switches` replays them, and
+`node tests/fuzz/compare.mjs --record` writes the results. The fuzzer
+with the official packages of an older version
+(`sh tests/fuzz/install.sh DIR VERSION`) finds each behavior with no
+switch: the Rust compiler compiles as the version of the package that it
+compares with. The job `switches` of `.github/workflows/fuzz.yml` does
+this for each older version that the Rust compiler serves (4.0.0 to
+4.3.4). About one third of its cases have JavaScript plugins or
+configs: they run the plugin layer of that version. Where an old
+version gives output that is not valid CSS, and the Rust compiler gives
+the result of the fixed version, the fuzzer knows the fault and prints
+the number of such cases ("The rules" of [`SWITCHES.md`](SWITCHES.md)).
+
+The plugin layer of each version has three checks: a unit test
+(`compat/js/bundles.rs`: each version reads back, and names its
+version), the job "test" of `.github/workflows/build.yml` (the files of
+the repository are the files that `scripts/compat.sh` makes from the
+source of Tailwind CSS), and `tests/versions.sh` (for each version of
+the Rust compiler, the two engines give the same output for a project
+with a plugin).
+
+The patch files of the packages have three checks: the unit tests of
+`src/patch.rs` (random texts with random changes must read back
+the same), the tool `tools/twpatch` in each build (each version of the
+store must read back as its package), and `tests/versions.sh` with
+`tailwind.com` on each system.
+
+A program of `cargo build` has no packages in its file. Get them with
+`sh scripts/packages.sh build/packages` and set
+`TAILWIND_COM_PACKAGES=build/packages`.
+
+The fuzzer found one fault of the script engine: Tailwind CSS uses
+`Intl.ListFormat` in an error message, and QuickJS has no `Intl`. The
+first run of the recorded projects found the other one: the sort (see
+"How the script engine stays the same as V8" in `VERSIONS.md`).
+
 ## Benchmarks
 
 `tests/bench/run.mjs` measures the time, the memory and the size of
 `tailwind.com`, of the native program and of `tailwind.wasm`, against
 the official npm CLI and the official standalone program. It also
 compares each output with the output of the npm CLI. The job `bench` of
-`.github/workflows/build.yml` runs it on Linux and macOS. See
+`.github/workflows/build.yml` runs it on Linux and macOS.
+`tests/bench/versions.mjs` measures the two engines of `tailwind.com`
+for older versions of Tailwind CSS, and compares their outputs. See
 [`BENCHMARKS.md`](BENCHMARKS.md) for the results and the commands.

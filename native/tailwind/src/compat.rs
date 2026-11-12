@@ -68,6 +68,19 @@ pub fn apply_compatibility_hooks(
     #[cfg(tw_js)]
     if let Some(loader) = options.module_loader.clone() {
         if uses_javascript(ast) {
+            // The program has the plugin layer of each version from
+            // `OLDEST_WITH_PLUGINS`: an older version needs the script
+            // engine.
+            if crate::version::current() < crate::version::Version::OLDEST_WITH_PLUGINS {
+                return Err(Error {
+                    message: format!(
+                        "The Rust compiler does not load JavaScript plugins and configs as Tailwind CSS v{}: use the script engine.",
+                        crate::version::current()
+                    ),
+                    name: std::borrow::Cow::Borrowed(crate::version::SCRIPT_ENGINE_NEEDED),
+                    causes: Vec::new(),
+                });
+            }
             return js::apply_compatibility_hooks(design_system, ast, sources, options.base, loader);
         }
     }
@@ -155,6 +168,13 @@ pub fn apply_compatibility_hooks(
     let compat_theme: OnceCell<theme_fn::CompatTheme> = OnceCell::new();
     design_system.resolve_theme_value_hook = Some(Rc::new(move |design_system, path, force_inline| {
         if path.starts_with("--") {
+            // Before 4.1.0, the full configuration replaced this function:
+            // after the first key path, a variable also gave its value.
+            if !crate::switches::THEME_VARIABLE_AFTER_KEY_PATH.on() {
+                if let Some(compat_theme) = compat_theme.get() {
+                    return compat_theme.resolve_theme_value(design_system, path);
+                }
+            }
             return design_system.resolve_theme_variable_value(path, force_inline);
         }
         compat_theme.get_or_init(|| theme_fn::CompatTheme::new(design_system)).resolve_theme_value(design_system, path)

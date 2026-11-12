@@ -422,7 +422,9 @@ fn parse_normalized(input: &str) -> Vec<SelectorAstNode> {
             // A function: `.foo:not(.bar)`
             OPEN_PAREN => {
                 let name = std::mem::take(&mut buffer);
-                if matches!(name.as_str(), ":not" | ":where" | ":has" | ":is" | ":-moz-any" | ":-webkit-any")
+                // Before 4.3.4, the two `any` forms were plain text.
+                if matches!(name.as_str(), ":not" | ":where" | ":has" | ":is")
+                    || (matches!(name.as_str(), ":-moz-any" | ":-webkit-any") && crate::switches::MOZ_ANY_NESTING.on())
                 {
                     stack.push(std::mem::replace(&mut frame, Frame { name, ..Frame::default() }));
                     i += 1;

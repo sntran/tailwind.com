@@ -34,6 +34,38 @@ bug, except the items of "Known differences".
 The scanner is the crate of Tailwind CSS itself, so the classes that it
 finds in the source files are the same by construction.
 
+## The other versions of Tailwind CSS
+
+The results above are for Tailwind CSS 4.3.5. For each older version of
+Tailwind CSS 4, from 4.0.0, the Rust compiler compiles as that version:
+it has a switch for each change of the behavior
+([`SWITCHES.md`](SWITCHES.md)). The results of the Rust compiler as an
+older version:
+
+| Check | Result |
+|---|---|
+| The recorded cases of the switches (`tests/upstream/switches.jsonl`), each with the official result of two or more versions | 301 of 301 the same |
+| The fuzzer against the official compiler of each version from 4.0.0 to 4.3.4, in CI for each push (the job `switches`): one third of the cases with JavaScript plugins and configs, and one third with two builds on one compiler | 0 different |
+| A small project, with and with no JavaScript plugin, as each of the 47 older versions, against the official compiler of that version in the script engine (`tests/versions.sh`) | 47 of 47 the same |
+| Builds in a sequence, as the watch does them, against one build | the same, as in the official compiler of each version |
+
+Where an old version gives output that is not valid CSS, or stops with
+a crash, the Rust compiler gives the result of the version with the fix
+("The rules" of [`SWITCHES.md`](SWITCHES.md)).
+
+The file also has the official compiler of each version, and runs it in
+its JavaScript engine with `TAILWIND_COM_ENGINE=script` (the script
+engine, [`VERSIONS.md`](VERSIONS.md)). The results of the script engine:
+
+| Check | Result |
+|---|---|
+| The 150 recorded projects of the official program, with the package of 4.3.5 (output, exit status, errors, source maps) | 150 of 150 the same |
+| 75,082 candidates in one build, against the Rust compiler (24 MB of CSS) | the same |
+| The fuzzer against the official compiler of the same version in Node.js, for 4.0.0, 4.1.0, 4.2.0 and 4.3.5: 600 cases each, about 200 of them with JavaScript plugins and configs | 0 different |
+| Random projects against the official command line program of 4.1.0 and 4.2.0, with no optimizer | the same |
+| The same projects with `--minify` or `--optimize` | Small differences in the optimized text: the optimizer is the Lightning CSS of this program, and not the one of the old release. |
+| Each of the 48 versions of `PACKAGES` on a project with a JavaScript plugin | 48 of 48 build |
+
 ## The two official programs
 
 The official standalone program and the official npm CLI give different

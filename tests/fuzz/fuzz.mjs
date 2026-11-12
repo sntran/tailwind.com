@@ -23,6 +23,9 @@
 //   compiler  a stylesheet and a list of candidates: compile(css) and
 //             build(candidates) of the npm package tailwindcss, against
 //             examples/fuzz_build.rs, which does the same with this crate.
+//             About one third of the cases have two builds on the one
+//             compiler (`first` candidates, then the other ones), as the
+//             watch does: the result is the text of the second build.
 //   project   a directory with app.css and source files with classes:
 //             the official command line program against this program,
 //             with the same arguments (also --minify and --optimize). The
@@ -95,7 +98,7 @@ function officialResult(c) {
 // --- This compiler, through the builder ----------------------------------
 
 function ourResults(cases) {
-  const input = cases.map((c) => JSON.stringify({ css: c.css, candidates: c.candidates, base: c.base ?? '' })).join('\n') + '\n'
+  const input = cases.map((c) => JSON.stringify({ css: c.css, candidates: c.candidates, base: c.base ?? '', first: c.first })).join('\n') + '\n'
   const run = spawnSync(opts.builder, [path.join(officialDir)], { input, maxBuffer: 1024 * 1024 * 1024 })
   if (run.status !== 0) {
     throw new Error(`the builder failed (status ${run.status}): ${run.stderr.toString().slice(0, 2000)}`)
@@ -107,6 +110,86 @@ function ourResults(cases) {
 
 function same(a, b) {
   return a.css === b.css && a.error === b.error && a.panic === undefined && b.panic === undefined
+}
+
+// A known fault of Tailwind CSS before 4.1.14: an `@variant` rule in the
+// body of `@custom-variant` stays in the output, which is not valid CSS.
+// This compiler replaces the rule in each version (docs/SWITCHES.md). A
+// result of the official compiler with this fault is not a difference.
+const [major, minor, patch] = version.split('.').map(Number)
+const KEEPS_AT_VARIANT = major === 4 && (minor < 1 || (minor === 1 && patch < 14))
+
+// A known fault of Tailwind CSS before 4.1.0: an arbitrary value had no
+// check, so a `}` with no open bracket before it (`w-[}]`) closed the
+// rule of the output too early, which is not valid CSS. This compiler
+// refuses such a value in each version (docs/SWITCHES.md).
+const CLOSES_A_RULE_EARLY = major === 4 && minor < 1
+
+// True when a line of the CSS has a `}` with no open `{` before it on
+// that line, and the line is not only that `}`. The printer writes the
+// `}` of a rule on a line of its own.
+function closesARuleEarly(css) {
+  for (const line of css.split('\n')) {
+    if (line.trim() === '}') continue
+    // An escape and a string have no brackets.
+    const text = line.replace(/\\./g, '').replace(/"[^"]*"|'[^']*'/g, '')
+    let depth = 0
+    for (const character of text) {
+      if (character === '{') depth++
+      else if (character === '}' && depth-- === 0) return true
+    }
+  }
+  return false
+}
+
+// A known fault of Tailwind CSS before 4.0.4: the compiler did not read
+// its at-rules in an `@media` rule, so `@theme`, `@utility` and
+// `@custom-variant` stayed in the output there, which is not valid CSS.
+// Before 4.0.2, an at-rule with no body stayed too (`@tailwind`,
+// `@source`). This compiler reads them in each version (docs/SWITCHES.md).
+const KEEPS_AT_RULES_IN_MEDIA = major === 4 && minor === 0 && patch < 4
+const AT_RULES_IN_MEDIA = patch < 2 ? /^\s*@(theme|utility|custom-variant|tailwind|source)[ ;]/m : /^\s*@(theme|utility|custom-variant) /m
+
+// A known fault of Tailwind CSS before 4.0.2: a text with no `:` was a
+// declaration, and a text of one character or less gave a declaration
+// with no property (`;;` gave `: ;`), which is not valid CSS. This
+// compiler gives the error of 4.0.2 there (docs/SWITCHES.md).
+const DECLARATION_WITH_NO_PROPERTY = major === 4 && minor === 0 && patch < 2
+
+// A known fault of Tailwind CSS 4.0.0: an empty selector in
+// `@custom-variant` (`@custom-variant foo ();`, `(&:hover,)`) gave a rule
+// with an empty selector, which is not valid CSS. This compiler gives the
+// error of 4.0.1 there (docs/SWITCHES.md).
+const EMPTY_VARIANT_SELECTOR = major === 4 && minor === 0 && patch < 1
+
+function hasKnownFault(official) {
+  if (official.css === undefined) return false
+  if (KEEPS_AT_VARIANT && /^\s*@variant /m.test(official.css)) return true
+  if (KEEPS_AT_RULES_IN_MEDIA && AT_RULES_IN_MEDIA.test(official.css)) return true
+  if (DECLARATION_WITH_NO_PROPERTY && /^\s*: /m.test(official.css)) return true
+  if (EMPTY_VARIANT_SELECTOR && /^\s*((.*,\s*)?|.*,\s*,.*)\{$/m.test(official.css)) return true
+  return CLOSES_A_RULE_EARLY && closesARuleEarly(official.css)
+}
+
+// The case with only the candidates at these indexes. For a case with two
+// builds (`first`), each candidate stays in its build.
+function keep(c, indexes) {
+  const candidates = indexes.map((i) => c.candidates[i])
+  if (c.first === undefined) return { ...c, candidates }
+  return { ...c, candidates, first: indexes.filter((i) => i < c.first).length }
+}
+
+// The case with no candidate that shows the known fault alone: the other
+// candidates are compared again. `null`: the stylesheet shows the fault
+// with no candidate (`@apply` of a custom variant).
+async function withoutKnownFault(c) {
+  if (hasKnownFault(await officialResult(keep(c, [])))) return null
+  const indexes = []
+  for (let i = 0; i < c.candidates.length; i++) {
+    if (!hasKnownFault(await officialResult(keep(c, [i])))) indexes.push(i)
+  }
+  const rest = keep(c, indexes)
+  return hasKnownFault(await officialResult(rest)) ? null : rest
 }
 
 // --- The generators ------------------------------------------------------
@@ -302,7 +385,12 @@ function compilerCase() {
   const parts = stylesheet()
   const candidates = []
   for (let n = random.int(40); n > 0; n--) candidates.push(candidate())
-  return { parts, css: parts.join('\n'), candidates, files: caseFiles, copy: caseCopy }
+  // Some cases have two builds on one compiler, as the watch does when
+  // the source files get new candidates: `first` candidates, then the
+  // other ones. A compiler that keeps state between builds must give the
+  // result of the official compiler here too.
+  const first = random.chance(0.3) ? random.int(candidates.length + 1) : undefined
+  return { parts, css: parts.join('\n'), candidates, first, files: caseFiles, copy: caseCopy }
 }
 
 // --- The reducer ---------------------------------------------------------
@@ -310,27 +398,30 @@ function compilerCase() {
 async function differs(c) {
   const [ours] = ourResults([c])
   const theirs = await officialResult(c)
-  return !same(ours, theirs)
+  return !same(ours, theirs) && !hasKnownFault(theirs)
 }
 
 // The smallest part of the case that still differs: first the
 // candidates, then the parts of the stylesheet, one at a time.
 async function reduce(c) {
-  let best = { parts: [...c.parts], candidates: [...c.candidates], files: c.files, copy: c.copy, base: c.base }
+  let best = { parts: [...c.parts], candidates: [...c.candidates], first: c.first, files: c.files, copy: c.copy, base: c.base }
   const make = (b) => ({ ...b, css: b.parts.join('\n') })
-  if (best.candidates.length > 0 && (await differs(make({ ...best, candidates: [] })))) {
-    best.candidates = []
+  // One build, when the two builds are not the cause.
+  if (best.first !== undefined && (await differs(make({ ...best, first: undefined })))) best.first = undefined
+  const all = best.candidates.map((_, i) => i)
+  if (best.candidates.length > 0 && (await differs(make(keep(best, []))))) {
+    best = keep(best, [])
   } else {
     // A candidate that differs alone is the best result.
-    for (const one of best.candidates) {
-      if (await differs(make({ ...best, candidates: [one] }))) {
-        best.candidates = [one]
+    for (const i of all) {
+      if (await differs(make(keep(best, [i])))) {
+        best = keep(best, [i])
         break
       }
     }
     for (let i = best.candidates.length - 1; i >= 0 && best.candidates.length > 1; i--) {
-      const fewer = best.candidates.filter((_, j) => j !== i)
-      if (await differs(make({ ...best, candidates: fewer }))) best.candidates = fewer
+      const fewer = keep(best, best.candidates.map((_, j) => j).filter((j) => j !== i))
+      if (await differs(make(fewer))) best = fewer
     }
   }
   for (let i = best.parts.length - 1; i >= 0; i--) {
@@ -389,7 +480,7 @@ fs.writeFileSync(failuresFile, '')
 let failures = 0
 let compared = 0
 // What the cases did, to show that they test more than errors.
-const stats = { compilerErrors: 0, compilerCss: 0, cssBytes: 0, projectErrors: 0, projectCss: 0, javascript: 0 }
+const stats = { compilerErrors: 0, compilerCss: 0, cssBytes: 0, projectErrors: 0, projectCss: 0, javascript: 0, knownFaults: 0, knownFaultsOnly: 0 }
 
 function record(entry) {
   failures++
@@ -420,14 +511,21 @@ for (let done = 0; done < opts.cases && Date.now() < compilerDeadline; done += B
       stats.cssBytes += theirs.css.length
     }
     if (same(ours[i], theirs)) continue
+    if (hasKnownFault(theirs)) {
+      stats.knownFaults++
+      const rest = await withoutKnownFault(cases[i])
+      if (rest === null) stats.knownFaultsOnly++
+      if (rest === null || !(await differs(rest))) continue
+      cases[i] = rest
+    }
     const reduced = await reduce(cases[i])
     const [reducedOurs] = ourResults([reduced])
     const reducedTheirs = await officialResult(reduced)
-    console.log(`fuzz: a difference in compiler case ${done + i}:\n${reduced.css}\n  candidates: ${JSON.stringify(reduced.candidates)}`)
+    console.log(`fuzz: a difference in compiler case ${done + i}:\n${reduced.css}\n  candidates: ${JSON.stringify(reduced.candidates)}${reduced.first === undefined ? '' : `\n  two builds: the first ${reduced.first} candidates, then the other ones`}`)
     record({
       kind: 'compiler',
-      case: { css: cases[i].css, candidates: cases[i].candidates, files: cases[i].files, copy: cases[i].copy },
-      reduced: { css: reduced.css, candidates: reduced.candidates, files: usedFiles(reduced), copy: usedCopy(reduced), official: reducedTheirs, ours: reducedOurs },
+      case: { css: cases[i].css, candidates: cases[i].candidates, first: cases[i].first, files: cases[i].files, copy: cases[i].copy },
+      reduced: { css: reduced.css, candidates: reduced.candidates, first: reduced.first, files: usedFiles(reduced), copy: usedCopy(reduced), official: reducedTheirs, ours: reducedOurs },
     })
   }
 }
@@ -456,6 +554,11 @@ for (let n = 0; n < opts.projects && Date.now() < deadline; n++) {
 console.log(
   `fuzz: compiler cases with CSS ${stats.compilerCss} (${(stats.cssBytes / 1e6).toFixed(1)} MB), with an error ${stats.compilerErrors}, with JavaScript ${stats.javascript}; projects with CSS ${stats.projectCss}, with an error ${stats.projectErrors}`,
 )
+if (stats.knownFaults > 0) {
+  console.log(
+    `fuzz: ${stats.knownFaults} cases with a known fault of Tailwind CSS ${version} (output that is not valid CSS): ${stats.knownFaults - stats.knownFaultsOnly} compared again with no candidate that shows it, ${stats.knownFaultsOnly} not compared (the stylesheet shows it)`,
+  )
+}
 console.log(`fuzz: ${compared} cases compared, ${failures} different (seed ${opts.seed})`)
 if (failures > 0) {
   console.log(`fuzz: the failures are in ${failuresFile}`)
