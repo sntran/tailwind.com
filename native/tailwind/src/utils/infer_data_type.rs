@@ -117,6 +117,10 @@ pub fn is_url(value: &str) -> bool {
 }
 
 pub fn is_line_width(value: &str) -> bool {
+    // Before 4.0.15, a line width was one of the three keywords.
+    if !crate::switches::LINE_WIDTH_LIST.on() {
+        return matches!(value, "thin" | "medium" | "thick");
+    }
     segment(value, b' ')
         .iter()
         .all(|value| is_length(value) || is_number(value) || matches!(*value, "thin" | "medium" | "thick"))

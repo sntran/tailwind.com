@@ -427,13 +427,18 @@ fn get_property_sort(nodes: &[AstNode]) -> PropertySort {
     while let Some(node) = q.pop_front() {
         match node {
             AstNode::Declaration(d) => {
-                let Some(value) = &d.value else { continue };
-                count += 1;
+                // A declaration with no value is not in the output.
+                // (Before 4.0.12, its property was in the sort.)
+                if d.value.is_some() {
+                    count += 1;
+                } else if crate::switches::SORT_IGNORES_EMPTY_DECLARATIONS.on() {
+                    continue;
+                }
                 if seen_tw_sort {
                     continue;
                 }
                 if d.property == "--tw-sort" {
-                    if let Some(idx) = property_index(value) {
+                    if let Some(idx) = property_index(d.value.as_deref().unwrap_or("")) {
                         if !order.contains(&idx) {
                             order.push(idx);
                         }

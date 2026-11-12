@@ -801,6 +801,53 @@ pub const KEYFRAME_NAMES_AFTER_COMMA: Switch = Switch::since(4, 0, 16, "a comma 
 /// `&::-webkit-details-marker`. Before: only the two `::marker` selectors.
 pub const MARKER_DETAILS_MARKER: Switch = Switch::since(4, 0, 16, "the marker variant has ::-webkit-details-marker");
 
+// --- 4.0.15 ---------------------------------------------------------------
+
+/// `--theme(--color-red-500)` gives `var(--color-red-500)`. It gives the
+/// value in the parameters of an at-rule and with `inline` after the
+/// name. A fallback goes into the `var(…)` of the value, and `initial` as
+/// a fallback is no fallback. Before: `--theme(…)` gave the value in each
+/// place, as `theme(…)` does, and its error had the text of `theme(…)`
+/// ("Consider checking if the path is correct").
+pub const THEME_FN_GIVES_VARIABLE: Switch = Switch::since(4, 0, 15, "--theme(…) gives the variable, not the value");
+
+/// A theme variable with the value `initial` is not in the output. Such a
+/// value comes from `--theme(--x, initial)` in the value of a theme
+/// variable. Before: the declaration was in the output.
+pub const THEME_INITIAL_NOT_EMITTED: Switch = Switch::since(4, 0, 15, "a theme variable with the value initial is not in the output");
+
+/// `-bg-conic-45` gives `from calc(45deg * -1)`. Before: `from calc(45 *
+/// -1)`, an angle with no unit.
+pub const BG_CONIC_NEGATIVE_ANGLE: Switch = Switch::since(4, 0, 15, "-bg-conic-* has an angle with a unit");
+
+/// A list of lengths, numbers and the keywords `thin`, `medium` and `thick`
+/// has the type line width: `border-[12px_4px]` is a border width. Before:
+/// only one of the three keywords, so `border-[12px_4px]` was a border
+/// color.
+pub const LINE_WIDTH_LIST: Switch = Switch::since(4, 0, 15, "a list of widths has the type line width");
+
+/// A declaration of a functional `@utility` goes out one time when its
+/// functions have no result, and the walk of its value stops there.
+/// Before: a `--modifier(…)` with no modifier in the candidate removed the
+/// declaration and the walk went on. Each next function with no result
+/// then removed the node after the declaration.
+pub const CSS_UTILITY_ONE_REMOVAL: Switch = Switch::since(4, 0, 15, "a declaration of @utility with no result removes only itself");
+
+/// A candidate that is the name of a theme variable (`--color-red-500`)
+/// makes a new output when it marks the variable as used. Before: only a
+/// new utility candidate made a new output, so a later `build` with only
+/// a new variable gave the output of before.
+pub const VARIABLE_CANDIDATE_REBUILDS: Switch = Switch::since(4, 0, 15, "a new theme variable as a candidate makes a new output");
+
+// --- 4.0.12 ---------------------------------------------------------------
+
+/// The sort of the rules ignores a declaration with no value: `text-sm`
+/// with no `--text-sm--line-height` sorts as a rule with only `font-size`.
+/// Before: the property of such a declaration was in the sort, so
+/// `text-sm` sorted also by `line-height`, `letter-spacing` and
+/// `font-weight`.
+pub const SORT_IGNORES_EMPTY_DECLARATIONS: Switch = Switch::since(4, 0, 12, "the sort ignores a declaration with no value");
+
 /// All the switches, the newest first: for the tests and the documents.
 pub const ALL: &[&Switch] = &[
     &COLOR_MIX_NEEDS_METHOD,
@@ -941,4 +988,11 @@ pub const ALL: &[&Switch] = &[
     &CSS_UTILITY_LITERALS,
     &KEYFRAME_NAMES_AFTER_COMMA,
     &MARKER_DETAILS_MARKER,
+    &THEME_FN_GIVES_VARIABLE,
+    &THEME_INITIAL_NOT_EMITTED,
+    &BG_CONIC_NEGATIVE_ANGLE,
+    &LINE_WIDTH_LIST,
+    &CSS_UTILITY_ONE_REMOVAL,
+    &VARIABLE_CANDIDATE_REBUILDS,
+    &SORT_IGNORES_EMPTY_DECLARATIONS,
 ];

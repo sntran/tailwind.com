@@ -283,7 +283,12 @@ fn handle_bg_conic(negative: bool) -> impl Fn(&FunctionalCandidate, &DesignSyste
         if !is_positive_integer(value) {
             return None;
         }
-        let value = if negative { format!("calc({value}deg * -1)") } else { format!("{value}deg") };
+        let value = match negative {
+            // Before 4.0.15, the negative angle had no unit.
+            true if !crate::switches::BG_CONIC_NEGATIVE_ANGLE.on() => format!("calc({value} * -1)"),
+            true => format!("calc({value}deg * -1)"),
+            false => format!("{value}deg"),
+        };
 
         Some(vec![
             decl("--tw-gradient-position", format!("from {value} {interpolation_method}")),

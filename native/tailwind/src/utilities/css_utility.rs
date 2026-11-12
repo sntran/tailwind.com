@@ -264,6 +264,9 @@ struct CompileState<'a> {
     /// tree: `true` when a `--value(…)` that is not a ratio has a result
     /// in it.
     resolved_declarations: Vec<bool>,
+    /// The number of times that the functions of the declaration of the
+    /// walk asked for its removal.
+    removals: usize,
 }
 
 fn compile_functional(node: &AtRule, candidate: &FunctionalCandidate, design_system: &DesignSystem) -> Compiled {
@@ -284,6 +287,7 @@ fn compile_functional(node: &AtRule, candidate: &FunctionalCandidate, design_sys
         resolved_modifier_fn: false,
         resolved_ratio_value: false,
         resolved_declarations: Vec::new(),
+        removals: 0,
     };
 
     resolve_declarations(&mut at_rule.nodes, true, &mut state);
@@ -333,8 +337,14 @@ fn resolve_declarations(nodes: &mut Vec<AstNode>, parent_is_rule: bool, state: &
                 if parent_is_rule {
                     if let Some(value) = declaration.value.as_deref().filter(|v| !v.is_empty()) {
                         let mut value_ast = value_parser::parse(value);
-                        if !resolve_value_functions(&mut value_ast, state, &mut resolved) {
-                            nodes.remove(index);
+                        state.removals = 0;
+                        resolve_value_functions(&mut value_ast, state, &mut resolved);
+                        if state.removals > 0 {
+                            // Before 4.0.15, a declaration could ask for
+                            // its removal more than one time. Each more
+                            // time removed the node after it.
+                            let end = (index + state.removals).min(nodes.len());
+                            nodes.drain(index..end);
                             continue;
                         }
                         declaration.value = Some(value_parser::to_css(&value_ast));
@@ -353,8 +363,9 @@ fn resolve_declarations(nodes: &mut Vec<AstNode>, parent_is_rule: bool, state: &
     }
 }
 
-/// Replace each `--value(…)` and `--modifier(…)` with its result. The result
-/// is `false` when a function has no result: the walk stops there.
+/// Replace each `--value(…)` and `--modifier(…)` with its result. A function
+/// with no result asks for the removal of the declaration
+/// (`CompileState::removals`). The result is `false` when the walk stops.
 fn resolve_value_functions(nodes: &mut Vec<ValueAstNode>, state: &mut CompileState, resolved_declaration: &mut bool) -> bool {
     let mut index = 0;
     while index < nodes.len() {
@@ -367,6 +378,7 @@ fn resolve_value_functions(nodes: &mut Vec<ValueAstNode>, state: &mut CompileSta
             state.used_value_fn = true;
             let Some(resolved) = resolve_value_function(state.value.map(FunctionValue::from), function, state.design_system)
             else {
+                state.removals += 1;
                 return false;
             };
             state.resolved_value_fn = true;
@@ -382,11 +394,18 @@ fn resolve_value_functions(nodes: &mut Vec<ValueAstNode>, state: &mut CompileSta
             // Before 4.3.0, a candidate with no modifier removed the
             // declaration here: there was no default.
             if state.modifier.is_none() && !crate::switches::CSS_UTILITY_DEFAULT.on() {
-                return false;
+                state.removals += 1;
+                if crate::switches::CSS_UTILITY_ONE_REMOVAL.on() {
+                    return false;
+                }
+                // Before 4.0.15, the walk went on with the next node.
+                index += 1;
+                continue;
             }
             state.used_modifier_fn = true;
             let Some(resolved) = resolve_value_function(state.modifier.map(FunctionValue::from), function, state.design_system)
             else {
+                state.removals += 1;
                 return false;
             };
             state.resolved_modifier_fn = true;

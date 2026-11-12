@@ -109,6 +109,36 @@ fn a_closing_curly_bracket_with_no_open_bracket_is_not_valid_in_each_version() {
 }
 
 #[test]
+fn a_new_theme_variable_as_a_candidate_makes_a_new_output_from_4_0_15() {
+    // The results of the official compiler of 4.0.14 and 4.0.15 for four
+    // builds with one compiler.
+    let css = "@theme { --color-red-500: red; --color-blue-500: blue; }\n@tailwind utilities;";
+    let builds: [&[&str]; 4] = [&["flex"], &["--color-red-500"], &["--color-blue-500", "block"], &["--color-nope"]];
+    let flex = ".flex {\n  display: flex;\n}\n";
+    let red_and_flex = ":root, :host {\n  --color-red-500: red;\n}\n.flex {\n  display: flex;\n}\n";
+    let all = ":root, :host {\n  --color-red-500: red;\n  --color-blue-500: blue;\n}\n.block {\n  display: block;\n}\n.flex {\n  display: flex;\n}\n";
+    let cases = [(Version(4, 0, 14), [flex, flex, all, all]), (Version(4, 0, 15), [flex, red_and_flex, all, all])];
+    for (version, expected) in cases {
+        let options = CompileOptions { test_mode: true, version: Some(version), ..CompileOptions::default() };
+        let mut compiler = compile(css, options).expect("the stylesheet compiles");
+        for (candidates, expected) in builds.iter().zip(expected) {
+            let candidates: Vec<String> = candidates.iter().map(|candidate| candidate.to_string()).collect();
+            assert_eq!(compiler.try_build(&candidates).expect("the build"), expected, "{candidates:?}, as Tailwind CSS {version}");
+        }
+    }
+
+    // A first build with only a variable has the variable in each version.
+    let red = ":root, :host {\n  --color-red-500: red;\n}\n";
+    let red_and_blue = ":root, :host {\n  --color-red-500: red;\n  --color-blue-500: blue;\n}\n";
+    for (version, second) in [(Version(4, 0, 14), red), (Version(4, 0, 15), red_and_blue)] {
+        let options = CompileOptions { test_mode: true, version: Some(version), ..CompileOptions::default() };
+        let mut compiler = compile(css, options).expect("the stylesheet compiles");
+        assert_eq!(compiler.try_build(&["--color-red-500".to_string()]).expect("the build"), red, "as Tailwind CSS {version}");
+        assert_eq!(compiler.try_build(&["--color-blue-500".to_string()]).expect("the build"), second, "as Tailwind CSS {version}");
+    }
+}
+
+#[test]
 fn each_switch_is_in_the_list() {
     // The list is for the documents: a switch that is not in it is easy
     // to forget. The newest switches are first.

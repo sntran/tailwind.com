@@ -628,6 +628,47 @@ changes in these releases: the Markdown and Ruby pre-processors, and the
 No switch: the suggestions of `--spacing(--value(integer))` and of the
 literal values are for the editor tools.
 
+### 4.0.15 (6 switches, all there; data changes with no switch)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `THEME_FN_GIVES_VARIABLE` | form | S | common | `--theme(--color-red-500)` gave the value (`red`), as `theme(…)` does, with no `inline`, no fallback in `var(…)`, and the error text of `theme(…)` ("Consider checking if the path is correct") |
+| `THEME_INITIAL_NOT_EMITTED` | fix | S | rare | A theme variable with the value `initial` (from `--theme(--x, initial)`) was in the output |
+| `BG_CONIC_NEGATIVE_ANGLE` | fix | S | rare | `-bg-conic-45` gave `from calc(45 * -1)`, an angle with no unit |
+| `LINE_WIDTH_LIST` | fix | S | rare | `border-[12px_4px]` gave `border-color: 12px 4px`: only `thin`, `medium` and `thick` had the type line width |
+| `CSS_UTILITY_ONE_REMOVAL` | fix | M | edge | In a functional `@utility`, a `--modifier(…)` with no modifier in the candidate removed its declaration and the walk of the value went on. Each next function with no result removed the node after the declaration |
+| `VARIABLE_CANDIDATE_REBUILDS` | fix | S | rare | A later `build` with only a new theme variable as a candidate (`--color-red-500`) gave the output of the build before |
+
+No switch: `replaceWith` of the walks takes only its first call, which is
+the fix of `CSS_UTILITY_ONE_REMOVAL` (no other code calls it two times).
+The flags for `items-center-safe` and `items-baseline-last` were off in a
+release (`SAFE_AND_LAST_BASELINE_ALIGNMENT`, 4.1.0). `PluginUtils` is a
+type. The plugin layer gives `forceInline` to its `theme` function as a
+default value, which changes no result. Data, from the package:
+`--default-font-family: --theme(--font-sans, initial)` and the five
+other `--default-*` font variables of `theme.css`, and `preflight.css`
+(`--theme(…)` for the font variables, no `line-height: inherit` for
+`body`, and the color of `::placeholder` in an `@supports` rule).
+
+`VARIABLE_CANDIDATE_REBUILDS` needs two builds with one compiler, so its
+case is a test of `native/tailwind/tests/switches.rs`, not a record.
+
+### 4.0.14 (no switch)
+
+No switch: `@source inline(…)` and `@source not inline(…)` were behind a
+flag that was off in a release (`SOURCE_NOT_AND_INLINE`, 4.1.0). The
+scanner of the source files follows no version.
+
+### 4.0.13 (no change of the compiler)
+
+### 4.0.12 (1 switch, there)
+
+| Switch | Kind | Effort | How often | What was before |
+|---|---|---|---|---|
+| `SORT_IGNORES_EMPTY_DECLARATIONS` | fix | S | common | The property of a declaration with no value was in the sort: `text-sm` with no `--text-sm--line-height` sorted also by `line-height`, `letter-spacing` and `font-weight`, so it came before `text-[13px]` |
+
+### 4.0.11 (no change of the compiler)
+
 ## What the list shows
 
 - **56 changes** in the eleven releases from 4.2.0 to 4.3.5. 7 of them

@@ -76,6 +76,12 @@ fn theme(design_system: &DesignSystem, source: &AstNode, args: &[&str]) -> Resul
         return Err(Error::new("The --theme(…) function can only be used with CSS variables from your theme."));
     }
 
+    // Before 4.0.15, `--theme(…)` gave the value of the variable, as
+    // `theme(…)` does.
+    if !crate::switches::THEME_FN_GIVES_VARIABLE.on() {
+        return legacy_theme(design_system, args);
+    }
+
     let mut inline = false;
 
     // `--theme(--color-red-500 inline)` gives the value, not the variable.

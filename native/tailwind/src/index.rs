@@ -207,8 +207,11 @@ impl Compiler {
             }
             if candidate.starts_with("--") {
                 let did_mark_variable_as_used = self.design_system.theme.mark_used_variable(candidate);
-                did_change |= did_mark_variable_as_used;
-                did_add_external_variable |= did_mark_variable_as_used;
+                // Before 4.0.15, a new variable alone made no new output.
+                if crate::switches::VARIABLE_CANDIDATE_REBUILDS.on() {
+                    did_change |= did_mark_variable_as_used;
+                    did_add_external_variable |= did_mark_variable_as_used;
+                }
             } else if self.all_valid_candidates_set.insert(candidate.clone()) {
                 self.all_valid_candidates.push(candidate.clone());
                 did_change = true;

@@ -208,7 +208,8 @@ impl Optimizer<'_> {
                 let is_theme_variable = context.theme && decl.property.starts_with("--");
 
                 // A theme variable with the value `initial` gives no output.
-                if is_theme_variable && value == "initial" {
+                // (Before 4.0.15, it was a declaration as each other one.)
+                if is_theme_variable && value == "initial" && switches::THEME_INITIAL_NOT_EMITTED.on() {
                     return;
                 }
 
