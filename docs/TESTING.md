@@ -370,5 +370,7 @@ first run of the recorded projects found the other one: the sort (see
 `tailwind.com`, of the native program and of `tailwind.wasm`, against
 the official npm CLI and the official standalone program. It also
 compares each output with the output of the npm CLI. The job `bench` of
-`.github/workflows/build.yml` runs it on Linux and macOS. See
+`.github/workflows/build.yml` runs it on Linux and macOS.
+`tests/bench/versions.mjs` measures the two engines of `tailwind.com`
+for older versions of Tailwind CSS, and compares their outputs. See
 [`BENCHMARKS.md`](BENCHMARKS.md) for the results and the commands.

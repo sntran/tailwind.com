@@ -22,8 +22,8 @@ The program has two compilers.
 | What | The Rust compiler of this repository | The official compiler of the npm package `tailwindcss` (`dist/lib.js`), with no change, in the QuickJS of the program |
 | Versions | The version of the file `UPSTREAM` (4.3.5), and each older version that has all its switches: now 4.0.0 to 4.3.4 ([`SWITCHES.md`](SWITCHES.md)) | Each version whose package the program can find |
 | A new version of Tailwind CSS needs | A port of the changes to Rust (`docs/SYNC.md`) | One line in the file `PACKAGES` |
-| Speed, Phoenix project | 10 ms | 69 ms |
-| Speed, 1000 HTML files | 224 ms | 1.31 s |
+| Speed, Phoenix project | 12 ms | 83 ms |
+| Speed, 1000 HTML files | 222 ms | 1.45 s |
 
 With no setting, the versions of the native engine use the native
 engine, and each other version uses the script engine. Now each version
@@ -40,8 +40,9 @@ the JavaScript of Tailwind CSS. The program has the plugin layer of each
 version that the Rust compiler serves, made from the source of that
 version with no change ([`SWITCHES.md`](SWITCHES.md), "The plugin
 layer"). So a stylesheet with plugins uses the Rust compiler too: a new
-Phoenix project (Tailwind CSS 4.3.3, with daisyUI) builds in 120 ms, and
-in 200 ms with the script engine. `TAILWIND_COM_ENGINE` can
+Phoenix project (Tailwind CSS 4.3.3, with daisyUI) builds in about
+160 ms, and in about 240 ms with the script engine. The speed of each
+engine for older versions is in [`BENCHMARKS.md`](BENCHMARKS.md). `TAILWIND_COM_ENGINE` can
 be `native` or `script`: `script` with the version of the native engine
 runs the official compiler of that version too.
 

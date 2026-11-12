@@ -516,7 +516,7 @@ the method of BEAM.com for Rust:
 ### The size of the file
 
 The file is about 20 MB: two copies of the program, one for x86_64 and
-one for aarch64, of about 9.5 MB each, and 0.37 MB for the packages of
+one for aarch64, of about 9.7 MB each, and 0.37 MB for the packages of
 the versions of Tailwind CSS in its ZIP directory (see "The versions of
 Tailwind CSS" below). In one copy:
 
@@ -526,20 +526,28 @@ Tailwind CSS" below). In one copy:
 | The compiler (the utilities, the variants, the default theme of v3) | about 1 MB |
 | The scanner of Tailwind CSS with its regular expressions and its `.gitignore` code | about 1 MB |
 | QuickJS with its Unicode tables, and the JSON code | about 1.4 MB |
-| The JavaScript files of the program, as text: the plugin layer of Tailwind CSS with the parts of Node.js (130 KB), the TypeScript transform (206 KB), the three plugins of the standalone program (96 KB) | 0.43 MB |
+| The JavaScript files of the program, as text: the plugin layer of Tailwind CSS with the parts of Node.js (136 KB), the patches of the plugin layer of the 47 older versions (170 KB), the runtime of the script engine (58 KB), the TypeScript transform (206 KB), the three plugins of the standalone program (96 KB) | 0.67 MB |
 | The Rust standard library, the unwind tables, the stylesheets, Cosmopolitan | the rest |
 
 The source maps (the code of the compiler and of the program, and the
 source maps of Lightning CSS with the crate `parcel_sourcemap`) are
 about 0.15 MB of one copy.
 
-The JavaScript files are in the two copies, so they are 0.86 MB of
+The JavaScript files are in the two copies, so they are 1.33 MB of
 the file. Before TypeScript, the three plugins and the parts of Node.js,
-the file had 18.3 MB, with 89 KB of JavaScript in a copy. Now it has
+the file had 18.3 MB, with 89 KB of JavaScript in a copy. Then it had
 19.1 MB: 0.41 MB for the TypeScript transform, 0.19 MB for the three
 plugins, 0.08 MB for the parts of Node.js, and the rest for the Rust
 and C code of the loader and of the warnings. `tailwind.wasm` has one
-copy: 8.6 MB before, and 8.95 MB now.
+copy: 8.6 MB before, and 8.95 MB then.
+
+The versions of Tailwind CSS came next. Each copy is 0.49 MB larger:
+0.15 MB for the script engine, and 0.34 MB for the 195 switches and the
+plugin layer of the 47 older versions (half of it is the 170 KB of
+patches). With the packages in the ZIP directory, the file has 20.3 MB
+now, and `tailwind.wasm` 9.4 MB. The sizes in this section are in
+units of 1,000,000 bytes. `docs/BENCHMARKS.md` gives the same sizes in
+units of 1,048,576 bytes (19.4 MB and 9.0 MB).
 
 The dependencies build for size (`opt-level = "s"`), and the compiler
 and QuickJS (`-O2`) build for speed. With all the code built for speed,

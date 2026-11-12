@@ -20,9 +20,9 @@ The compiler follows Tailwind CSS 4.3.5 file by file. The tests compare
 its output with the recorded output of the official compiler: see
 [Compatibility](#compatibility).
 
-The file also has the official compiler of each other version of
-Tailwind CSS 4, from 4.0.0, and runs it in its own JavaScript engine:
-see [Versions of Tailwind CSS](#versions-of-tailwind-css).
+The compiler can also compile as each older version of Tailwind CSS 4,
+from 4.0.0, and the file has the official compiler of each of these
+versions too: see [Versions of Tailwind CSS](#versions-of-tailwind-css).
 
 ## Quick start
 
@@ -152,11 +152,11 @@ The file has two engines:
   and it has a switch for each behavior that changed since 4.0.0, so it
   serves each version from 4.0.0 to 4.3.5, also with JavaScript plugins
   ([`docs/SWITCHES.md`](docs/SWITCHES.md)). It is the
-  fast one: 10 ms for a Phoenix project.
+  fast one: about 12 ms for a Phoenix project, in each version.
 - **The script engine** is the official compiler of the npm package
   `tailwindcss` of a version (one JavaScript file with no dependency),
-  with no change, in the QuickJS of the file. It needs 69 ms for the
-  same project, and the official programs need 131 ms to 165 ms. The
+  with no change, in the QuickJS of the file. It needs about 83 ms for
+  the same project, and the official programs need 139 ms to 186 ms. The
   package of each version is in the ZIP directory of the file: an APE
   file is also a ZIP file. The file has the newest package in full, and
   each older version as a small patch: the differences from the next
@@ -198,10 +198,10 @@ tests, and a TLA+ model of the watch.
 
 [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) compares the time, the memory
 and the size with the official npm CLI and the official standalone
-program. For example, the Phoenix project: 10 ms with `tailwind.com`,
-165 ms with the npm CLI and 131 ms with the standalone program. A
-project with daisyUI: 137 ms, 282 ms and 217 ms, with 13 MB of memory in
-place of 100 MB and 88 MB.
+program. For example, the Phoenix project: 12 ms with `tailwind.com`,
+186 ms with the npm CLI and 139 ms with the standalone program. A
+project with daisyUI: 182 ms, 310 ms and 251 ms, with 13 MB of memory in
+place of 103 MB and 89 MB.
 
 CI runs `tailwind.com` on Linux (x86_64 and aarch64), macOS (arm64 and
 x86_64), Windows (x86_64), FreeBSD, NetBSD and OpenBSD 7.3 (x86_64, in

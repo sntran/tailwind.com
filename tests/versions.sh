@@ -65,9 +65,8 @@ module.exports = plugin(({ addUtilities, theme }) => {
 })
 JS
 echo '<p class="flex md:p-4 hover:from-plugin group-hover:underline blur-sm m-0 m-1 space-x-0"></p>' > src/a.html
-# The same with no plugin: the Rust compiler compiles this one as an older
-# version too. (With a plugin, it gives the stylesheet to the script
-# engine for a version with another plugin layer.)
+# The same with no plugin. The Rust compiler compiles the two as each
+# older version: it has the plugin layer of each version.
 cat > plain.css <<'CSS'
 @import "tailwindcss" source(none);
 @source "./src";

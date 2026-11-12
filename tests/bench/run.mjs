@@ -70,7 +70,8 @@ if (opts.program) {
 }
 // The same file with its second engine: the official compiler of the
 // package of this version, in the JavaScript engine of the file
-// (docs/VERSIONS.md). This is the speed of each other version.
+// (docs/VERSIONS.md). A version that is newer than the port has this
+// speed. tests/bench/versions.mjs measures the older versions.
 if (opts.program && opts.script) {
   programs.push({
     name: 'tailwind.com, script engine',

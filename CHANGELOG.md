@@ -15,7 +15,7 @@ Each version of Tailwind CSS 4, from 4.0.0 to 4.3.5, in one file.
 - A second engine, the script engine: the official compiler of the npm
   package `tailwindcss` of a version (`dist/lib.js`), with no change, in
   the QuickJS of the file. The Rust compiler (the native engine) stays
-  the engine of its version, 4.3.5.
+  the default engine.
 - `tailwind.com` has the package of each stable version of Tailwind
   CSS 4, from 4.0.0 to 4.3.5 (48 versions), in its ZIP directory
   `tailwindcss/`: an APE file is also a ZIP file. The file has the
@@ -58,6 +58,8 @@ Each version of Tailwind CSS 4, from 4.0.0 to 4.3.5, in one file.
   (`tests/versions.sh`), the sort and `Intl.ListFormat` against V8
   (`tests/v8.mjs`), and the fuzzer against the official compiler of
   five versions in Node.js.
+- `tests/bench/versions.mjs`: the speed of each engine for older
+  versions of Tailwind CSS (`docs/BENCHMARKS.md`).
 
 ### Changed
 
@@ -80,9 +82,10 @@ Each version of Tailwind CSS 4, from 4.0.0 to 4.3.5, in one file.
   `--optimize`, the text can be different from the official program of
   that version in small details. `--map` needs Tailwind CSS 4.1.6 or
   later.
-- The script engine is slower than the native engine: about 70 ms in
-  place of 10 ms for a Phoenix project, and about 1.3 s in place of
-  0.2 s for a project with 5600 different classes.
+- The script engine is slower than the native engine: about 80 ms in
+  place of 12 ms for a Phoenix project, and about 1.45 s in place of
+  0.22 s for a project with 5600 different classes. With no setting, it
+  is only for a version that is newer than the port.
 - Tailwind CSS 3 does not work.
 
 ## 0.1.0 - 2026-11-11
