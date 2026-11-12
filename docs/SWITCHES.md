@@ -29,8 +29,8 @@ nothing wrong: that version is only slower.
 |---|---|---|
 | 4.3.5 | Rust compiler | the port |
 | 4.3.4 | Rust compiler | 3 |
-| 4.3.3 | Rust compiler | 18 more |
-| 4.3.2 | Rust compiler | 5 more |
+| 4.3.3 | Rust compiler | 19 more |
+| 4.3.2 | Rust compiler | 6 more |
 | 4.3.1 | Rust compiler | 3 more |
 | 4.3.0 | Rust compiler | 8 more |
 | 4.2.4 | Rust compiler | 8 more |
@@ -38,11 +38,31 @@ nothing wrong: that version is only slower.
 | 4.2.2 | Rust compiler | 2 more |
 | 4.2.1 | Rust compiler | 1 more |
 | 4.2.0 | Rust compiler | 1 more |
-| 4.0.0 to 4.1.18 | script engine | not counted |
+| 4.1.18 | Rust compiler | 12 more |
+| 4.1.17 | Rust compiler | 6 more |
+| 4.1.16 | Rust compiler | 0 more |
+| 4.1.15 | Rust compiler | 2 more |
+| 4.1.14 | Rust compiler | 6 more |
+| 4.1.13 | Rust compiler | 6 more |
+| 4.1.12 | Rust compiler | 5 more |
+| 4.1.11 | Rust compiler | 4 more |
+| 4.1.10 | Rust compiler | 0 more |
+| 4.1.9 | Rust compiler | 1 more |
+| 4.1.8 | Rust compiler | 2 more |
+| 4.1.7 | Rust compiler | 1 more |
+| 4.1.6 | Rust compiler | 1 more |
+| 4.1.5 | Rust compiler | 7 more |
+| 4.1.4 | Rust compiler | 3 more |
+| 4.1.3 | Rust compiler | 6 more |
+| 4.1.2 | Rust compiler | 0 more |
+| 4.1.1 | Rust compiler | 5 more |
+| 4.1.0 | Rust compiler | 2 more |
+| 4.0.17 | Rust compiler | 15 more |
+| 4.0.0 to 4.0.16 | script engine | not counted |
 
-All the 49 switches of Tailwind CSS 4.2 and 4.3 are there. Each of these
-versions uses the Rust compiler also for a stylesheet with `@plugin` or
-`@config`: see "The plugin layer" below.
+All the 135 switches of Tailwind CSS 4.1.0 to 4.3.5 are there. Each of
+these versions uses the Rust compiler also for a stylesheet with
+`@plugin` or `@config`: see "The plugin layer" below.
 
 ## How to write a switch
 
@@ -119,8 +139,10 @@ sh tests/fuzz/install.sh build/official-4.3.4 4.3.4
   that shows the fault.
 - **A behavior of one version only** needs two switches, one for its
   start and one for its end. (In the list, `addbase-variant-eager` is
-  only in 4.3.1, but it is in the plugin layer. `UTILITY_ROOT_ENDING_DASH`
-  is only in 4.2.0, the oldest version, so it needs one switch.)
+  only in 4.3.1, but it is in the plugin layer. The `& { … }` rule in the
+  `@supports` rule of a `color-mix()` fallback is only in 4.1.15:
+  `COLOR_MIX_FALLBACK_AMPERSAND` is its start and
+  `COLOR_MIX_FALLBACK_NO_AMPERSAND` is its end.)
 - **The plugin layer has no switches: each version has its own.** See
   the next section.
 
@@ -160,7 +182,7 @@ CSS in its plugin layer needs no switch and no work: the list marks it
   module, and the program uses the script engine for that stylesheet.
   Now `OLDEST_WITH_PLUGINS` is `OLDEST`, so this does not occur.
 
-## The changes of Tailwind CSS 4.2 and 4.3
+## The changes of Tailwind CSS, release by release
 
 This list comes from the source of Tailwind CSS: each change between two
 releases that can change the result of `compile` and `build`.
@@ -577,7 +599,7 @@ before 4.1.2, a `color-mix(…)` with less than three parts
 | `STATIC_VARIANTS_OF_4_1` | feature | S | rare | No `details-content`, `user-valid`, `user-invalid`, `inverted-colors`, `noscript`, `pointer-none`, `pointer-coarse`, `pointer-fine`, `any-pointer-none`, `any-pointer-coarse`, `any-pointer-fine` |
 | `SOURCE_NOT_AND_INLINE` | feature | S | rare | `@source not "…"`, `@source inline(…)` and `@source not inline(…)` were the error "`@source` paths must be quoted." |
 | `ARBITRARY_VALUE_CHECK` | fix | S | edge | An arbitrary value had no check: `[color:red;background:blue]`, `w-[1px)]` and `[--x:{a:b}]` were valid |
-| `THEME_VARIABLE_AFTER_KEY_PATH` | fix | S | rare | After the first `theme(colors.red.500)` in a stylesheet, `--theme(--color-red-500)` gave the value and not `var(--color-red-500)`, and did not mark the variable as used |
+| `THEME_VARIABLE_AFTER_KEY_PATH` | fix | S | each build with a plugin | After the first `theme(colors.red.500)` in a stylesheet, and in each stylesheet with `@plugin` or `@config`, `--theme(--color-red-500)` gave the value and not `var(--color-red-500)`, and did not mark the variable as used. So `preflight.css` had the font lists and not `var(--default-font-family, …)` |
 | theme-variable-with-plugins (JS) | fix | S | rare | With a plugin or a config, each `--theme(--color-red-500)` gave the value and not the variable |
 | config-content-not (JS) | feature | S | rare | A `content` entry of a config that starts with `!` was a source with the `!` in its pattern, not a negated source |
 | colors (JS) | data | S | rare | `tailwindcss/colors` had the lightness of each `oklch(…)` as a number (`0.984`), not as a percentage (`98.4%`) |
@@ -617,18 +639,22 @@ changes in these releases: the Markdown and Ruby pre-processors, and the
 
 ## What the list shows
 
-- **56 changes** in the eleven releases from 4.2.0 to 4.3.5. 7 of them
+- **56 changes** in the eleven releases from 4.2.0 to 4.3.5. 5 of them
   are only in the JavaScript of the plugin layer and need no switch. So
-  there are **49 switches**, and all are there: the Rust compiler serves
-  each version of 4.2 and 4.3.
+  there are **51 switches** for these releases.
+- **84 more switches** for the twenty releases from 4.1.0 to 4.2.0: 12
+  for 4.2.0, 57 for 4.1.1 to 4.1.18, and 15 for 4.1.0. All the 135
+  switches are there: the Rust compiler serves each version from 4.0.17
+  to 4.3.5.
 - **Most of the changes are fixes** of faults in rare inputs. 9 change
   the form of valid output, 6 are new features, 4 are constants, and 1
   has no visible change.
 - **7 change the output of a normal project** (the rows with "each
   build" or "common"). Each other one needs an input that few projects
   have.
-- **Most are one condition or one constant.** Of the 49 switches, 42
-  are one condition, one constant or one small helper, and 7 keep a
+- **Most are one condition or one constant.** Of the 51 switches of 4.2
+  and 4.3, 44 are one condition, one constant or one small helper, and 7
+  keep a
   function in two forms (the declaration with `!important`, the custom
   property at the end of the input, the brackets of an arbitrary value,
   the words of `supports-[…]`, the color of a shadow, the negation of a
@@ -645,11 +671,18 @@ changes in these releases: the Markdown and Ruby pre-processors, and the
   CSS was almost complete. One switch came later
   (`DEFAULT_THEME_SYSTEM_FONTS`): its value is in the Rust part of the
   plugin layer, and the fuzzer has no `theme(fontFamily.sans)`.
-- **An older line is more work.** With no switch for it, the Rust
-  compiler is different from the official 4.1.18 in 111 of 600 fuzz
-  cases, and from 4.0.17 in 375 of 600 (4.2.4 before its switches: 35 of
-  1,500). 4.1.0 to 4.2.0 changes about 4,000 lines of the compiler of
-  Tailwind CSS.
+- **An older line has more failures but few causes.** With no switch
+  for the 4.1 line, the Rust compiler was different from the official
+  4.1.18 in 181 of 600 fuzz cases, from 4.1.15 in 536, from 4.1.0 in
+  580, and from 4.0.17 in 584 (cases with no plugin). A small number of
+  changes made most of these: the spaces in a fraction (4.2.0), the
+  `color-mix()` fallback (it came in 4.1.0 and changed in 4.1.2, 4.1.4,
+  4.1.13, 4.1.15 and 4.1.16), the `@layer properties` rule (4.1.2), and
+  the utilities that were new in 4.1.0 and 4.2.0. A group of new
+  utilities is one switch (`LOGICAL_UTILITIES`, `MASK_UTILITIES`).
+- **Three kinds of old behavior get no switch**: a fault that stops the
+  compiler, output that is not valid CSS ("The rules"), and a change
+  that is only in the JavaScript of the plugin layer.
 - **A behavior that is a fault of an old version is kept**, when its
   result is CSS: a custom property at the end of the input loses its
   last character as 4.3.3, as in the official 4.3.3. And from 4.1.13 to

@@ -735,7 +735,8 @@ pub const SOURCE_NOT_AND_INLINE: Switch = Switch::since(4, 1, 0, "@source not an
 /// Before: after the first `theme(…)` with a key path
 /// (`theme(colors.red.500)`), the theme function of the plugin layer read
 /// each next path: `--theme(--x)` gave the value and not `var(--x)`, and
-/// the variable was not marked as used.
+/// the variable was not marked as used. With `@plugin` or `@config`, that
+/// function read each path from the start (`compat/js/runtime.rs`).
 pub const THEME_VARIABLE_AFTER_KEY_PATH: Switch = Switch::since(4, 1, 0, "--theme(--x) gives the variable also after theme() with a key path");
 
 /// `shadow-*` and `inset-shadow-*` take an opacity as a modifier

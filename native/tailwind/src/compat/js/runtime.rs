@@ -580,9 +580,12 @@ impl JsRuntime {
                 let runtime = self.this();
                 self.with_mut(|ds| {
                     ds.resolve_theme_value_hook = Some(Rc::new(move |ds, path, force_inline| {
-                        // Each JavaScript version of this function gives a
-                        // theme variable to the function of the host.
-                        if path.starts_with("--") {
+                        // Since 4.1.0, each JavaScript version of this
+                        // function gives a theme variable to the function
+                        // of the host. Before, the JavaScript function
+                        // resolved it too, and gave the value
+                        // (`switches::THEME_VARIABLE_AFTER_KEY_PATH`).
+                        if path.starts_with("--") && crate::switches::THEME_VARIABLE_AFTER_KEY_PATH.on() {
                             return ds.resolve_theme_variable_value(path, force_inline);
                         }
                         let argument = json!({ "path": path, "forceInline": force_inline });
