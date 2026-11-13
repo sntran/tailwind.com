@@ -87,13 +87,33 @@ config_for(Profile) when is_atom(Profile) ->
     end.
 
 -doc """
-The path of tailwind.com.
+The path of tailwind.com: the path of the configuration, else
+`tailwind.com` in the priv directory of the application `tailwind` when
+it is there (for example in the zip of a program of BEAM.com), else
+`_build/tailwind.com`.
 """.
 -spec bin_path() -> string().
 bin_path() ->
     case application:get_env(tailwind, path) of
-        {ok, Path} -> to_list(Path);
-        undefined -> filename:absname(filename:join("_build", "tailwind.com"))
+        {ok, Path} ->
+            to_list(Path);
+        undefined ->
+            case priv_path() of
+                false -> filename:absname(filename:join("_build", "tailwind.com"));
+                Priv -> Priv
+            end
+    end.
+
+%% tailwind.com in the priv directory of the application tailwind, or
+%% false when it is not there.
+-spec priv_path() -> string() | false.
+priv_path() ->
+    case code:priv_dir(tailwind) of
+        {error, bad_name} ->
+            false;
+        Dir ->
+            Path = filename:join(Dir, "tailwind.com"),
+            filelib:is_regular(Path) andalso Path
     end.
 
 -doc """
@@ -115,13 +135,15 @@ tailwind.com is an Actually Portable Executable (its first bytes are
 `MZ`): on Windows it is a program, and on the other systems the shell
 starts it, because the kernel does not start such a file in all cases. A
 file of another type (a program for this system only) starts directly.
+A file in `/zip` (the zip of a program of BEAM.com) also starts
+directly: the shell cannot read `/zip`, and BEAM.com starts the file.
 """.
 -spec command([string()]) -> {string(), [string()]}.
 command(Args) ->
     Path = bin_path(),
-    case {os:type(), is_ape(Path), os:find_executable("sh")} of
-        {{win32, _}, _, _} -> {Path, Args};
-        {_, true, Sh} when Sh =/= false -> {Sh, [Path | Args]};
+    Direct = element(1, os:type()) =:= win32 orelse lists:prefix("/zip/", Path) orelse not is_ape(Path),
+    case Direct orelse os:find_executable("sh") of
+        Sh when is_list(Sh) -> {Sh, [Path | Args]};
         _ -> {Path, Args}
     end.
 

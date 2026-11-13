@@ -72,14 +72,15 @@ names that BEAM.com added on 2026-11-11 (`asinf`, `atanf`, `expm1`,
 load the object, and the error names the first name that is not there.
 
 The object is the program of the file tailwind.com, with the NIF in
-place of `main()`, and with two differences:
+place of `main()`. It has each version of Tailwind CSS 4, as the file
+has: the store of the npm packages (the newest in full, each older
+version as a patch, 1.1 MB) is in the object (`TAILWIND_COM_EMBED_PACKAGES`
+of `native/tailwind/build.rs`). `config :tailwind, version: "4.1.0"`
+works with the two files only. One difference:
 
 - The watch has the file events of Linux (inotify). On macOS, the BSDs
   and Windows, it polls the files every 250 ms: the table of `beam.com`
   does not have the functions of kqueue and of Windows.
-- The older versions of Tailwind CSS are not in the object.
-  `priv/tailwindcss` of the application can have them (as for another
-  VM, below). This is not tested in `beam.com` yet.
 
 An object has one section for each kind (`native/nif/sections.ld`), not
 one for each function: about 36,000 sections took 8 MB for their headers,

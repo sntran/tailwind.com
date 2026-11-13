@@ -40,7 +40,7 @@ cosmo_check() {
 
 # rust_staticlib CPU PACKAGE LIB A: the library LIB of the crate PACKAGE,
 # with the feature `ape`, as the staticlib A for CPU (the std of
-# *-unknown-linux-musl). The calls of SYMS get the names of cosmo_rust.c.
+# *-unknown-linux-musl), in CARGO_TARGET_DIR (default: target). The calls of SYMS get the names of cosmo_rust.c.
 #
 # On aarch64, Cosmopolitan reserves the registers x18 and x28. The std of
 # Rust for Linux uses them. So the aarch64 library and its std build with
@@ -48,19 +48,46 @@ cosmo_check() {
 rust_staticlib() {
     cpu=$1 package=$2 lib=$3 a=$4
     target=$cpu-unknown-linux-musl
+    dir=${CARGO_TARGET_DIR:-$root/target}
     if [ "$cpu" = aarch64 ]; then
         RUSTFLAGS="-C target-feature=+reserve-x18,+reserve-x28" \
             cargo "+$nightly" rustc -q -p "$package" --lib --release --features ape --crate-type staticlib \
-            --target "$target" -Zbuild-std=std,panic_unwind --target-dir "$root/target/reserved"
-        cp "$root/target/reserved/$target/release/lib$lib.a" "$a"
+            --target "$target" -Zbuild-std=std,panic_unwind --target-dir "$dir/reserved"
+        cp "$dir/reserved/$target/release/lib$lib.a" "$a"
     else
-        cargo rustc -q -p "$package" --lib --release --features ape --crate-type staticlib --target "$target"
-        cp "$root/target/$target/release/lib$lib.a" "$a"
+        cargo rustc -q -p "$package" --lib --release --features ape --crate-type staticlib --target "$target" \
+            --target-dir "$dir"
+        cp "$dir/$target/release/lib$lib.a" "$a"
     fi
     args=
     for s in $SYMS; do args="$args --redefine-sym $s=tw_rs_$s"; done
     # shellcheck disable=SC2086
     sh "$C/bin/$cpu-unknown-cosmo-objcopy" $args "$a"
+}
+
+# package_store DIR: the store of the packages of the script engine in
+# DIR: the npm packages `tailwindcss` of the variable PACKAGES ("all", the
+# default: each version of the file PACKAGES; or a list), the newest
+# version in full, and each older version as a patch: the differences
+# from the next newer version (tools/twpatch). The tool reads each
+# version back and compares it with its package. The number of the
+# versions goes into the variable store_count.
+package_store() {
+    packages=$root/build/packages
+    case "${PACKAGES:-all}" in
+        all) versions=$(grep -v '^#' "$root/PACKAGES" | cut -d' ' -f1) ;;
+        *) versions=$PACKAGES ;;
+    esac
+    # shellcheck disable=SC2086
+    sh "$root/scripts/packages.sh" "$packages" $versions
+    # shellcheck disable=SC2086
+    versions=$(echo $versions | tr ' ' '\n' | sort -t. -k1,1n -k2,2n -k3,3n | tr '\n' ' ')
+    env -u CARGO_TARGET_DIR cargo build -q --release --manifest-path "$root/tools/twpatch/Cargo.toml"
+    rm -rf "$1"
+    # shellcheck disable=SC2086
+    "$root/tools/twpatch/target/release/twpatch" pack "$packages" "$1" $versions
+    # shellcheck disable=SC2086
+    store_count=$(echo $versions | wc -w | tr -d ' ')
 }
 
 # c_objects CPU DIR [WATCH_FLAGS]: the C files of the program for CPU, in

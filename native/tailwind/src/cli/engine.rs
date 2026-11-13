@@ -19,10 +19,12 @@
 //!   version (`4.2.0/package.json`, `4.2.0/dist/lib.js`, ...): the files
 //!   of the npm package.
 //!
-//! The program looks for a package in `TAILWIND_COM_PACKAGES`, and then
-//! in its own file: `tailwind.com` is also a ZIP file, and the packages
-//! are in its directory `tailwindcss/`. The file has the newest package
-//! in full, and each older version as a patch file (`patch.rs`).
+//! The program looks for a package in `TAILWIND_COM_PACKAGES`, then in
+//! its own file: `tailwind.com` is also a ZIP file, and the packages are
+//! in its directory `tailwindcss/`. Then in the store in the program
+//! (`EMBEDDED`): the native NIF objects for BEAM.com have one
+//! (`scripts/nif.sh`). A store has the newest package in full, and each
+//! older version as a patch file (`patch.rs`).
 
 use crate::index::{Compiler, Root, Source};
 use crate::source_maps::DecodedSourceMap;
@@ -43,12 +45,54 @@ pub const PACKAGES_VARIABLE: &str = "TAILWIND_COM_PACKAGES";
 /// The directory of the packages in the ZIP file of `tailwind.com`.
 const ZIP_PACKAGES: &str = "/zip/tailwindcss";
 
-/// An npm package `tailwindcss` of a store. A store is a directory with,
+// The files of the store in the program: `EMBEDDED`, a list of the paths
+// in the store and their bytes. Empty, unless the build had the variable
+// TAILWIND_COM_EMBED_PACKAGES (build.rs).
+include!(concat!(env!("OUT_DIR"), "/embedded_packages.rs"));
+
+/// A store of packages: a directory, or the files in the program. It has,
 /// for each version, a directory with the files of the package
 /// (`4.3.5/package.json`, ...) or a patch file (`4.3.4.patch`): the
 /// differences from another version of the store (`patch.rs`).
+#[derive(Clone)]
+enum Store {
+    Directory(PathBuf),
+    Embedded,
+}
+
+impl Store {
+    /// The bytes of a file of the store. `path` has `/` between its parts.
+    fn read(&self, path: &str) -> Option<Vec<u8>> {
+        match self {
+            Store::Directory(directory) => std::fs::read(directory.join(path)).ok(),
+            Store::Embedded => EMBEDDED.iter().find(|(name, _)| *name == path).map(|(_, bytes)| bytes.to_vec()),
+        }
+    }
+
+    /// The names at the top of the store: the directories and the patch
+    /// files of the versions.
+    fn names(&self) -> Vec<String> {
+        match self {
+            Store::Directory(directory) => std::fs::read_dir(directory)
+                .map(|entries| entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect())
+                .unwrap_or_default(),
+            Store::Embedded => {
+                let mut names: Vec<String> = Vec::new();
+                for (path, _) in EMBEDDED {
+                    let name = path.split('/').next().unwrap_or(path).to_string();
+                    if !names.contains(&name) {
+                        names.push(name);
+                    }
+                }
+                names
+            }
+        }
+    }
+}
+
+/// An npm package `tailwindcss` of a store.
 pub struct DirectoryPackage {
-    store: PathBuf,
+    store: Store,
     version: String,
     /// The patch files that this package read, by their version.
     patches: RefCell<HashMap<String, Option<Rc<Patch>>>>,
@@ -62,7 +106,7 @@ fn is_version(text: &str) -> bool {
 impl DirectoryPackage {
     /// The package of a version in a store, when the store has the
     /// package `tailwindcss` of this version.
-    fn open(store: PathBuf, version: &str) -> Option<Self> {
+    fn open(store: Store, version: &str) -> Option<Self> {
         if !is_version(version) {
             return None;
         }
@@ -92,7 +136,7 @@ impl DirectoryPackage {
         if let Some(known) = self.patches.borrow().get(version) {
             return known.clone();
         }
-        let patch = std::fs::read(self.store.join(format!("{version}.patch"))).ok().and_then(|bytes| Patch::parse(&bytes)).map(Rc::new);
+        let patch = self.store.read(&format!("{version}.patch")).and_then(|bytes| Patch::parse(&bytes)).map(Rc::new);
         self.patches.borrow_mut().insert(version.to_string(), patch.clone());
         patch
     }
@@ -104,7 +148,7 @@ impl DirectoryPackage {
         if depth > 1024 || !is_version(version) {
             return None;
         }
-        if let Ok(bytes) = std::fs::read(self.store.join(version).join(name)) {
+        if let Some(bytes) = self.store.read(&format!("{version}/{name}")) {
             return Some(bytes);
         }
         let patch = self.patch(version)?;
@@ -127,14 +171,17 @@ impl crate::script::Package for DirectoryPackage {
     }
 }
 
-/// The stores: the directory of the environment, and the ZIP directory
-/// of the file of the program.
-fn stores() -> Vec<PathBuf> {
+/// The stores: the directory of the environment, the ZIP directory of the
+/// file of the program, and the store in the program.
+fn stores() -> Vec<Store> {
     let mut stores = Vec::new();
     if let Some(packages) = super::context::var(PACKAGES_VARIABLE).filter(|value| !value.is_empty()) {
-        stores.push(PathBuf::from(packages));
+        stores.push(Store::Directory(PathBuf::from(packages)));
     }
-    stores.push(PathBuf::from(ZIP_PACKAGES));
+    stores.push(Store::Directory(PathBuf::from(ZIP_PACKAGES)));
+    if !EMBEDDED.is_empty() {
+        stores.push(Store::Embedded);
+    }
     stores
 }
 
@@ -147,9 +194,7 @@ fn find_package(version: &str) -> Option<DirectoryPackage> {
 pub fn stored_versions() -> Vec<String> {
     let mut versions: Vec<String> = Vec::new();
     for store in stores() {
-        let Ok(entries) = std::fs::read_dir(&store) else { continue };
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
+        for name in store.names() {
             let name = name.strip_suffix(".patch").unwrap_or(&name).to_string();
             if !versions.contains(&name) && DirectoryPackage::open(store.clone(), &name).is_some() {
                 versions.push(name);

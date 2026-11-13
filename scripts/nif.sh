@@ -21,11 +21,18 @@
 # watch.c has inotify only (TW_WATCH_INOTIFY_ONLY): on the other systems,
 # a watch polls the files.
 #
+# The object has the store of the packages of the script engine, as the
+# ZIP part of the file tailwind.com has it (TAILWIND_COM_EMBED_PACKAGES of
+# native/tailwind/build.rs): each version of Tailwind CSS 4 works, with no
+# other file. PACKAGES selects the versions, as for scripts/build.sh.
+#
 # The object has one section for each kind (native/nif/sections.ld), and
 # no local name that no relocation uses: 14 MB, not 22 MB.
 #
-# Environment: COSMOCC, COSMOCC_VERSION and RUST_NIGHTLY, as for
-# scripts/build.sh.
+# Environment: COSMOCC, COSMOCC_VERSION, RUST_NIGHTLY and PACKAGES, as
+# for scripts/build.sh. The Rust builds go to target/nif: the store in
+# the program changes the crate tailwind, and the builds of
+# scripts/build.sh stay in target.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${1:-$root/build/nif}
@@ -42,6 +49,13 @@ work=$root/build/nif-work
 rm -rf "$work"
 mkdir -p "$work" "$OUT"
 cd "$root"
+
+export CARGO_TARGET_DIR="$root/target/nif"
+if [ "${PACKAGES:-all}" != none ]; then
+    package_store "$work/tailwindcss"
+    log "The store of the packages of $store_count versions of Tailwind CSS goes into the objects"
+    export TAILWIND_COM_EMBED_PACKAGES="$work/tailwindcss"
+fi
 
 for cpu in x86_64 aarch64; do
     d=$work/$cpu

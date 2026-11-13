@@ -112,13 +112,24 @@ defmodule Tailwind do
   Returns the path of `tailwind.com`.
 
   The path of the configuration (`config :tailwind, path: ...`) has
-  priority. The default is `tailwind.com` in the `_build` directory of
+  priority. Then `tailwind.com` in the priv directory of the application
+  `tailwind`, when it is there (for example in the zip of a program of
+  BEAM.com). The default is `tailwind.com` in the `_build` directory of
   the project.
   """
   def bin_path do
+    priv =
+      case :code.priv_dir(:tailwind) do
+        {:error, _} -> nil
+        dir -> Path.join(dir, "tailwind.com")
+      end
+
     cond do
       path = Application.get_env(:tailwind, :path) ->
         Path.expand(path)
+
+      priv && File.regular?(priv) ->
+        priv
 
       Code.ensure_loaded?(Mix.Project) ->
         Path.join(Path.dirname(Mix.Project.build_path()), "tailwind.com")

@@ -61,21 +61,8 @@ log "Linking $OUT with $cc"
 # program reads the directory tailwindcss/ of its own file (/zip).
 if [ "${PACKAGES:-all}" != none ]; then
     command -v zip >/dev/null 2>&1 || { log "The program zip is not there. Install it, or build with PACKAGES=none."; exit 1; }
-    packages=$root/build/packages
-    case "${PACKAGES:-all}" in
-        all) versions=$(grep -v '^#' "$root/PACKAGES" | cut -d' ' -f1) ;;
-        *) versions=$PACKAGES ;;
-    esac
-    # shellcheck disable=SC2086
-    sh "$root/scripts/packages.sh" "$packages" $versions
-    # The newest version in full, and each older version as a patch: the
-    # differences from the next newer version (tools/twpatch). The tool
-    # reads each version back and compares it with its package.
-    versions=$(echo $versions | tr ' ' '\n' | sort -t. -k1,1n -k2,2n -k3,3n | tr '\n' ' ')
-    cargo build -q --release --manifest-path "$root/tools/twpatch/Cargo.toml"
-    # shellcheck disable=SC2086
-    "$root/tools/twpatch/target/release/twpatch" pack "$packages" "$work/zip/tailwindcss" $versions
-    log "Adding the packages of $(echo $versions | wc -w | tr -d ' ') versions of Tailwind CSS"
+    package_store "$work/zip/tailwindcss"
+    log "Adding the packages of $store_count versions of Tailwind CSS"
     (cd "$work/zip" && zip -q -9 -r -X "$work/tailwind.com" tailwindcss)
 fi
 

@@ -50,6 +50,16 @@ run(Root, Path, Dir) ->
     {Status1, _} = tailwind_nif:run(["--version"], #{env => [{"TAILWINDCSS_VERSION", "4.999.0"}]}, Fold, []),
     check("a version that is not there gives 1", 1, Status1),
 
+    %% An older version: the store of the packages in the object.
+    {Status3, Out3} = tailwind_nif:run(["--version"], #{env => [{"TAILWINDCSS_VERSION", "4.0.0"}]}, Fold, []),
+    check("the version 4.0.0 is in the object", {0, true},
+        {Status3, has(iolist_to_binary(Out3), <<"(tailwindcss v4.0.0)">>)}),
+    {Status4, _} = tailwind_nif:run(["-i", "app.css", "-o", "old.css"],
+        #{cd => Project, env => [{"TAILWINDCSS_VERSION", "4.1.0"}]}, Fold, []),
+    check("a build as 4.1.0 gives the status 0", 0, Status4),
+    check("the CSS is of 4.1.0", true,
+        has(read(filename:join(Project, "old.css")), <<"tailwindcss v4.1.0">>)),
+
     %% A JavaScript plugin: QuickJS in the object.
     ok = file:write_file(filename:join(Project, "plugin.js"),
         <<"module.exports = function ({ addUtilities }) { addUtilities({ '.from-js': { color: 'red' } }) }\n">>),
