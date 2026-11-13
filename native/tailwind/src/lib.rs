@@ -11,6 +11,8 @@ pub mod candidate;
 pub mod cli;
 pub mod compat;
 pub mod compile;
+#[cfg(feature = "ape-mimalloc")]
+mod cosmo_allocator;
 pub mod css_functions;
 pub mod css_parser;
 pub mod design_system;

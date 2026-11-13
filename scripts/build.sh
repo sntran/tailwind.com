@@ -41,12 +41,13 @@ for cpu in $CPUS; do
     d=$work; [ "$cpu" = aarch64 ] && d=$work/.aarch64
     mkdir -p "$d"
     log "Building the Rust library for $cpu"
-    rust_staticlib "$cpu" tailwind tailwind "$d/libtailwind.a"
-    log "Building QuickJS for $cpu"
+    rust_staticlib "$cpu" tailwind tailwind "$d/libtailwind.a" ape-mimalloc
+    log "Building QuickJS and mimalloc for $cpu"
     c_objects "$cpu" "$d"
+    mimalloc_object "$cpu" "$d/mimalloc.o"
     # One object with one global name, tailwind_main.
     # shellcheck disable=SC2086
-    sh "$root/scripts/rust_link.sh" "$C" "$cpu" tailwind_main "$d/tailwind.o" $objects "$d/libtailwind.a"
+    sh "$root/scripts/rust_link.sh" "$C" "$cpu" tailwind_main "$d/tailwind.o" $objects "$d/mimalloc.o" "$d/libtailwind.a"
 done
 
 cp "$root/native/tailwind/c_src/main.c" "$work/main.c"

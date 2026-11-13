@@ -41,6 +41,12 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   about 25% less time, and its peak memory is 91 MB, not 75 MB. The
   library does not set an allocator, and `wasm32-wasip1` does not use
   mimalloc.
+- The file `tailwind.com` uses mimalloc 2 too (the feature
+  `ape-mimalloc`): `scripts/build.sh` compiles it with cosmocc, from the C
+  source of the crate `libmimalloc-sys` of `Cargo.lock`. With the change
+  above, a large build takes 124 ms, not 232 ms, and the peak memory does
+  not change. The file is 370 KB larger. The native NIF objects keep the
+  allocator of `beam.com`.
 - The scanner of Tailwind CSS is a copy in the repository
   (`native/scanner`), not a dependency on the git repository of Tailwind
   CSS: three crates with no change in their code, and manifests of ours
