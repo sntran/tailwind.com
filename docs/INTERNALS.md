@@ -402,9 +402,12 @@ source map, the JSON text has none of these keys.
   optimizer, with a new source map: the parts of `magic-string`
   (`generateMap` with `hires: 'boundary'`) and of
   `@jridgewell/remapping` that Tailwind CSS uses for it.
-- The scanner is the crate `tailwindcss-oxide` of Tailwind CSS: the
-  detection of source files, `.gitignore`, and the extraction of
-  candidates are the code of Tailwind CSS itself.
+- The scanner is the code of Tailwind CSS itself: the detection of
+  source files, `.gitignore`, and the extraction of candidates. Its three
+  crates (`crates/oxide`, `crates/classification-macros` and
+  `crates/ignore` of Tailwind CSS) are a copy with no change in
+  `native/scanner`, with our manifests, so that crates.io can take them
+  (`native/scanner/README.md`).
 
 ### The watch
 

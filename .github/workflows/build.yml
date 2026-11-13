@@ -57,8 +57,17 @@ jobs:
           sh scripts/compat.sh "$RUNNER_TEMP/tailwindcss"
           git diff --exit-code -- native/tailwind/assets
           test -z "$(git status --porcelain -- native/tailwind/assets)"
+      - name: The scanner, from the source of Tailwind CSS
+        run: |
+          sh scripts/scanner.sh "$RUNNER_TEMP/tailwindcss"
+          git diff --exit-code -- native/scanner
+          test -z "$(git status --porcelain -- native/scanner)"
+      - name: The tests of the scanner
+        run: cargo test --release -p tailwind-com-scanner -p tailwind-com-ignore -p tailwind-com-classification-macros
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        # --no-deps: the compiler only. The scanner (native/scanner) is a
+        # copy of the code of Tailwind CSS, with no change.
+        run: cargo clippy --no-deps --all-targets -- -D warnings
       - name: The tests, against the record of Tailwind CSS
         run: cargo test --release
       - name: The program, against the record of the official program
@@ -183,6 +192,18 @@ jobs:
           # pages.yml run by hand deploys the site of the newest run on
           # main.
           retention-days: 90
+
+  # The crates for crates.io (native/scanner/README.md): each crate must
+  # build alone from its package, as crates.io builds it. Now the three
+  # crates of the scanner.
+  crates:
+    name: The crates for crates.io
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: cargo publish --dry-run -p tailwind-com-classification-macros -p tailwind-com-ignore -p tailwind-com-scanner
 
   tlc:
     name: The TLA+ models

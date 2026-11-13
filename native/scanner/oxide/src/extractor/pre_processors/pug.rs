@@ -1,0 +1,463 @@
+use crate::cursor;
+use crate::extractor::bracket_stack::BracketStack;
+use crate::extractor::machine::{Machine, MachineState};
+use crate::extractor::pre_processors::pre_processor::PreProcessor;
+use crate::extractor::variant_machine::VariantMachine;
+
+#[derive(Debug, Default)]
+pub struct Pug;
+
+impl PreProcessor for Pug {
+    fn process(&self, content: &[u8]) -> Vec<u8> {
+        let len = content.len();
+        let mut result = content.to_vec();
+        let mut cursor = cursor::Cursor::new(content);
+        let mut bracket_stack = BracketStack::default();
+
+        // Whether the outermost open bracket is the `(` of a Pug attribute list. E.g.:
+        //
+        // ```pug
+        // a(href="#")
+        //  ^
+        // ```
+        let mut in_attributes = false;
+
+        // Whether we are still in the leading whitespace of a line.
+        let mut at_line_start = true;
+
+        // Whether we are in the tag part of a line, i.e. the tag name, class and id shorthands
+        // and mixin calls before any whitespace or text content. An attribute list can only
+        // start here. E.g.:
+        //
+        // ```pug
+        // a.flex(href="#") call(
+        // ^^^^^^ Tag      ^^^^^^ Text
+        // ```
+        let mut in_tag = false;
+
+        // After a block-expansion `:`, spaces/tabs before the nested tag must not clear `in_tag`.
+        let mut in_block_expansion_whitespace = false;
+
+        // The quote of the string we are in, inside of an attribute list. Brackets in a string
+        // are text, so they should not be tracked. E.g.:
+        //
+        // ```pug
+        // a(title="a (b")
+        //          ^^^^^ Not an open `(`
+        // ```
+        let mut quote: Option<u8> = None;
+
+        // The position of the opening quote of the string we are in.
+        let mut quote_start = 0;
+
+        // Whether quotes are text until the end of the line, because a string on this line didn't
+        // end. E.g.: the `"` in a regex like `/"/`.
+        let mut quotes_are_text = false;
+
+        while cursor.pos < len {
+            if let Some(q) = quote {
+                match cursor.curr() {
+                    // Skip the escaped character. E.g.: `"a \" ("`
+                    b'\\' => cursor.advance(),
+                    c if c == q => quote = None,
+
+                    // Only template literals can span multiple lines, so this quote didn't start
+                    // a string. E.g.: `// don't cache` in a `script.` block, or a regex like
+                    // `/"/`. Scan the rest of the line again, with quotes as text, so that an
+                    // unpaired quote can't hide brackets like the `)` of the attribute list. The
+                    // end of the input also ends the line.
+                    c if q != b'`' && (c == b'\n' || cursor.pos + 1 == len) => {
+                        quote = None;
+                        quotes_are_text = true;
+                        cursor.move_to(quote_start + 1);
+                        continue;
+                    }
+
+                    _ => {}
+                }
+
+                cursor.advance();
+                continue;
+            }
+
+            if at_line_start && !matches!(cursor.curr(), b' ' | b'\t' | b'\r' | b'\n') {
+                at_line_start = false;
+
+                // Lines starting with `|`, `//`, `-`, `=`, `<`, etc. are text, comments or code.
+                in_tag = cursor.curr().is_ascii_alphabetic()
+                    || matches!(cursor.curr(), b'.' | b'#' | b'+');
+            }
+
+            match cursor.curr() {
+                // Pug attribute lists can span multiple lines, but brackets in text or comments
+                // can't, so an unbalanced bracket there should not leak into the next line. E.g.:
+                //
+                // ```pug
+                // p
+                //   | (
+                //   span.underline.font-bold(title="x") km
+                //   | )
+                // ```
+                b'\n' if !in_attributes => {
+                    bracket_stack.reset();
+                    at_line_start = true;
+                    in_tag = false;
+                    in_block_expansion_whitespace = false;
+                }
+
+                b'"' | b'\'' | b'`' if in_attributes && !quotes_are_text => {
+                    quote = Some(cursor.curr());
+                    quote_start = cursor.pos;
+                }
+
+                // Whitespace ends the tag part of the line, unless it follows a `:` for block
+                // expansion (including repeated spaces/tabs). E.g.: `li:  a(href="#")`
+                b' ' | b'\t' if bracket_stack.is_empty() && !in_block_expansion_whitespace => {
+                    in_tag = false;
+                }
+
+                b':' if bracket_stack.is_empty() => {
+                    in_block_expansion_whitespace = true;
+                }
+
+                // Only replace `.` with a space if it's not surrounded by numbers. E.g.:
+                //
+                // ```diff
+                // - .flex.items-center
+                // +  flex items-center
+                // ```
+                //
+                // But with numbers, it's allowed:
+                //
+                // ```diff
+                // - px-2.5
+                // + px-2.5
+                // ```
+                b'.' => {
+                    // Don't replace dots with spaces when inside of any type of brackets, because
+                    // this could be part of arbitrary values. E.g.: `bg-[url(https://example.com)]`
+                    //                                                                       ^
+                    if !bracket_stack.is_empty() {
+                        cursor.advance();
+                        continue;
+                    }
+
+                    // If the dot is surrounded by digits, we want to keep it. E.g.: `px-2.5`
+                    // EXCEPT if it's followed by a valid variant that happens to start with a
+                    // digit.
+                    // E.g.: `bg-red-500.2xl:flex`
+                    //                 ^^^
+                    if cursor.prev().is_ascii_digit() && cursor.next().is_ascii_digit() {
+                        let mut next_cursor = cursor.clone();
+                        next_cursor.advance();
+
+                        let mut variant_machine = VariantMachine::default();
+                        if let MachineState::Done(_) = variant_machine.next(&mut next_cursor) {
+                            result[cursor.pos] = b' ';
+                        }
+                    } else {
+                        result[cursor.pos] = b' ';
+                    }
+                }
+
+                // In Pug the class name shorthand can be followed by a parenthesis. E.g.:
+                //
+                // ```pug
+                // body.border-t-4.p-8(attr=value)
+                //                    ^ Not part of the p-8 class
+                // ```
+                //
+                // This means that we need to replace all these `(` and `)` with spaces to make
+                // sure that we can extract the `p-8`.
+                //
+                // However, we also need to make sure that we keep the parens that are part of the
+                // utility class. E.g.: `bg-(--my-color)`.
+                b'(' if bracket_stack.is_empty() && !matches!(cursor.prev(), b'-' | b'/') => {
+                    result[cursor.pos] = b' ';
+                    bracket_stack.push(cursor.curr());
+
+                    // A `(` in the tag part of the line opens an attribute list.
+                    in_attributes = in_tag;
+                }
+
+                b'(' | b'[' | b'{' => {
+                    bracket_stack.push(cursor.curr());
+                }
+
+                b')' | b']' | b'}' if !bracket_stack.is_empty() => {
+                    bracket_stack.pop(cursor.curr());
+
+                    if bracket_stack.is_empty() {
+                        in_attributes = false;
+                    }
+                }
+
+                // Consume everything else
+                _ => {}
+            };
+
+            if !matches!(cursor.curr(), b' ' | b'\t' | b':') {
+                in_block_expansion_whitespace = false;
+            }
+
+            if cursor.curr() == b'\n' {
+                quotes_are_text = false;
+            }
+
+            cursor.advance();
+        }
+
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Pug;
+    use crate::extractor::pre_processors::pre_processor::PreProcessor;
+
+    #[test]
+    fn test_pug_pre_processor() {
+        for (input, expected) in [
+            // Convert dots to spaces
+            ("div.flex.bg-red-500", "div flex bg-red-500"),
+            (".flex.bg-red-500", " flex bg-red-500"),
+            // Keep dots in strings
+            (r#"div(class="px-2.5")"#, r#"div class="px-2.5")"#),
+            // Nested brackets
+            (
+                "bg-[url(https://example.com/?q=[1,2])]",
+                "bg-[url(https://example.com/?q=[1,2])]",
+            ),
+            // Classes in HTML attributes
+            (r#"<div id="px-2.5"></div>"#, r#"<div id="px-2.5"></div>"#),
+        ] {
+            Pug::test(input, expected);
+        }
+    }
+
+    #[test]
+    fn test_strings_only_occur_when_nested() {
+        let input = r#"
+            p.mt-2.text-xl
+              div The quote in the next word, can't be the start of a string
+
+            h3.mt-24.text-center.text-4xl.font-bold.italic
+              div The classes above should be extracted
+        "#;
+
+        Pug::test_extract_contains(
+            input,
+            vec![
+                // First paragraph
+                "mt-2",
+                "text-xl",
+                // second paragraph
+                "mt-24",
+                "text-center",
+                "text-4xl",
+                "font-bold",
+                "italic",
+            ],
+        );
+    }
+
+    #[test]
+    fn test_arbitrary_code_followed_by_classes() {
+        let input = r#"
+            - i < 3
+              .flex.items-center
+        "#;
+        Pug::test_extract_contains(input, vec!["flex", "items-center"]);
+    }
+
+    // https://github.com/tailwindlabs/tailwindcss/issues/17313
+    #[test]
+    fn test_class_shorthand_followed_by_parens() {
+        let input = r#"
+            .text-sky-600.bg-neutral-900(title="A tooltip") This div has an HTML attribute.
+        "#;
+        Pug::test_extract_contains(input, vec!["text-sky-600", "bg-neutral-900"]);
+
+        // Additional test with CSS Variable shorthand syntax in the attribute itself because `(`
+        // and `)` are not valid in the class shorthand version.
+        //
+        // Also included an arbitrary value including `(` and `)` to make sure that we don't
+        // accidentally remove those either.
+        let input = r#"
+            .p-8(class="bg-(--my-color) bg-(--my-color)/(--my-opacity) bg-[url(https://example.com)]")
+        "#;
+        Pug::test_extract_contains(
+            input,
+            vec![
+                "p-8",
+                "bg-(--my-color)",
+                "bg-(--my-color)/(--my-opacity)",
+                "bg-[url(https://example.com)]",
+            ],
+        );
+    }
+
+    // https://github.com/tailwindlabs/tailwindcss/issues/20545
+    #[test]
+    fn test_unbalanced_brackets_in_text_do_not_leak_to_next_line() {
+        let input = r#"
+            p
+              | (
+              span.underline.font-bold(title="x") km
+              | )
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        let input = r#"
+            //- a bare "(" here
+            span.underline.font-bold(title="x") km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        let input = r#"
+            p.mt-2 Some text (with an unbalanced paren
+            span.underline.font-bold(title="x") km
+        "#;
+        Pug::test_extract_contains(input, vec!["mt-2", "underline", "font-bold"]);
+    }
+
+    #[test]
+    fn test_unbalanced_paren_after_a_word_in_text_does_not_leak_to_next_line() {
+        let input = r#"
+            p
+              | call(
+              span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        let input = r#"
+            p call(foo
+            span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        let input = r#"
+            //- TODO(
+            span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+    }
+
+    #[test]
+    fn test_multiline_attribute_lists() {
+        let input = r#"
+            a.flex.items-center(
+              href="https://example.com"
+              class="bg-[url(https://example.com/a.png)] px-2.5"
+            ) Link
+            span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(
+            input,
+            vec![
+                "flex",
+                "items-center",
+                "bg-[url(https://example.com/a.png)]",
+                "px-2.5",
+                "underline",
+                "font-bold",
+            ],
+        );
+
+        let input = r#"
+            +card(
+              "title"
+            )
+            li: a.w-[10px](
+              href="/home"
+            ) Link
+            span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(input, vec!["w-[10px]", "underline", "font-bold"]);
+    }
+
+    #[test]
+    fn test_block_expansion_with_multiple_spaces_keeps_attribute_context() {
+        // Two spaces/tabs after the colon must not clear `in_tag`, or the `(` is not treated as a
+        // multiline attribute list and dots in attribute values get turned into spaces.
+        Pug::test(
+            "li:  a(\n  href=\"x.flex\"\n)",
+            "li:  a \n  href=\"x.flex\"\n)",
+        );
+        Pug::test(
+            "li:\t\ta(\n  href=\"x.flex\"\n)",
+            "li:\t\ta \n  href=\"x.flex\"\n)",
+        );
+
+        let long_gap = " ".repeat(256);
+        Pug::test(
+            &format!("li:{long_gap}a(\n  href=\"x.flex\"\n)"),
+            &format!("li:{long_gap}a \n  href=\"x.flex\"\n)"),
+        );
+
+        let input = r#"
+            li:  a(
+              href="x.flex"
+              class="underline font-bold"
+            ) Link
+            span.mt-2 km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold", "mt-2"]);
+    }
+
+    #[test]
+    fn test_unbalanced_brackets_in_quoted_attribute_values() {
+        let input = r#"
+            a(title="a (b") Link
+            span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        let input = r#"
+            a(title='a [b' data-x=`{c`) Link
+            span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        let input = r#"
+            a(title="a \" (b") Link
+            span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        // A quote in a regex is not a string, so it does not hide the `)` of the attribute list
+        let input = r#"
+            input(pattern=/"/.source)
+            span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        let input = r#"
+            input(pattern=/"/.source title="x")
+            span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        // Also on the last line, without a trailing newline
+        let input = r#"div(data-pattern=/"/.source): span.underline.font-bold"#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        // A `'` or `"` string can't span lines, so an unpaired quote does not hide the next lines
+        let input = r#"
+            script.
+              fetch(url, {
+                // don't cache
+              })
+            span.underline.font-bold km
+        "#;
+        Pug::test_extract_contains(input, vec!["underline", "font-bold"]);
+
+        // A `)` in a string does not close the attribute list, so dots in later attribute values
+        // are kept.
+        Pug::test(
+            "a(\n  title=\"a )\"\n  href=\"x.flex\"\n)",
+            "a \n  title=\"a )\"\n  href=\"x.flex\"\n)",
+        );
+    }
+}

@@ -10,10 +10,18 @@ source of this repository keeps the license texts in licenses/.
 
 Tailwind CSS 4.3.5 (the compiler that native/tailwind follows file by
 file, the stylesheets in native/tailwind/assets, the plugin layer in
-native/tailwind/assets/compat.js, the scanner crate tailwindcss-oxide,
-and the recorded test data in tests/upstream)
+native/tailwind/assets/compat.js, the scanner crates in native/scanner
+(crates/oxide and crates/classification-macros of Tailwind CSS), and the
+recorded test data in tests/upstream)
   Copyright (c) Tailwind Labs, Inc.
   MIT License (licenses/tailwindcss.txt).
+
+ignore 0.4.33, as Tailwind CSS changed it (the matching of .gitignore
+files for the scanner, in native/scanner/ignore)
+  Copyright (c) 2015 Andrew Gallant.
+  MIT License or the Unlicense (native/scanner/ignore/LICENSE-MIT,
+  native/scanner/ignore/UNLICENSE).
+  https://github.com/BurntSushi/ripgrep/tree/master/crates/ignore
   https://github.com/tailwindlabs/tailwindcss
 
 Lightning CSS 1.0.0-alpha.72 (the optimizer of --minify and --optimize)

@@ -1,11 +1,11 @@
 [package]
 name = "tailwind"
-version = "0.2.0"
+version.workspace = true
 edition = "2021"
 rust-version = "1.85"
 license = "Apache-2.0"
 description = "A Tailwind CSS compiler in one file"
-repository = "https://github.com/sntran/tailwind.com"
+repository.workspace = true
 
 build = "build.rs"
 
@@ -36,8 +36,9 @@ ape = ["cli"]
 
 [dependencies]
 indexmap = "2"
-# The scanner of Tailwind CSS, from the same release as the compiler.
-tailwindcss-oxide = { git = "https://github.com/tailwindlabs/tailwindcss.git", tag = "v4.3.5", optional = true }
+# The scanner of Tailwind CSS, from the same release as the compiler: a
+# copy in native/scanner (scripts/scanner.sh).
+tailwindcss-oxide = { workspace = true, optional = true }
 # The version that the npm package lightningcss 1.33.0 has: the optimizer
 # of Tailwind CSS 4.3.5.
 lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["sourcemap"], optional = true }

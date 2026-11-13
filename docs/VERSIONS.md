@@ -146,8 +146,8 @@ version, these are the same as the official program of that version:
 These parts are the code of this program, for each version:
 
 - **The command line program** (the options, the messages, the watch).
-- **The scanner of source files**: the `tailwindcss-oxide` crate of the
-  version of `UPSTREAM`. An older version of Tailwind CSS has an older
+- **The scanner of source files**: the scanner of the version of
+  `UPSTREAM` (`native/scanner`). An older version of Tailwind CSS has an older
   scanner, which can find other candidates in a source file in rare
   cases.
 - **The optimizer** (`--minify`, `--optimize`): the Lightning CSS of the

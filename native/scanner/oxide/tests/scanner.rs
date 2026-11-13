@@ -1,0 +1,4080 @@
+#[cfg(test)]
+mod scanner {
+    use insta::assert_snapshot;
+    use pretty_assertions::assert_eq;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+    use std::thread::sleep;
+    use std::time::Duration;
+    use std::{fs, path};
+
+    use tailwindcss_oxide::*;
+    use tempfile::tempdir;
+
+    fn symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
+        #[cfg(not(windows))]
+        let result = std::os::unix::fs::symlink(original, link);
+
+        #[cfg(windows)]
+        let result = std::os::windows::fs::symlink_dir(original, link);
+
+        result
+    }
+
+    fn symlink_file<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
+        #[cfg(not(windows))]
+        let result = std::os::unix::fs::symlink(original, link);
+
+        #[cfg(windows)]
+        let result = std::os::windows::fs::symlink_file(original, link);
+
+        result
+    }
+
+    fn public_source_entry_from_pattern(dir: PathBuf, pattern: &str) -> PublicSourceEntry {
+        let mut parts = pattern.split_whitespace();
+        let _ = parts.next().unwrap_or_default();
+        let not_or_pattern = parts.next().unwrap_or_default();
+        if not_or_pattern == "not" {
+            let pattern = parts.next().unwrap_or_default();
+            return PublicSourceEntry {
+                base: dir.to_string_lossy().into(),
+                pattern: pattern[1..pattern.len() - 1].to_string(),
+                negated: true,
+            };
+        }
+
+        PublicSourceEntry {
+            base: dir.to_string_lossy().into(),
+            pattern: not_or_pattern[1..not_or_pattern.len() - 1].to_string(),
+            negated: false,
+        }
+    }
+
+    struct ScanResult {
+        files: Vec<String>,
+        globs: Vec<String>,
+        normalized_sources: Vec<String>,
+        candidates: Vec<String>,
+        tree: String,
+    }
+
+    /// Renders the directory as a tree, annotating every file and folder with an indicator that
+    /// shows whether the scanner picked it up:
+    ///
+    /// - `✓` — scanned
+    /// - `✗` — ignored / skipped
+    ///
+    /// Symlinks are rendered as `link → target`, where the target is shown relative to the folder
+    /// containing the symlink. The contents of every `.gitignore` file are printed right below the
+    /// file itself.
+    ///
+    /// Folders that are a git repository root (they contain a `.git` folder) are marked with
+    /// `(git)`, because ignore rules behave differently inside and outside of a repository.
+    fn fs_tree(root: &Path, scanned: &[String]) -> String {
+        /// Computes the relative path from `parent` to `target`, where both are relative to the
+        /// same root, e.g.: `b/c` seen from `b` is `c`, and the root itself seen from `b` is `..`.
+        fn relative_to(target: &Path, parent: &Path) -> String {
+            let target = target.components().collect::<Vec<_>>();
+            let parent = parent.components().collect::<Vec<_>>();
+
+            let common = target
+                .iter()
+                .zip(&parent)
+                .take_while(|(a, b)| **a == **b)
+                .count();
+
+            let mut parts = vec![".."; parent.len() - common];
+            parts.extend(
+                target[common..]
+                    .iter()
+                    .map(|component| component.as_os_str().to_str().unwrap()),
+            );
+
+            if parts.is_empty() {
+                // The symlink points to its own parent folder
+                ".".into()
+            } else {
+                parts.join("/")
+            }
+        }
+
+        fn walk(
+            dir: &Path,
+            root: &Path,
+            prefix: &str,
+            scanned: &[String],
+            visited: &mut Vec<PathBuf>,
+            out: &mut String,
+        ) {
+            let mut entries = fs::read_dir(dir)
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name() != ".git")
+                .collect::<Vec<_>>();
+            entries.sort_by_key(|entry| entry.file_name());
+
+            for (i, entry) in entries.iter().enumerate() {
+                let last = i == entries.len() - 1;
+                let connector = if last { "└── " } else { "├── " };
+                let child_prefix = if last { "    " } else { "│   " };
+
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
+                let rel = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+
+                let file_type = entry.file_type().unwrap();
+
+                // a file is scanned when it shows up in the scanned files list. a folder is
+                // considered scanned when any scanned file lives inside of it. paths that go
+                // through a symlink count towards the symlink, not towards the target directory.
+                let dir_prefix = format!("{rel}/");
+                let is_scanned = scanned
+                    .iter()
+                    .any(|file| file == &rel || file.starts_with(&dir_prefix));
+                let indicator = if is_scanned { "✓" } else { "✗" };
+
+                let mut display_name = name.clone();
+                if path.join(".git").exists() {
+                    display_name = format!("{display_name} (git)");
+                }
+                if file_type.is_symlink() {
+                    if let Ok(target) = fs::read_link(&path) {
+                        // Show the target relative to the folder containing the symlink, or as-is
+                        // when it points outside of the tree.
+                        let target = match (target.strip_prefix(root), dir.strip_prefix(root)) {
+                            (Ok(target), Ok(parent)) => relative_to(target, parent),
+                            _ => target.to_string_lossy().replace('\\', "/"),
+                        };
+                        display_name = format!("{name} → {target}");
+
+                        // The symlink points to a target that doesn't exist
+                        if path.metadata().is_err() {
+                            display_name = format!("{display_name} (broken)");
+                        }
+                    }
+                }
+
+                out.push_str(&format!("{prefix}{connector}{indicator} {display_name}\n"));
+
+                // Print the contents of `.gitignore` files below the file itself, so the ignore
+                // rules are visible in the same output.
+                if name == ".gitignore" {
+                    if let Ok(contents) = fs::read_to_string(&path) {
+                        for line in contents.lines() {
+                            let line = format!("{prefix}{child_prefix}    {line}");
+                            out.push_str(line.trim_end());
+                            out.push('\n');
+                        }
+                    }
+                }
+
+                // Descend into directories, including symlinked ones. The paths inside a symlinked
+                // directory are computed through the symlink, so the indicators show what the
+                // scanner saw via that route. A visited stack prevents symlink cycles from
+                // recursing forever.
+                if path.metadata().map(|meta| meta.is_dir()).unwrap_or(false) {
+                    let Ok(canonical) = dunce::canonicalize(&path) else {
+                        continue;
+                    };
+                    if visited.contains(&canonical) {
+                        continue;
+                    }
+
+                    visited.push(canonical);
+                    walk(
+                        &path,
+                        root,
+                        &format!("{prefix}{child_prefix}"),
+                        scanned,
+                        visited,
+                        out,
+                    );
+                    visited.pop();
+                }
+            }
+        }
+
+        let mut visited = vec![dunce::canonicalize(root).unwrap()];
+        let mut out = if root.join(".git").exists() {
+            String::from(". (git)\n")
+        } else {
+            String::from(".\n")
+        };
+        walk(root, root, "", scanned, &mut visited, &mut out);
+        out
+    }
+
+    fn create_files_in(dir: &path::Path, paths: &[(&str, &str)]) {
+        // Create the necessary files
+        for (path, contents) in paths {
+            // Ensure we use the right path separator for the current platform
+            let path = dir.join(path.replace('/', path::MAIN_SEPARATOR.to_string().as_str()));
+            let parent = path.parent().unwrap();
+            if !parent.exists() {
+                fs::create_dir_all(parent).unwrap();
+            }
+
+            fs::write(path, contents).unwrap()
+        }
+    }
+
+    fn scanned_files(scanner: &mut Scanner, base: &Path) -> Vec<String> {
+        let base_dir =
+            format!("{}{}", dunce::canonicalize(base).unwrap().display(), "/").replace('\\', "/");
+
+        let mut files = scanner
+            .get_files()
+            .iter()
+            // Normalize paths to use unix style separators
+            .map(|file| file.replace('\\', "/").replace(&base_dir, ""))
+            .collect::<Vec<_>>();
+        files.sort();
+        files
+    }
+
+    fn scanned_globs(scanner: &mut Scanner, base: &Path) -> Vec<String> {
+        let base_dir =
+            format!("{}{}", dunce::canonicalize(base).unwrap().display(), "/").replace('\\', "/");
+
+        let mut globs = scanner
+            .get_globs()
+            .iter()
+            .map(|glob| {
+                if glob.pattern.starts_with('/') {
+                    format!("{}{}", glob.base, glob.pattern)
+                } else {
+                    format!("{}/{}", glob.base, glob.pattern)
+                }
+            })
+            // Normalize paths to use unix style separators
+            .map(|file| file.replace('\\', "/").replace(&base_dir, ""))
+            .collect::<Vec<_>>();
+        globs.sort();
+        globs
+    }
+
+    fn normalize_files(files: Vec<String>, base: &Path) -> Vec<String> {
+        let base_dir =
+            format!("{}{}", dunce::canonicalize(base).unwrap().display(), "/").replace('\\', "/");
+
+        let mut files = files
+            .iter()
+            .map(|file| file.replace('\\', "/").replace(&base_dir, ""))
+            .collect::<Vec<_>>();
+        files.sort();
+        files
+    }
+
+    fn scan_with_globs(
+        paths_with_content: &[(&str, &str)],
+        source_directives: Vec<&str>,
+    ) -> ScanResult {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Initialize this directory as a git repository
+        let _ = Command::new("git").arg("init").current_dir(&dir).output();
+
+        // Create the necessary files
+        self::create_files_in(&dir, paths_with_content);
+
+        let base = format!("{}", dir.display()).replace('\\', "/");
+
+        // Resolve all content paths for the (temporary) current working directory
+        let sources: Vec<PublicSourceEntry> = source_directives
+            .iter()
+            .map(|str| public_source_entry_from_pattern(base.clone().into(), str))
+            .collect();
+
+        let mut scanner = Scanner::new(sources);
+
+        let candidates = scanner.scan();
+        let base_dir =
+            format!("{}{}", dunce::canonicalize(&base).unwrap().display(), "/").replace('\\', "/");
+
+        // Get all scanned files as strings relative to the base directory
+        let files = scanned_files(&mut scanner, Path::new(&base));
+
+        // Get all scanned globs as strings relative to the base directory
+        let globs = scanned_globs(&mut scanner, Path::new(&base));
+
+        // Get all normalized sources as strings relative to the base directory
+        let mut normalized_sources = scanner
+            .get_normalized_sources()
+            .iter()
+            .map(|glob| {
+                if glob.pattern.starts_with('/') {
+                    format!("{}{}", glob.base, glob.pattern)
+                } else {
+                    format!("{}/{}", glob.base, glob.pattern)
+                }
+            })
+            // Normalize paths to use unix style separators
+            .map(|file| file.replace('\\', "/").replace(&base_dir, ""))
+            .collect::<Vec<_>>();
+        normalized_sources.sort();
+
+        let tree = fs_tree(&dir, &files);
+
+        ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            candidates,
+            tree,
+        }
+    }
+
+    fn scan(paths_with_content: &[(&str, &str)]) -> ScanResult {
+        scan_with_globs(paths_with_content, vec!["@source '**/*'"])
+    }
+
+    #[test]
+    fn it_should_work_with_a_set_of_root_files() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            ("index.html", ""),
+            ("a.html", ""),
+            ("b.html", ""),
+            ("c.html", ""),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ a.html
+        ├── ✓ b.html
+        ├── ✓ c.html
+        └── ✓ index.html
+        ");
+        assert_eq!(files, vec!["a.html", "b.html", "c.html", "index.html"]);
+        assert_eq!(globs, vec!["*"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_work_with_a_set_of_root_files_and_ignore_ignored_files() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            (".gitignore", "b.html"),
+            ("index.html", ""),
+            ("a.html", ""),
+            ("b.html", ""),
+            ("c.html", ""),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       b.html
+        ├── ✓ a.html
+        ├── ✗ b.html
+        ├── ✓ c.html
+        └── ✓ index.html
+        ");
+
+        assert_eq!(files, vec!["a.html", "c.html", "index.html"]);
+        assert_eq!(globs, vec!["*"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_list_all_files_in_the_public_folder_explicitly() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            ("index.html", ""),
+            ("public/a.html", ""),
+            ("public/b.html", ""),
+            ("public/c.html", ""),
+            ("public/nested/c.html", ""),
+            ("public/deeply/nested/c.html", ""),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ index.html
+        └── ✓ public
+            ├── ✓ a.html
+            ├── ✓ b.html
+            ├── ✓ c.html
+            ├── ✓ deeply
+            │   └── ✓ nested
+            │       └── ✓ c.html
+            └── ✓ nested
+                └── ✓ c.html
+        ");
+
+        assert_eq!(
+            files,
+            vec![
+                "index.html",
+                "public/a.html",
+                "public/b.html",
+                "public/c.html",
+                "public/deeply/nested/c.html",
+                "public/nested/c.html",
+            ]
+        );
+        assert_eq!(globs, vec!["*"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_list_nested_folders_explicitly_in_the_public_folder() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            ("index.html", ""),
+            ("public/a.html", ""),
+            ("public/b.html", ""),
+            ("public/c.html", ""),
+            ("public/nested/a.html", ""),
+            ("public/nested/b.html", ""),
+            ("public/nested/c.html", ""),
+            ("public/nested/again/a.html", ""),
+            ("public/very/deeply/nested/a.html", ""),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ index.html
+        └── ✓ public
+            ├── ✓ a.html
+            ├── ✓ b.html
+            ├── ✓ c.html
+            ├── ✓ nested
+            │   ├── ✓ a.html
+            │   ├── ✓ again
+            │   │   └── ✓ a.html
+            │   ├── ✓ b.html
+            │   └── ✓ c.html
+            └── ✓ very
+                └── ✓ deeply
+                    └── ✓ nested
+                        └── ✓ a.html
+        ");
+
+        assert_eq!(
+            files,
+            vec![
+                "index.html",
+                "public/a.html",
+                "public/b.html",
+                "public/c.html",
+                "public/nested/a.html",
+                "public/nested/again/a.html",
+                "public/nested/b.html",
+                "public/nested/c.html",
+                "public/very/deeply/nested/a.html",
+            ]
+        );
+        assert_eq!(globs, vec!["*",]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_list_all_files_in_the_public_folder_explicitly_except_ignored_files() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            (".gitignore", "public/b.html\na.html"),
+            ("index.html", ""),
+            ("public/a.html", ""),
+            ("public/b.html", ""),
+            ("public/c.html", ""),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       public/b.html
+        │       a.html
+        ├── ✓ index.html
+        └── ✓ public
+            ├── ✗ a.html
+            ├── ✗ b.html
+            └── ✓ c.html
+        ");
+
+        assert_eq!(files, vec!["index.html", "public/c.html",]);
+        assert_eq!(globs, vec!["*"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_use_a_glob_for_top_level_folders() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            ("index.html", ""),
+            ("src/a.html", ""),
+            ("src/b.html", ""),
+            ("src/c.html", ""),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ index.html
+        └── ✓ src
+            ├── ✓ a.html
+            ├── ✓ b.html
+            └── ✓ c.html
+        ");
+
+        assert_eq!(
+            files,
+            vec!["index.html", "src/a.html", "src/b.html", "src/c.html"]
+        );
+        assert_eq!(globs, vec![
+            "*",
+            "src/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+        ]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_ignore_binary_files() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            ("index.html", ""),
+            ("a.mp4", ""),
+            ("b.png", ""),
+            ("c.lock", ""),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ a.mp4
+        ├── ✗ b.png
+        ├── ✗ c.lock
+        └── ✓ index.html
+        ");
+
+        assert_eq!(files, vec!["index.html"]);
+        assert_eq!(globs, vec!["*"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    // https://github.com/tailwindlabs/tailwindcss/issues/17569
+    #[test]
+    fn it_should_not_ignore_folders_that_end_with_a_binary_extension() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            // Looks like `.pages` binary extension, but it's a folder
+            ("some.pages/index.html", "content-['some.pages/index.html']"),
+            // Ignore a specific folder. This is to ensure that this still "wins" from the internal
+            // solution of dealing with binary extensions for files only.
+            (".gitignore", "other.pages"),
+            (
+                "other.pages/index.html",
+                "content-['other.pages/index.html']",
+            ),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       other.pages
+        ├── ✗ other.pages
+        │   └── ✗ index.html
+        └── ✓ some.pages
+            └── ✓ index.html
+        ");
+
+        assert_eq!(files, vec!["some.pages/index.html"]);
+        assert_eq!(globs, vec!["*", "some.pages/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_ignore_known_extensions() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            ("index.html", ""),
+            ("a.css", ""),
+            ("b.sass", ""),
+            ("c.less", ""),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ a.css
+        ├── ✗ b.sass
+        ├── ✗ c.less
+        └── ✓ index.html
+        ");
+
+        assert_eq!(files, vec!["a.css", "index.html"]);
+        assert_eq!(globs, vec!["*"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_find_new_extensions() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[("src/index.my-extension", "")]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ src
+            └── ✓ index.my-extension
+        ");
+
+        assert_eq!(files, vec!["src/index.my-extension"]);
+        assert_eq!(globs, vec!["*", "src/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,my-extension,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_ignore_known_files() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            ("index.html", ""),
+            ("package-lock.json", ""),
+            ("yarn.lock", ""),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ index.html
+        ├── ✗ package-lock.json
+        └── ✗ yarn.lock
+        ");
+
+        assert_eq!(files, vec!["index.html"]);
+        assert_eq!(globs, vec!["*"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_ignore_and_expand_nested_ignored_folders() {
+        let ScanResult {
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            // Explicitly listed root files
+            ("foo.html", ""),
+            ("bar.html", ""),
+            ("baz.html", ""),
+            // Nested folder A, using glob
+            ("nested-a/foo.html", ""),
+            ("nested-a/bar.html", ""),
+            ("nested-a/baz.html", ""),
+            // Nested folder B, with deeply nested files, using glob
+            ("nested-b/deeply-nested/foo.html", ""),
+            ("nested-b/deeply-nested/bar.html", ""),
+            ("nested-b/deeply-nested/baz.html", ""),
+            // Nested folder C, with ignored sub-folder
+            ("nested-c/foo.html", ""),
+            ("nested-c/bar.html", ""),
+            ("nested-c/baz.html", ""),
+            //   Ignored folder
+            ("nested-c/.gitignore", "ignored-folder/"),
+            ("nested-c/ignored-folder/foo.html", ""),
+            ("nested-c/ignored-folder/bar.html", ""),
+            ("nested-c/ignored-folder/baz.html", ""),
+            //   Deeply nested, without issues
+            ("nested-c/sibling-folder/foo.html", ""),
+            ("nested-c/sibling-folder/bar.html", ""),
+            ("nested-c/sibling-folder/baz.html", ""),
+            // Nested folder D, with deeply nested ignored folder
+            ("nested-d/foo.html", ""),
+            ("nested-d/bar.html", ""),
+            ("nested-d/baz.html", ""),
+            ("nested-d/.gitignore", "deep/"),
+            ("nested-d/very/deeply/nested/deep/foo.html", ""),
+            ("nested-d/very/deeply/nested/deep/bar.html", ""),
+            ("nested-d/very/deeply/nested/deep/baz.html", ""),
+            ("nested-d/very/deeply/nested/foo.html", ""),
+            ("nested-d/very/deeply/nested/bar.html", ""),
+            ("nested-d/very/deeply/nested/baz.html", ""),
+            ("nested-d/very/deeply/nested/directory/foo.html", ""),
+            ("nested-d/very/deeply/nested/directory/bar.html", ""),
+            ("nested-d/very/deeply/nested/directory/baz.html", ""),
+            ("nested-d/very/deeply/nested/directory/again/foo.html", ""),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ bar.html
+        ├── ✓ baz.html
+        ├── ✓ foo.html
+        ├── ✓ nested-a
+        │   ├── ✓ bar.html
+        │   ├── ✓ baz.html
+        │   └── ✓ foo.html
+        ├── ✓ nested-b
+        │   └── ✓ deeply-nested
+        │       ├── ✓ bar.html
+        │       ├── ✓ baz.html
+        │       └── ✓ foo.html
+        ├── ✓ nested-c
+        │   ├── ✗ .gitignore
+        │   │       ignored-folder/
+        │   ├── ✓ bar.html
+        │   ├── ✓ baz.html
+        │   ├── ✓ foo.html
+        │   ├── ✗ ignored-folder
+        │   │   ├── ✗ bar.html
+        │   │   ├── ✗ baz.html
+        │   │   └── ✗ foo.html
+        │   └── ✓ sibling-folder
+        │       ├── ✓ bar.html
+        │       ├── ✓ baz.html
+        │       └── ✓ foo.html
+        └── ✓ nested-d
+            ├── ✗ .gitignore
+            │       deep/
+            ├── ✓ bar.html
+            ├── ✓ baz.html
+            ├── ✓ foo.html
+            └── ✓ very
+                └── ✓ deeply
+                    └── ✓ nested
+                        ├── ✓ bar.html
+                        ├── ✓ baz.html
+                        ├── ✗ deep
+                        │   ├── ✗ bar.html
+                        │   ├── ✗ baz.html
+                        │   └── ✗ foo.html
+                        ├── ✓ directory
+                        │   ├── ✓ again
+                        │   │   └── ✓ foo.html
+                        │   ├── ✓ bar.html
+                        │   ├── ✓ baz.html
+                        │   └── ✓ foo.html
+                        └── ✓ foo.html
+        ");
+
+        assert_eq!(
+            files,
+            vec![
+                "bar.html",
+                "baz.html",
+                "foo.html",
+                "nested-a/bar.html",
+                "nested-a/baz.html",
+                "nested-a/foo.html",
+                "nested-b/deeply-nested/bar.html",
+                "nested-b/deeply-nested/baz.html",
+                "nested-b/deeply-nested/foo.html",
+                "nested-c/bar.html",
+                "nested-c/baz.html",
+                "nested-c/foo.html",
+                "nested-c/sibling-folder/bar.html",
+                "nested-c/sibling-folder/baz.html",
+                "nested-c/sibling-folder/foo.html",
+                "nested-d/bar.html",
+                "nested-d/baz.html",
+                "nested-d/foo.html",
+                "nested-d/very/deeply/nested/bar.html",
+                "nested-d/very/deeply/nested/baz.html",
+                "nested-d/very/deeply/nested/directory/again/foo.html",
+                "nested-d/very/deeply/nested/directory/bar.html",
+                "nested-d/very/deeply/nested/directory/baz.html",
+                "nested-d/very/deeply/nested/directory/foo.html",
+                "nested-d/very/deeply/nested/foo.html",
+            ]
+        );
+        assert_eq!(globs, vec![
+            "*",
+            "nested-a/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+            "nested-b/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+            "nested-c/*/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+            "nested-c/sibling-folder/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+            "nested-d/*/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+            "nested-d/very/*/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+            "nested-d/very/deeply/*/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+            "nested-d/very/deeply/nested/*/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+            "nested-d/very/deeply/nested/directory/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+        ]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_scan_for_utilities() {
+        let mut ignores = String::new();
+        ignores.push_str("# md:font-bold\n");
+        ignores.push_str("foo.html\n");
+
+        let ScanResult {
+            candidates,
+            normalized_sources,
+            tree,
+            ..
+        } = scan(&[
+            // The gitignore file is used to filter out files but not scanned for candidates
+            (".gitignore", &ignores),
+            // A file that should definitely be scanned
+            ("index.html", "font-bold md:flex"),
+            // A file that should definitely not be scanned
+            ("foo.jpg", "xl:font-bold"),
+            // A file that is ignored
+            ("foo.html", "lg:font-bold"),
+            // An Angular file using the class shorthand syntax
+            (
+                "index.angular.html",
+                "<div [class.underline]=\"bool\"></div>",
+            ),
+            // A svelte file with `class:foo="bar"` syntax
+            ("index.svelte", "<div class:px-4='condition'></div>"),
+            ("index2.svelte", "<div\n\tclass:px-5='condition'></div>"),
+            ("index3.svelte", "<div\n  class:px-6='condition'></div>"),
+            ("index4.svelte", "<div\nclass:px-7='condition'></div>"),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       # md:font-bold
+        │       foo.html
+        ├── ✗ foo.html
+        ├── ✗ foo.jpg
+        ├── ✓ index.angular.html
+        ├── ✓ index.html
+        ├── ✓ index.svelte
+        ├── ✓ index2.svelte
+        ├── ✓ index3.svelte
+        └── ✓ index4.svelte
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "bool",
+                "class",
+                "condition",
+                "font-bold",
+                "md:flex",
+                "px-4",
+                "px-5",
+                "px-6",
+                "px-7",
+                "underline"
+            ]
+        );
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn it_should_be_possible_to_scan_in_the_parent_directory() {
+        let ScanResult {
+            candidates,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[("foo/bar/baz/foo.html", "content-['foo.html']")],
+            vec!["@source '**/*'", "@source './foo/bar/baz/..'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ foo
+            └── ✓ bar
+                └── ✓ baz
+                    └── ✓ foo.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['foo.html']"]);
+        assert_eq!(normalized_sources, vec!["**/*", "foo/bar/**/*"]);
+    }
+
+    #[test]
+    fn it_should_preserve_source_order_when_referencing_a_sibling_project() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                ("project-a/src/index.css", ""),
+                ("project-b/keep/keep.html", "content-['GOOD-1']"),
+                ("project-b/ignored/ignored.html", "content-['BAD-1']"),
+                ("project-b/ignored/except.html", "content-['GOOD-2']"),
+            ],
+        );
+
+        let base = dir.join("project-a/src");
+        let mut scanner = Scanner::new(vec![
+            public_source_entry_from_pattern(base.clone(), "@source '../../project-b'"),
+            public_source_entry_from_pattern(base.clone(), "@source not '../../project-b/ignored'"),
+            public_source_entry_from_pattern(
+                base.clone(),
+                "@source '../../project-b/ignored/except.html'",
+            ),
+        ]);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ project-a
+        │   └── ✗ src
+        │       └── ✗ index.css
+        └── ✓ project-b
+            ├── ✓ ignored
+            │   ├── ✓ except.html
+            │   └── ✗ ignored.html
+            └── ✓ keep
+                └── ✓ keep.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['GOOD-1']", "content-['GOOD-2']"]);
+    }
+
+    #[test]
+    fn it_should_scan_files_without_extensions() {
+        // These look like folders, but they are files
+        let ScanResult {
+            candidates,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[("my-file", "content-['my-file']")],
+            vec!["@source '**/*'", "@source './my-file'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ my-file
+        ");
+
+        assert_eq!(candidates, vec!["content-['my-file']"]);
+        assert_eq!(normalized_sources, vec!["**/*", "my-file"]);
+    }
+
+    #[test]
+    fn it_should_scan_folders_with_extensions() {
+        // These look like files, but they are folders
+        let ScanResult {
+            candidates,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                (
+                    "my-folder.templates/foo.html",
+                    "content-['my-folder.templates/foo.html']",
+                ),
+                (
+                    "my-folder.bin/foo.html",
+                    "content-['my-folder.bin/foo.html']",
+                ),
+            ],
+            vec![
+                "@source '**/*'",
+                "@source './my-folder.templates'",
+                "@source './my-folder.bin'",
+            ],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ my-folder.bin
+        │   └── ✓ foo.html
+        └── ✓ my-folder.templates
+            └── ✓ foo.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['my-folder.bin/foo.html']",
+                "content-['my-folder.templates/foo.html']",
+            ]
+        );
+        assert_eq!(
+            normalized_sources,
+            vec!["**/*", "my-folder.bin/**/*", "my-folder.templates/**/*"]
+        );
+    }
+
+    #[test]
+    fn it_should_scan_content_paths() {
+        let ScanResult {
+            candidates,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                // We know that `.styl` extensions are ignored, so they are not covered by auto content
+                // detection.
+                ("foo.styl", "content-['foo.styl']"),
+            ],
+            vec!["@source '**/*'", "@source '*.styl'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ foo.styl
+        ");
+
+        assert_eq!(candidates, vec!["content-['foo.styl']"]);
+        assert_eq!(normalized_sources, vec!["**/*", "*.styl"]);
+    }
+
+    #[test]
+    fn it_should_drop_invalid_utf8_candidates() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("index.html"), b"flex bg-[\x80] block").unwrap();
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.path().to_path_buf(),
+            "@source '*.html'",
+        )]);
+
+        let candidates = scanner
+            .scan()
+            .into_iter()
+            .map(String::into_bytes)
+            .collect::<Vec<_>>();
+
+        assert_eq!(candidates, vec![b"block".to_vec(), b"flex".to_vec()]);
+    }
+
+    #[test]
+    fn it_should_not_store_invalid_utf8_candidates_during_incremental_scans() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("index.html");
+        fs::write(&file, b"flex bg-[\x80]").unwrap();
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.path().to_path_buf(),
+            "@source '*.html'",
+        )]);
+
+        let candidates = scanner
+            .scan_content(vec![ChangedContent::File(file, "html".into())])
+            .into_iter()
+            .map(String::into_bytes)
+            .collect::<Vec<_>>();
+        assert_eq!(candidates, vec![b"flex".to_vec()]);
+
+        let candidates =
+            scanner.scan_content(vec![ChangedContent::Content("block".into(), "html".into())]);
+        assert_eq!(candidates, vec!["block"]);
+
+        let candidates = scanner
+            .scan()
+            .into_iter()
+            .map(String::into_bytes)
+            .collect::<Vec<_>>();
+        assert_eq!(candidates, vec![b"block".to_vec(), b"flex".to_vec()]);
+    }
+
+    #[test]
+    fn it_should_drop_invalid_utf8_candidates_with_positions() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("index.html");
+        fs::write(
+            &file,
+            b"flex bg-[\x80] group-[]:block group-[]:bg-[\x80] grid",
+        )
+        .unwrap();
+
+        let mut scanner = Scanner::new(vec![]);
+        let candidates = scanner
+            .get_candidates_with_positions(ChangedContent::File(file, "html".into()))
+            .into_iter()
+            .map(|(candidate, position)| (candidate.into_bytes(), position))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            candidates,
+            vec![
+                (b"flex".to_vec(), 0),
+                (b"group-[]:block".to_vec(), 12),
+                (b"grid".to_vec(), 43),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_preserve_valid_utf8_candidates() {
+        let dir = tempdir().unwrap();
+        fs::write(
+            dir.path().join("index.html"),
+            "before:content-['💩'] bg-[é] font-[中文]".as_bytes(),
+        )
+        .unwrap();
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.path().to_path_buf(),
+            "@source '*.html'",
+        )]);
+
+        assert_eq!(
+            scanner.scan(),
+            vec!["before:content-['💩']", "bg-[é]", "font-[中文]"]
+        );
+    }
+
+    #[test]
+    fn it_should_preserve_paths_for_sources_ending_in_a_deep_glob() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                (
+                    "blog/2024/foo/bar/baz/index.html",
+                    "content-['blog/2024/foo/bar/baz/index.html']",
+                ),
+                (
+                    "blog/2024/foo/bar/qux/index.html",
+                    "content-['blog/2024/foo/bar/qux/index.html']",
+                ),
+            ],
+            vec!["@source './blog/*/foo/bar/baz/**/*'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ blog
+            └── ✓ 2024
+                └── ✓ foo
+                    └── ✓ bar
+                        ├── ✓ baz
+                        │   └── ✓ index.html
+                        └── ✗ qux
+                            └── ✗ index.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['blog/2024/foo/bar/baz/index.html']"]
+        );
+        assert_eq!(files, vec!["blog/2024/foo/bar/baz/index.html"]);
+        assert_eq!(globs, vec!["blog/*/foo/bar/baz/**/*"]);
+        assert_eq!(normalized_sources, vec!["blog/*/foo/bar/baz/**/*"]);
+    }
+
+    #[test]
+    fn it_should_scan_next_dynamic_folders() {
+        let ScanResult {
+            candidates,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                // We know that `.styl` extensions are ignored, so they are not covered by auto content
+                // detection.
+                ("app/[slug]/page.styl", "content-['[slug]']"),
+                ("app/[...slug]/page.styl", "content-['[...slug]']"),
+                ("app/[[...slug]]/page.styl", "content-['[[...slug]]']"),
+                ("app/(theme)/page.styl", "content-['(theme)']"),
+            ],
+            vec!["@source '**/*'", "@source './**/*.{styl}'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ app
+            ├── ✓ (theme)
+            │   └── ✓ page.styl
+            ├── ✓ [...slug]
+            │   └── ✓ page.styl
+            ├── ✓ [[...slug]]
+            │   └── ✓ page.styl
+            └── ✓ [slug]
+                └── ✓ page.styl
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['(theme)']",
+                "content-['[...slug]']",
+                "content-['[[...slug]]']",
+                "content-['[slug]']",
+            ],
+        );
+        assert_eq!(normalized_sources, vec!["**/*", "**/*.styl"]);
+    }
+
+    #[test]
+    fn it_should_scan_absolute_paths() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Initialize this directory as a git repository
+        let _ = Command::new("git").arg("init").current_dir(&dir).output();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                ("project-a/index.html", "content-['project-a/index.html']"),
+                ("project-b/index.html", "content-['project-b/index.html']"),
+            ],
+        );
+
+        // Get POSIX-style absolute path
+        let full_path = format!("{}", dir.display()).replace('\\', "/");
+
+        let sources = vec![PublicSourceEntry {
+            base: full_path.clone(),
+            pattern: full_path.clone(),
+            negated: false,
+        }];
+
+        let mut scanner = Scanner::new(sources);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        . (git)
+        ├── ✓ project-a
+        │   └── ✓ index.html
+        └── ✓ project-b
+            └── ✓ index.html
+        ");
+
+        // We've done the initial scan and found the files
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['project-a/index.html']",
+                "content-['project-b/index.html']"
+            ]
+        );
+    }
+
+    #[test]
+    fn it_should_scan_content_paths_even_when_they_are_git_ignored() {
+        let ScanResult {
+            candidates,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                (".gitignore", "foo.styl"),
+                // We know that `.styl` extensions are ignored, so they are not covered by auto content
+                // detection.
+                ("foo.styl", "content-['foo.styl']"),
+            ],
+            // But explicitly including them should still work
+            vec!["@source '**/*'", "@source 'foo.styl'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       foo.styl
+        └── ✓ foo.styl
+        ");
+
+        assert_eq!(candidates, vec!["content-['foo.styl']"]);
+        assert_eq!(normalized_sources, vec!["**/*", "foo.styl"]);
+    }
+
+    #[test]
+    fn it_should_pick_up_new_files() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Initialize this directory as a git repository
+        let _ = Command::new("git").arg("init").current_dir(&dir).output();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                ("project-a/index.html", "content-['project-a/index.html']"),
+                ("project-b/index.html", "content-['project-b/index.html']"),
+            ],
+        );
+
+        let sources = vec![
+            public_source_entry_from_pattern(dir.join("project-a"), "@source '**/*'"),
+            public_source_entry_from_pattern(dir.join("project-b"), "@source '**/*'"),
+        ];
+
+        let mut scanner = Scanner::new(sources);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        . (git)
+        ├── ✓ project-a
+        │   └── ✓ index.html
+        └── ✓ project-b
+            └── ✓ index.html
+        ");
+
+        // We've done the initial scan and found the files
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['project-a/index.html']",
+                "content-['project-b/index.html']"
+            ]
+        );
+
+        // We have to sleep because it might run too fast (seriously) and the
+        // mtimes of the directories end up being the same as the last time we
+        // checked them
+        sleep(Duration::from_millis(100));
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                ("project-a/new.html", "content-['project-a/new.html']"),
+                ("project-b/new.html", "content-['project-b/new.html']"),
+            ],
+        );
+
+        let candidates = scanner.scan();
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['project-a/index.html']",
+                "content-['project-a/new.html']",
+                "content-['project-b/index.html']",
+                "content-['project-b/new.html']"
+            ]
+        );
+
+        // We have to sleep because it might run too fast (seriously) and the
+        // mtimes of the directories end up being the same as the last time we
+        // checked them
+        sleep(Duration::from_millis(100));
+
+        // Create folders
+        create_files_in(
+            &dir,
+            &[
+                (
+                    "project-a/sub1/sub2/index.html",
+                    "content-['project-a/sub1/sub2/index.html']",
+                ),
+                (
+                    "project-b/sub1/sub2/index.html",
+                    "content-['project-b/sub1/sub2/index.html']",
+                ),
+            ],
+        );
+
+        let candidates = scanner.scan();
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['project-a/index.html']",
+                "content-['project-a/new.html']",
+                "content-['project-a/sub1/sub2/index.html']",
+                "content-['project-b/index.html']",
+                "content-['project-b/new.html']",
+                "content-['project-b/sub1/sub2/index.html']"
+            ]
+        );
+
+        // We have to sleep because it might run too fast (seriously) and the
+        // mtimes of the directories end up being the same as the last time we
+        // checked them
+        sleep(Duration::from_millis(100));
+
+        // Create folders
+        create_files_in(
+            &dir,
+            &[
+                (
+                    "project-a/sub1/sub2/new.html",
+                    "content-['project-a/sub1/sub2/new.html']",
+                ),
+                (
+                    "project-b/sub1/sub2/new.html",
+                    "content-['project-b/sub1/sub2/new.html']",
+                ),
+            ],
+        );
+
+        let candidates = scanner.scan();
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['project-a/index.html']",
+                "content-['project-a/new.html']",
+                "content-['project-a/sub1/sub2/index.html']",
+                "content-['project-a/sub1/sub2/new.html']",
+                "content-['project-b/index.html']",
+                "content-['project-b/new.html']",
+                "content-['project-b/sub1/sub2/index.html']",
+                "content-['project-b/sub1/sub2/new.html']"
+            ]
+        );
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        . (git)
+        ├── ✓ project-a
+        │   ├── ✓ index.html
+        │   ├── ✓ new.html
+        │   └── ✓ sub1
+        │       └── ✓ sub2
+        │           ├── ✓ index.html
+        │           └── ✓ new.html
+        └── ✓ project-b
+            ├── ✓ index.html
+            ├── ✓ new.html
+            └── ✓ sub1
+                └── ✓ sub2
+                    ├── ✓ index.html
+                    └── ✓ new.html
+        ");
+    }
+
+    #[test]
+    fn it_should_remove_deleted_files_from_scanned_files() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Initialize this directory as a git repository
+        let _ = Command::new("git").arg("init").current_dir(&dir).output();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                ("src/index.html", "content-['src/index.html']"),
+                ("src/keep.html", "content-['src/keep.html']"),
+                ("src/remove.html", "content-['src/remove.html']"),
+            ],
+        );
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source '**/*'",
+        )]);
+
+        scanner.scan();
+        assert_eq!(
+            scanned_files(&mut scanner, &dir),
+            vec!["src/index.html", "src/keep.html", "src/remove.html"]
+        );
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        . (git)
+        └── ✓ src
+            ├── ✓ index.html
+            ├── ✓ keep.html
+            └── ✓ remove.html
+        ");
+
+        fs::remove_file(dir.join("src/remove.html")).unwrap();
+
+        scanner.scan();
+        assert_eq!(
+            scanned_files(&mut scanner, &dir),
+            vec!["src/index.html", "src/keep.html"]
+        );
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        . (git)
+        └── ✓ src
+            ├── ✓ index.html
+            └── ✓ keep.html
+        ");
+    }
+
+    #[test]
+    fn it_should_remove_deleted_directories_from_scanned_files() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Initialize this directory as a git repository
+        let _ = Command::new("git").arg("init").current_dir(&dir).output();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                ("src/index.html", "content-['src/index.html']"),
+                ("src/keep/index.html", "content-['src/keep/index.html']"),
+                ("src/remove/index.html", "content-['src/remove/index.html']"),
+                (
+                    "src/remove/nested/index.html",
+                    "content-['src/remove/nested/index.html']",
+                ),
+            ],
+        );
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source '**/*'",
+        )]);
+
+        scanner.scan();
+        assert_eq!(
+            scanned_files(&mut scanner, &dir),
+            vec![
+                "src/index.html",
+                "src/keep/index.html",
+                "src/remove/index.html",
+                "src/remove/nested/index.html",
+            ]
+        );
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        . (git)
+        └── ✓ src
+            ├── ✓ index.html
+            ├── ✓ keep
+            │   └── ✓ index.html
+            └── ✓ remove
+                ├── ✓ index.html
+                └── ✓ nested
+                    └── ✓ index.html
+        ");
+
+        fs::remove_dir_all(dir.join("src/remove")).unwrap();
+
+        scanner.scan();
+        assert_eq!(
+            scanned_files(&mut scanner, &dir),
+            vec!["src/index.html", "src/keep/index.html"]
+        );
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        . (git)
+        └── ✓ src
+            ├── ✓ index.html
+            └── ✓ keep
+                └── ✓ index.html
+        ");
+    }
+
+    #[test]
+    fn it_should_remove_deleted_directories_from_scanned_globs() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Initialize this directory as a git repository
+        let _ = Command::new("git").arg("init").current_dir(&dir).output();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                ("index.html", "content-['index.html']"),
+                ("src/index.html", "content-['src/index.html']"),
+            ],
+        );
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source '**/*'",
+        )]);
+
+        scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        . (git)
+        ├── ✓ index.html
+        └── ✓ src
+            └── ✓ index.html
+        ");
+
+        let globs = scanned_globs(&mut scanner, &dir);
+        assert!(globs.iter().any(|glob| glob.starts_with("src/**/*")));
+
+        fs::remove_dir_all(dir.join("src")).unwrap();
+
+        scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        . (git)
+        └── ✓ index.html
+        ");
+
+        let globs = scanned_globs(&mut scanner, &dir);
+        assert!(!globs.iter().any(|glob| glob.starts_with("src/**/*")));
+    }
+
+    #[test]
+    fn it_should_track_files_scanned_by_the_last_scan() {
+        let dir = tempdir().unwrap().into_path();
+
+        let _ = Command::new("git").arg("init").current_dir(&dir).output();
+
+        create_files_in(
+            &dir,
+            &[
+                ("src/index.html", "content-['src/index.html']"),
+                ("src/keep.html", "content-['src/keep.html']"),
+            ],
+        );
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source '**/*'",
+        )]);
+
+        assert_eq!(
+            scanner.scan(),
+            vec!["content-['src/index.html']", "content-['src/keep.html']"]
+        );
+
+        assert_eq!(
+            scanner.scan(),
+            vec!["content-['src/index.html']", "content-['src/keep.html']"]
+        );
+        assert_eq!(scanner.get_scanned_files(), Vec::<String>::new());
+
+        sleep(Duration::from_millis(10));
+        fs::write(dir.join("src/index.html"), "content-['src/changed.html']").unwrap();
+
+        assert_eq!(
+            scanner.scan(),
+            vec![
+                "content-['src/changed.html']",
+                "content-['src/index.html']",
+                "content-['src/keep.html']",
+            ]
+        );
+        assert_eq!(
+            normalize_files(scanner.get_scanned_files(), &dir),
+            vec!["src/index.html"]
+        );
+    }
+
+    #[test]
+    fn it_should_ignore_negated_custom_sources() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                ("src/index.ts", "content-['src/index.ts']"),
+                ("src/colors/red.jsx", "content-['src/colors/red.jsx']"),
+                ("src/colors/blue.tsx", "content-['src/colors/blue.tsx']"),
+                ("src/colors/green.tsx", "content-['src/colors/green.tsx']"),
+                ("src/utils/string.ts", "content-['src/utils/string.ts']"),
+                ("src/utils/date.ts", "content-['src/utils/date.ts']"),
+                ("src/utils/file.ts", "content-['src/utils/file.ts']"),
+                (
+                    "src/admin/foo/template.html",
+                    "content-['src/admin/template.html']",
+                ),
+                (
+                    "src/templates/index.html",
+                    "content-['src/templates/index.html']",
+                ),
+            ],
+            vec![
+                "@source '**/*'",
+                "@source not 'src/index.ts'",
+                "@source not '**/*.{jsx,tsx}'",
+                "@source not 'src/utils'",
+                "@source not 'dist'",
+            ],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ src
+            ├── ✓ admin
+            │   └── ✓ foo
+            │       └── ✓ template.html
+            ├── ✗ colors
+            │   ├── ✗ blue.tsx
+            │   ├── ✗ green.tsx
+            │   └── ✗ red.jsx
+            ├── ✗ index.ts
+            ├── ✓ templates
+            │   └── ✓ index.html
+            └── ✗ utils
+                ├── ✗ date.ts
+                ├── ✗ file.ts
+                └── ✗ string.ts
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['src/admin/template.html']",
+                "content-['src/templates/index.html']",
+            ]
+        );
+
+        assert_eq!(
+            files,
+            vec![
+                "src/admin/foo/template.html",
+                "src/templates/index.html",
+                // These files are ignored and thus do not need to be watched:
+
+                // "src/colors/blue.tsx",
+                // "src/colors/green.tsx",
+                // "src/colors/red.jsx",
+                // "src/index.ts",
+                // "src/utils/date.ts",
+                // "src/utils/file.ts",
+                // "src/utils/string.ts"
+            ]
+        );
+        assert_eq!(
+            globs,
+            vec![
+                "*",
+                "src/*/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+                "src/admin/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+                "src/colors/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+                "src/templates/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+            ]
+        );
+
+        assert_eq!(normalized_sources, vec!["**/*",]);
+    }
+
+    #[test]
+    fn it_should_include_defined_extensions_that_are_ignored_by_default() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            // Typically skipped
+            &[
+                ("src/index.exe", "content-['src/index.exe']"),
+                ("src/index.bin", "content-['src/index.bin']"),
+                ("out/out.exe", "content-['out/out.exe']"),
+            ],
+            // But explicitly included
+            vec!["@source '**/*'", "@source 'src/**/*.{exe,bin}'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ out
+        │   └── ✗ out.exe
+        └── ✓ src
+            ├── ✓ index.bin
+            └── ✓ index.exe
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['src/index.bin']", "content-['src/index.exe']",]
+        );
+        assert_eq!(files, vec!["src/index.bin", "src/index.exe",]);
+        assert_eq!(
+            globs,
+            vec![
+                "*",
+                // Contains `.exe` and `.bin` in the list
+                "out/**/*.{aspx,astro,bin,cjs,cts,eex,erb,exe,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+                "src/{**/*.bin,**/*.exe,**/*.{aspx,astro,bin,cjs,cts,eex,erb,exe,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}}",
+            ]
+        );
+        assert_eq!(
+            normalized_sources,
+            vec!["**/*", "src/**/*.bin", "src/**/*.exe"]
+        );
+    }
+
+    #[test]
+    fn it_should_work_with_manual_glob_only() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                ("index.html", "content-['index.html']"),
+                ("src/index.html", "content-['src/index.html']"),
+                ("src/ignore.html", "content-['src/ignore.html']"),
+                ("src/admin/index.html", "content-['src/admin/index.html']"),
+                ("src/admin/ignore.html", "content-['src/admin/ignore.html']"),
+                (
+                    "src/dashboard/index.html",
+                    "content-['src/dashboard/index.html']",
+                ),
+                (
+                    "src/dashboard/ignore.html",
+                    "content-['src/dashboard/ignore.html']",
+                ),
+                ("src/lib.ts", "content-['src/lib.ts']"),
+            ],
+            vec![
+                "@source './src/**/*.html'",
+                "@source not './src/index.html'",
+                "@source not './src/**/ignore.html'",
+            ],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ index.html
+        └── ✓ src
+            ├── ✓ admin
+            │   ├── ✗ ignore.html
+            │   └── ✓ index.html
+            ├── ✓ dashboard
+            │   ├── ✗ ignore.html
+            │   └── ✓ index.html
+            ├── ✗ ignore.html
+            ├── ✗ index.html
+            └── ✗ lib.ts
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['src/admin/index.html']",
+                "content-['src/dashboard/index.html']",
+            ]
+        );
+
+        assert_eq!(
+            files,
+            vec!["src/admin/index.html", "src/dashboard/index.html",]
+        );
+        assert_eq!(globs, vec!["src/**/*.html"]);
+        assert_eq!(normalized_sources, vec!["src/**/*.html"]);
+    }
+
+    #[test]
+    fn it_should_restrict_explicit_file_sources_to_the_matching_file() {
+        let ScanResult {
+            candidates,
+            files,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                ("src/foo.html", "content-['src/foo.html']"),
+                ("src/bar.html", "content-['src/bar.html']"),
+            ],
+            vec!["@source './src/foo.html'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ src
+            ├── ✗ bar.html
+            └── ✓ foo.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['src/foo.html']"]);
+        assert_eq!(files, vec!["src/foo.html"]);
+    }
+
+    #[test]
+    fn it_should_combine_multiple_restricted_sources_for_the_same_base() {
+        let ScanResult {
+            candidates,
+            files,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                ("src/foo.html", "content-['src/foo.html']"),
+                ("src/bar.html", "content-['src/bar.html']"),
+                ("src/baz.html", "content-['src/baz.html']"),
+            ],
+            vec!["@source './src/foo.html'", "@source './src/bar.html'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ src
+            ├── ✓ bar.html
+            ├── ✗ baz.html
+            └── ✓ foo.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['src/bar.html']", "content-['src/foo.html']"]
+        );
+        assert_eq!(files, vec!["src/bar.html", "src/foo.html"]);
+    }
+
+    // https://github.com/tailwindlabs/tailwindcss/issues/20333
+    #[test]
+    fn it_should_combine_nested_and_root_restricted_sources() {
+        // The restriction (`*`) added for the root-level file must not prevent walking into the
+        // `nested` folder that another explicit source points into. At the same time, relaxing
+        // that restriction to `/*` must not accidentally open up sibling folders (`ignore-me`)
+        // or files that no explicit source points at.
+        let paths_with_content = &[
+            ("nested/component.html", "content-['nested/component.html']"),
+            ("nested/ignore-me.html", "content-['nested/ignore-me.html']"),
+            ("ignore-me/component.html", "content-['ignore-me']"),
+            ("component-sources.classes.txt", "content-['classes.txt']"),
+            ("ignore-me.txt", "content-['ignore-me.txt']"),
+        ];
+
+        let ScanResult {
+            candidates,
+            files,
+            tree,
+            ..
+        } = scan_with_globs(
+            paths_with_content,
+            vec![
+                "@source './nested/component.html'",
+                "@source './component-sources.classes.txt'",
+            ],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ component-sources.classes.txt
+        ├── ✗ ignore-me
+        │   └── ✗ component.html
+        ├── ✗ ignore-me.txt
+        └── ✓ nested
+            ├── ✓ component.html
+            └── ✗ ignore-me.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['classes.txt']",
+                "content-['nested/component.html']"
+            ]
+        );
+        assert_eq!(
+            files,
+            vec!["component-sources.classes.txt", "nested/component.html"]
+        );
+
+        // Same setup, but with the root-level source declared first
+        let ScanResult {
+            candidates,
+            files,
+            tree,
+            ..
+        } = scan_with_globs(
+            paths_with_content,
+            vec![
+                "@source './component-sources.classes.txt'",
+                "@source './nested/component.html'",
+            ],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ component-sources.classes.txt
+        ├── ✗ ignore-me
+        │   └── ✗ component.html
+        ├── ✗ ignore-me.txt
+        └── ✓ nested
+            ├── ✓ component.html
+            └── ✗ ignore-me.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['classes.txt']",
+                "content-['nested/component.html']"
+            ]
+        );
+        assert_eq!(
+            files,
+            vec!["component-sources.classes.txt", "nested/component.html"]
+        );
+    }
+
+    #[test]
+    fn it_should_allow_later_ignores_to_override_restricted_sources() {
+        let ScanResult {
+            candidates,
+            files,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[("src/foo.html", "content-['src/foo.html']")],
+            vec!["@source './src/foo.html'", "@source not './src/foo.html'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✗ src
+            └── ✗ foo.html
+        ");
+
+        assert!(candidates.is_empty());
+        assert!(files.is_empty());
+    }
+
+    #[test]
+    fn it_should_handle_sources_with_parent_patterns() {
+        {
+            let ScanResult {
+                candidates,
+                files,
+                tree,
+                ..
+            } = scan_with_globs(
+                &[
+                    ("src/foo.html", "content-['src/foo.html']"),
+                    ("src/bar/index.html", "content-['src/bar/index.html']"),
+                    ("src/bar/ignore.html", "content-['src/bar/ignore.html']"),
+                ],
+                vec!["@source './src/ba*/*.html'"],
+            );
+
+            assert_snapshot!(tree, @"
+            . (git)
+            └── ✓ src
+                ├── ✓ bar
+                │   ├── ✓ ignore.html
+                │   └── ✓ index.html
+                └── ✗ foo.html
+            ");
+
+            assert_eq!(
+                candidates,
+                vec![
+                    "content-['src/bar/ignore.html']",
+                    "content-['src/bar/index.html']"
+                ]
+            );
+            assert_eq!(files, vec!["src/bar/ignore.html", "src/bar/index.html"]);
+        }
+
+        {
+            let ScanResult {
+                candidates,
+                files,
+                tree,
+                ..
+            } = scan_with_globs(
+                &[
+                    ("src/foo.html", "content-['src/foo.html']"),
+                    ("src/bar/index.html", "content-['src/bar/index.html']"),
+                    ("src/bar/ignore.html", "content-['src/bar/ignore.html']"),
+                ],
+                vec![
+                    "@source './src/ba*/*.html'",
+                    "@source not './src/bar/ignore.html'", // Ignore the ignore.html
+                ],
+            );
+
+            assert_snapshot!(tree, @"
+            . (git)
+            └── ✓ src
+                ├── ✓ bar
+                │   ├── ✗ ignore.html
+                │   └── ✓ index.html
+                └── ✗ foo.html
+            ");
+
+            assert_eq!(candidates, vec!["content-['src/bar/index.html']"]);
+            assert_eq!(files, vec!["src/bar/index.html"]);
+        }
+
+        {
+            let ScanResult {
+                candidates,
+                files,
+                tree,
+                ..
+            } = scan_with_globs(
+                &[
+                    ("src/foo.html", "content-['src/foo.html']"),
+                    ("src/bar/index.html", "content-['src/bar/index.html']"),
+                    ("src/bar/ignore.html", "content-['src/bar/ignore.html']"),
+                ],
+                vec!["@source '**/*'", "@source not './src/ba*/*.html'"],
+            );
+
+            assert_snapshot!(tree, @"
+            . (git)
+            └── ✓ src
+                ├── ✗ bar
+                │   ├── ✗ ignore.html
+                │   └── ✗ index.html
+                └── ✓ foo.html
+            ");
+
+            assert_eq!(candidates, vec!["content-['src/foo.html']"]);
+            assert_eq!(files, vec!["src/foo.html"]);
+        }
+
+        {
+            let ScanResult {
+                candidates,
+                files,
+                tree,
+                ..
+            } = scan_with_globs(
+                &[
+                    ("src/foo.html", "content-['src/foo.html']"),
+                    ("src/bar/index.html", "content-['src/bar/index.html']"),
+                    ("src/bar/ignore.html", "content-['src/bar/ignore.html']"),
+                ],
+                vec![
+                    "@source '**/*'",
+                    "@source not './src/ba*/*.html'",
+                    "@source './src/bar/index.html'", //
+                ],
+            );
+
+            assert_snapshot!(tree, @"
+            . (git)
+            └── ✓ src
+                ├── ✓ bar
+                │   ├── ✗ ignore.html
+                │   └── ✓ index.html
+                └── ✓ foo.html
+            ");
+
+            assert_eq!(
+                candidates,
+                vec!["content-['src/bar/index.html']", "content-['src/foo.html']"]
+            );
+            assert_eq!(files, vec!["src/bar/index.html", "src/foo.html"]);
+        }
+    }
+
+    #[test]
+    fn nested_explicit_source_should_not_suppress_siblings_of_broad_source() {
+        // A broad `**/*` source should keep auto-detecting every file, even when a more
+        // specific `@source` points at a single file inside a subdirectory. The restriction
+        // added for the explicit file must not hide its siblings from the broad source.
+        let ScanResult {
+            candidates,
+            files,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                ("src/components/button.html", "content-['button']"),
+                ("src/components/card.html", "content-['card']"),
+            ],
+            vec!["@source '**/*'", "@source './src/components/button.html'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ src
+            └── ✓ components
+                ├── ✓ button.html
+                └── ✓ card.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['button']", "content-['card']"]);
+        assert_eq!(
+            files,
+            vec!["src/components/button.html", "src/components/card.html"]
+        );
+    }
+
+    #[test]
+    fn nested_explicit_source_should_not_suppress_siblings_of_auto_source() {
+        // Same as above, but the broad source is an auto-detected directory (`@source "src"`)
+        // and the explicit file lives in a nested subdirectory of it.
+        let ScanResult {
+            candidates,
+            files,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                ("src/components/button.html", "content-['button']"),
+                ("src/components/card.html", "content-['card']"),
+            ],
+            vec!["@source 'src'", "@source './src/components/button.html'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ src
+            └── ✓ components
+                ├── ✓ button.html
+                └── ✓ card.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['button']", "content-['card']"]);
+        assert_eq!(
+            files,
+            vec!["src/components/button.html", "src/components/card.html"]
+        );
+    }
+
+    #[test]
+    fn root_file_source_should_not_suppress_sibling_source_roots() {
+        let ScanResult {
+            candidates, tree, ..
+        } = scan_with_globs(
+            &[
+                ("index.css", ""),
+                ("src/index.html", "content-['src/index.html']"),
+                ("pages/foo.html", "content-['pages/foo.html']"),
+                ("pages/nested/foo.html", "content-['pages/nested/foo.html']"),
+            ],
+            vec![
+                "@source './src'",
+                "@source './pages/**/*.html'",
+                "@source './index.css'",
+            ],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✓ index.css
+        ├── ✓ pages
+        │   ├── ✓ foo.html
+        │   └── ✓ nested
+        │       └── ✓ foo.html
+        └── ✓ src
+            └── ✓ index.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['pages/foo.html']",
+                "content-['pages/nested/foo.html']",
+                "content-['src/index.html']",
+            ]
+        );
+    }
+
+    #[test]
+    fn it_respects_gitignore_in_workspace_root() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                (".gitignore", "ignore-1.html\nweb/ignore-2.html"),
+                ("src/index.html", "content-['src/index.html']"),
+                ("web/index.html", "content-['web/index.html']"),
+                ("web/ignore-1.html", "content-['web/ignore-1.html']"),
+                ("web/ignore-2.html", "content-['web/ignore-2.html']"),
+            ],
+            vec!["@source './src'", "@source './web'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       ignore-1.html
+        │       web/ignore-2.html
+        ├── ✓ src
+        │   └── ✓ index.html
+        └── ✓ web
+            ├── ✗ ignore-1.html
+            ├── ✗ ignore-2.html
+            └── ✓ index.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['src/index.html']", "content-['web/index.html']",]
+        );
+
+        assert_eq!(files, vec!["src/index.html", "web/index.html",]);
+        assert_eq!(globs, vec!["src/*", "web/*",]);
+        assert_eq!(normalized_sources, vec!["src/**/*", "web/**/*",]);
+    }
+
+    #[test]
+    fn it_includes_skipped_by_default_extensions_with_a_specific_source() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                ("src/logo.jpg", "content-['/src/logo.jpg']"),
+                ("src/logo.png", "content-['/src/logo.png']"),
+            ],
+            vec!["@source './src/logo.{jpg,png}'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ src
+            ├── ✓ logo.jpg
+            └── ✓ logo.png
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['/src/logo.jpg']", "content-['/src/logo.png']"]
+        );
+        assert_eq!(files, vec!["src/logo.jpg", "src/logo.png"]);
+        assert!(globs.is_empty());
+        assert_eq!(normalized_sources, vec!["src/logo.jpg", "src/logo.png"]);
+    }
+
+    #[test]
+    fn it_respects_gitignore_in_workspace_root_for_manual_globs() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                (".gitignore", "ignore-1.html\n/web/ignore-2.html"),
+                ("web/index.html", "content-['web/index.html']"),
+                ("web/ignore-1.html", "content-['web/ignore-1.html']"),
+                ("web/ignore-2.html", "content-['web/ignore-2.html']"),
+            ],
+            vec!["@source './web'", "@source './web/ignore-1.html'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       ignore-1.html
+        │       /web/ignore-2.html
+        └── ✓ web
+            ├── ✓ ignore-1.html
+            ├── ✗ ignore-2.html
+            └── ✓ index.html
+        ");
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['web/ignore-1.html']",
+                "content-['web/index.html']",
+            ]
+        );
+
+        assert_eq!(files, vec!["web/ignore-1.html", "web/index.html",]);
+        assert_eq!(globs, vec!["web/*"]);
+        assert_eq!(normalized_sources, vec!["web/**/*", "web/ignore-1.html"]);
+    }
+
+    #[test]
+    fn it_respects_gitignore_files_with_whitelist_patterns() {
+        // https://github.com/tailwindlabs/tailwindcss/discussions/20382
+        //
+        // A `.gitignore` that ignores everything (`/*`) and then whitelists specific
+        // directories and files using negated patterns.
+        let ScanResult {
+            files,
+            candidates,
+            tree,
+            ..
+        } = scan(&[
+            (
+                ".gitignore",
+                "/*\n!/app\n!/public\n!/package.json\n!/.gitignore\n",
+            ),
+            ("app/index.html", "content-['app/index.html']"),
+            ("public/index.html", "content-['public/index.html']"),
+            ("package.json", ""),
+            // These are all ignored by the `/*` rule because they are not whitelisted
+            ("build/generated.html", "content-['build/generated.html']"),
+            ("logs/dev.log", "content-['logs/dev.log']"),
+            (
+                "node_modules/my-ui-lib/index.html",
+                "content-['node_modules/my-ui-lib/index.html']",
+            ),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       /*
+        │       !/app
+        │       !/public
+        │       !/package.json
+        │       !/.gitignore
+        ├── ✓ app
+        │   └── ✓ index.html
+        ├── ✗ build
+        │   └── ✗ generated.html
+        ├── ✗ logs
+        │   └── ✗ dev.log
+        ├── ✗ node_modules
+        │   └── ✗ my-ui-lib
+        │       └── ✗ index.html
+        ├── ✓ package.json
+        └── ✓ public
+            └── ✓ index.html
+        ");
+
+        assert_eq!(
+            files,
+            vec!["app/index.html", "package.json", "public/index.html"]
+        );
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['app/index.html']",
+                "content-['public/index.html']"
+            ]
+        );
+    }
+
+    #[test]
+    fn it_respects_gitignore_files_with_nested_whitelist_patterns() {
+        // Example from the official `.gitignore` documentation:
+        //
+        // ```gitignore
+        // # exclude everything except directory foo/bar
+        // /*
+        // !/foo
+        // /foo/*
+        // !/foo/bar
+        // ```
+        let ScanResult {
+            files,
+            candidates,
+            tree,
+            ..
+        } = scan(&[
+            (
+                ".gitignore",
+                "# exclude everything except directory foo/bar\n/*\n!/foo\n/foo/*\n!/foo/bar\n",
+            ),
+            ("foo/bar/index.html", "content-['foo/bar/index.html']"),
+            (
+                "foo/bar/nested/index.html",
+                "content-['foo/bar/nested/index.html']",
+            ),
+            // These are all ignored because they are not inside `foo/bar`
+            ("index.html", "content-['index.html']"),
+            ("foo/index.html", "content-['foo/index.html']"),
+            ("foo/baz/index.html", "content-['foo/baz/index.html']"),
+        ]);
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       # exclude everything except directory foo/bar
+        │       /*
+        │       !/foo
+        │       /foo/*
+        │       !/foo/bar
+        ├── ✓ foo
+        │   ├── ✓ bar
+        │   │   ├── ✓ index.html
+        │   │   └── ✓ nested
+        │   │       └── ✓ index.html
+        │   ├── ✗ baz
+        │   │   └── ✗ index.html
+        │   └── ✗ index.html
+        └── ✗ index.html
+        ");
+
+        assert_eq!(
+            files,
+            vec!["foo/bar/index.html", "foo/bar/nested/index.html"]
+        );
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['foo/bar/index.html']",
+                "content-['foo/bar/nested/index.html']"
+            ]
+        );
+    }
+
+    #[test]
+    fn explicit_source_directories_respect_their_own_gitignore() {
+        // A directory referenced via `@source` behaves like an auto source detection
+        // root. The `.gitignore` file _inside_ that directory still applies to its
+        // contents. Only when the directory itself is ignored (by an ancestor
+        // `.gitignore`, see the tests above) do we bypass the ignore rules.
+        let ScanResult {
+            files,
+            candidates,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                ("vendor/.gitignore", "ignored.html"),
+                ("vendor/index.html", "content-['vendor/index.html']"),
+                ("vendor/ignored.html", "content-['vendor/ignored.html']"),
+            ],
+            vec!["@source 'vendor'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ vendor
+            ├── ✗ .gitignore
+            │       ignored.html
+            ├── ✗ ignored.html
+            └── ✓ index.html
+        ");
+
+        assert_eq!(files, vec!["vendor/index.html"]);
+        assert_eq!(candidates, vec!["content-['vendor/index.html']"]);
+    }
+
+    #[test]
+    fn explicit_sources_can_include_files_inside_gitignored_parent_directories() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                (".gitignore", "src/efgh/"),
+                ("src/efgh/index.html", "content-['src/efgh/index.html']"),
+                ("src/efgh/ignore.js", "content-['src/efgh/ignore.js']"),
+                ("src/abcd/index.html", "content-['src/abcd/index.html']"),
+            ],
+            vec!["@source './src/ef*/*.html'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       src/efgh/
+        └── ✓ src
+            ├── ✗ abcd
+            │   └── ✗ index.html
+            └── ✓ efgh
+                ├── ✗ ignore.js
+                └── ✓ index.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['src/efgh/index.html']"]);
+        assert_eq!(files, vec!["src/efgh/index.html"]);
+        assert_eq!(globs, vec!["src/ef*/*.html"]);
+    }
+
+    #[test]
+    fn skips_ignore_files_outside_of_a_repo() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                // This file should always be picked up
+                ("home/project/apps/web/index.html", "content-['index.html']"),
+                // Set up various ignore rules
+                ("home/.gitignore", "ignore-home.html"),
+                ("home/project/.gitignore", "ignore-project.html"),
+                ("home/project/apps/.gitignore", "ignore-apps.html"),
+                ("home/project/apps/web/.gitignore", "ignore-web.html"),
+                // Some of these should be ignored depending on which dir is the repo root
+                (
+                    "home/project/apps/web/ignore-home.html",
+                    "content-['ignore-home.html']",
+                ),
+                (
+                    "home/project/apps/web/ignore-project.html",
+                    "content-['ignore-project.html']",
+                ),
+                (
+                    "home/project/apps/web/ignore-apps.html",
+                    "content-['ignore-apps.html']",
+                ),
+                (
+                    "home/project/apps/web/ignore-web.html",
+                    "content-['ignore-web.html']",
+                ),
+                // Auto content detection outside of `web/`
+                (
+                    "home/project/apps/admin/index.html",
+                    "content-['home/project/apps/admin/index.html']",
+                ),
+                // Manual sources outside of `web/`
+                (
+                    "home/project/apps/dashboard/index.html",
+                    "content-['home/project/apps/dashboard/index.html']",
+                ),
+            ],
+        );
+
+        let sources = vec![
+            public_source_entry_from_pattern(
+                dir.join("home/project/apps/web")
+                    .to_string_lossy()
+                    .to_string()
+                    .into(),
+                "@source '**/*'",
+            ),
+            public_source_entry_from_pattern(
+                dir.join("home/project/apps/web")
+                    .to_string_lossy()
+                    .to_string()
+                    .into(),
+                "@source '../admin'",
+            ),
+            public_source_entry_from_pattern(
+                dir.join("home/project/apps/web")
+                    .to_string_lossy()
+                    .to_string()
+                    .into(),
+                "@source '../dashboard/*.html'",
+            ),
+        ];
+
+        let mut scanner = Scanner::new(sources.clone());
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        └── ✓ home
+            ├── ✗ .gitignore
+            │       ignore-home.html
+            └── ✓ project
+                ├── ✗ .gitignore
+                │       ignore-project.html
+                └── ✓ apps
+                    ├── ✗ .gitignore
+                    │       ignore-apps.html
+                    ├── ✓ admin
+                    │   └── ✓ index.html
+                    ├── ✓ dashboard
+                    │   └── ✓ index.html
+                    └── ✓ web
+                        ├── ✗ .gitignore
+                        │       ignore-web.html
+                        ├── ✗ ignore-apps.html
+                        ├── ✗ ignore-home.html
+                        ├── ✗ ignore-project.html
+                        ├── ✗ ignore-web.html
+                        └── ✓ index.html
+        ");
+
+        // All ignore files are applied because there's no git repo
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['home/project/apps/admin/index.html']",
+                "content-['home/project/apps/dashboard/index.html']",
+                "content-['index.html']"
+            ]
+        );
+
+        // Initialize `home` as a git repository and scan again
+        // The results should be the same as before
+        _ = Command::new("git")
+            .arg("init")
+            .current_dir(dir.join("home"))
+            .output();
+        let mut scanner = Scanner::new(sources.clone());
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        └── ✓ home (git)
+            ├── ✗ .gitignore
+            │       ignore-home.html
+            └── ✓ project
+                ├── ✗ .gitignore
+                │       ignore-project.html
+                └── ✓ apps
+                    ├── ✗ .gitignore
+                    │       ignore-apps.html
+                    ├── ✓ admin
+                    │   └── ✓ index.html
+                    ├── ✓ dashboard
+                    │   └── ✓ index.html
+                    └── ✓ web
+                        ├── ✗ .gitignore
+                        │       ignore-web.html
+                        ├── ✗ ignore-apps.html
+                        ├── ✗ ignore-home.html
+                        ├── ✗ ignore-project.html
+                        ├── ✗ ignore-web.html
+                        └── ✓ index.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['home/project/apps/admin/index.html']",
+                "content-['home/project/apps/dashboard/index.html']",
+                "content-['index.html']"
+            ]
+        );
+
+        // Drop the .git folder
+        fs::remove_dir_all(dir.join("home/.git")).unwrap();
+
+        // Initialize `home/project` as a git repository and scan again
+        _ = Command::new("git")
+            .arg("init")
+            .current_dir(dir.join("home/project"))
+            .output();
+        let mut scanner = Scanner::new(sources.clone());
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        └── ✓ home
+            ├── ✗ .gitignore
+            │       ignore-home.html
+            └── ✓ project (git)
+                ├── ✗ .gitignore
+                │       ignore-project.html
+                └── ✓ apps
+                    ├── ✗ .gitignore
+                    │       ignore-apps.html
+                    ├── ✓ admin
+                    │   └── ✓ index.html
+                    ├── ✓ dashboard
+                    │   └── ✓ index.html
+                    └── ✓ web
+                        ├── ✗ .gitignore
+                        │       ignore-web.html
+                        ├── ✗ ignore-apps.html
+                        ├── ✓ ignore-home.html
+                        ├── ✗ ignore-project.html
+                        ├── ✗ ignore-web.html
+                        └── ✓ index.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['home/project/apps/admin/index.html']",
+                "content-['home/project/apps/dashboard/index.html']",
+                "content-['ignore-home.html']",
+                "content-['index.html']"
+            ]
+        );
+
+        // Drop the .git folder
+        fs::remove_dir_all(dir.join("home/project/.git")).unwrap();
+
+        // Initialize `home/project/apps` as a git repository and scan again
+        _ = Command::new("git")
+            .arg("init")
+            .current_dir(dir.join("home/project/apps"))
+            .output();
+        let mut scanner = Scanner::new(sources.clone());
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        └── ✓ home
+            ├── ✗ .gitignore
+            │       ignore-home.html
+            └── ✓ project
+                ├── ✗ .gitignore
+                │       ignore-project.html
+                └── ✓ apps (git)
+                    ├── ✗ .gitignore
+                    │       ignore-apps.html
+                    ├── ✓ admin
+                    │   └── ✓ index.html
+                    ├── ✓ dashboard
+                    │   └── ✓ index.html
+                    └── ✓ web
+                        ├── ✗ .gitignore
+                        │       ignore-web.html
+                        ├── ✗ ignore-apps.html
+                        ├── ✓ ignore-home.html
+                        ├── ✓ ignore-project.html
+                        ├── ✗ ignore-web.html
+                        └── ✓ index.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['home/project/apps/admin/index.html']",
+                "content-['home/project/apps/dashboard/index.html']",
+                "content-['ignore-home.html']",
+                "content-['ignore-project.html']",
+                "content-['index.html']"
+            ]
+        );
+
+        // Drop the .git folder
+        fs::remove_dir_all(dir.join("home/project/apps/.git")).unwrap();
+
+        // Initialize `home/project/apps` as a git repository and scan again
+        _ = Command::new("git")
+            .arg("init")
+            .current_dir(dir.join("home/project/apps/web"))
+            .output();
+
+        let mut scanner = Scanner::new(sources.clone());
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        └── ✓ home
+            ├── ✗ .gitignore
+            │       ignore-home.html
+            └── ✓ project
+                ├── ✗ .gitignore
+                │       ignore-project.html
+                └── ✓ apps
+                    ├── ✗ .gitignore
+                    │       ignore-apps.html
+                    ├── ✓ admin
+                    │   └── ✓ index.html
+                    ├── ✓ dashboard
+                    │   └── ✓ index.html
+                    └── ✓ web (git)
+                        ├── ✗ .gitignore
+                        │       ignore-web.html
+                        ├── ✓ ignore-apps.html
+                        ├── ✓ ignore-home.html
+                        ├── ✓ ignore-project.html
+                        ├── ✗ ignore-web.html
+                        └── ✓ index.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['home/project/apps/admin/index.html']",
+                "content-['home/project/apps/dashboard/index.html']",
+                "content-['ignore-apps.html']",
+                "content-['ignore-home.html']",
+                "content-['ignore-project.html']",
+                "content-['index.html']",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_explicitly_ignore_explicitly_allowed_files() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                ("src/keep-me.html", "content-['keep-me.html']"),
+                ("src/ignore-me.html", "content-['ignore-me.html']"),
+            ],
+        );
+
+        let sources = vec![
+            public_source_entry_from_pattern(dir.clone(), "@source '**/*.html'"),
+            public_source_entry_from_pattern(dir.clone(), "@source not 'src/ignore-me.html'"),
+        ];
+
+        let mut scanner = Scanner::new(sources.clone());
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        └── ✓ src
+            ├── ✗ ignore-me.html
+            └── ✓ keep-me.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['keep-me.html']"]);
+    }
+
+    #[test]
+    fn test_works_with_filenames_containing_glob_characters() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                ("src/app/[foo]/ignore-me.html", "content-['ignore-me.html']"),
+                ("src/app/[foo]/keep-me.html", "content-['keep-me.html']"),
+            ],
+        );
+
+        let sources = vec![
+            public_source_entry_from_pattern(dir.clone(), "@source '**/*'"),
+            public_source_entry_from_pattern(
+                dir.clone(),
+                "@source not 'src/app/[foo]/ignore*.html'",
+            ),
+        ];
+
+        let mut scanner = Scanner::new(sources.clone());
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        └── ✓ src
+            └── ✓ app
+                └── ✓ [foo]
+                    ├── ✗ ignore-me.html
+                    └── ✓ keep-me.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['keep-me.html']"]);
+    }
+
+    #[test]
+    fn test_ignore_files_can_be_included_with_custom_source_rule() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[("src/keep-me.html", "content-['src/keep-me.html']")],
+        );
+
+        let mut scanner = Scanner::new(vec![
+            public_source_entry_from_pattern(dir.clone(), "@source '**/*.html'"),
+            public_source_entry_from_pattern(
+                dir.clone(),
+                "@source not 'src/ignored-by-source-not.html'",
+            ),
+        ]);
+
+        let candidates = scanner.scan();
+        assert_eq!(candidates, vec!["content-['src/keep-me.html']"]);
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        └── ✓ src
+            └── ✓ keep-me.html
+        ");
+
+        // Create new files that should definitely be ignored
+        create_files_in(
+            &dir,
+            &[
+                // Create new file that matches the `@source '…'` glob
+                ("src/new-file.html", "content-['src/new-file.html']"),
+                // Create new file that is ignored based on file extension
+                (
+                    "src/ignore-by-extension.bin",
+                    "content-['src/ignore-by-extension.bin']",
+                ),
+                // Create a file that is ignored based on the `.gitignore` file
+                (".gitignore", "src/ignored-by-gitignore.html"),
+                (
+                    "src/ignored-by-gitignore.html",
+                    "content-['src/ignored-by-gitignore.html']",
+                ),
+                // Create a file that is ignored by the `@source not '…'`
+                (
+                    "src/ignored-by-source-not.html",
+                    "content-['src/ignored-by-source-not.html']",
+                ),
+            ],
+        );
+
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ .gitignore
+        │       src/ignored-by-gitignore.html
+        └── ✓ src
+            ├── ✗ ignore-by-extension.bin
+            ├── ✓ ignored-by-gitignore.html
+            ├── ✗ ignored-by-source-not.html
+            ├── ✓ keep-me.html
+            └── ✓ new-file.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                // Ignored by git ignore BUT included by `@source "**/*.html"`
+                "content-['src/ignored-by-gitignore.html']",
+                "content-['src/keep-me.html']",
+                "content-['src/new-file.html']"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_allow_default_ignored_files() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Create files
+        create_files_in(&dir, &[("foo.styl", "content-['foo.styl']")]);
+
+        let sources = vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source '**/*'",
+        )];
+
+        let mut scanner = Scanner::new(sources.clone());
+
+        let candidates = scanner.scan();
+        assert!(candidates.is_empty());
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        └── ✗ foo.styl
+        ");
+
+        // Explicitly allow `.styl` files
+        let mut scanner = Scanner::new(vec![
+            public_source_entry_from_pattern(dir.clone(), "@source '**/*'"),
+            public_source_entry_from_pattern(dir.clone(), "@source '*.styl'"),
+        ]);
+
+        let candidates = scanner.scan();
+        assert_eq!(candidates, vec!["content-['foo.styl']"]);
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        └── ✓ foo.styl
+        ");
+    }
+
+    #[test]
+    fn test_allow_default_ignored_files_via_gitignore() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                ("index.html", "content-['index.html']"),
+                (".gitignore", "index.html"),
+            ],
+        );
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source '**/*'",
+        )]);
+
+        let candidates = scanner.scan();
+        assert!(candidates.is_empty());
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ .gitignore
+        │       index.html
+        └── ✗ index.html
+        ");
+
+        let mut scanner = Scanner::new(vec![
+            public_source_entry_from_pattern(dir.clone(), "@source '**/*'"),
+            public_source_entry_from_pattern(dir.clone(), "@source './*.html'"),
+        ]);
+
+        let candidates = scanner.scan();
+        assert_eq!(candidates, vec!["content-['index.html']"]);
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ .gitignore
+        │       index.html
+        └── ✓ index.html
+        ");
+    }
+
+    #[test]
+    fn test_allow_explicit_node_modules_paths() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                // Current project
+                ("src/index.html", "content-['src/index.html']"),
+                // Ignore file
+                (".gitignore", "node_modules"),
+                // Library ignored by default
+                (
+                    "node_modules/my-ui-lib/index.html",
+                    "content-['node_modules/my-ui-lib/index.html']",
+                ),
+            ],
+        );
+
+        // Default auto source detection
+        let sources = vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source './'",
+        )];
+
+        let mut scanner = Scanner::new(sources.clone());
+
+        let candidates = scanner.scan();
+        assert_eq!(candidates, vec!["content-['src/index.html']"]);
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ .gitignore
+        │       node_modules
+        ├── ✗ node_modules
+        │   └── ✗ my-ui-lib
+        │       └── ✗ index.html
+        └── ✓ src
+            └── ✓ index.html
+        ");
+
+        // Explicitly listing all `*.html` files, should not include `node_modules` because it's
+        // ignored
+        let sources = vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source '**/*.html'",
+        )];
+
+        let mut scanner = Scanner::new(sources.clone());
+        let candidates = scanner.scan();
+        assert_eq!(candidates, vec!["content-['src/index.html']"]);
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ .gitignore
+        │       node_modules
+        ├── ✗ node_modules
+        │   └── ✗ my-ui-lib
+        │       └── ✗ index.html
+        └── ✓ src
+            └── ✓ index.html
+        ");
+
+        // Explicitly listing all `*.html` files
+        // Explicitly list the `node_modules/my-ui-lib`
+        //
+        let sources = vec![
+            public_source_entry_from_pattern(dir.clone(), "@source '**/*.html'"),
+            public_source_entry_from_pattern(dir.clone(), "@source 'node_modules/my-ui-lib'"),
+        ];
+
+        let mut scanner = Scanner::new(sources.clone());
+        let candidates = scanner.scan();
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['node_modules/my-ui-lib/index.html']",
+                "content-['src/index.html']"
+            ]
+        );
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ .gitignore
+        │       node_modules
+        ├── ✓ node_modules
+        │   └── ✓ my-ui-lib
+        │       └── ✓ index.html
+        └── ✓ src
+            └── ✓ index.html
+        ");
+    }
+
+    // https://github.com/tailwindlabs/tailwindcss/issues/19844
+    #[test]
+    fn test_allow_explicit_sources_ignored_by_allow_list_gitignore() {
+        let ScanResult {
+            candidates, tree, ..
+        } = scan_with_globs(
+            &[
+                (".gitignore", "*\n!/app\n!/app/design\n!/app/design/**\n"),
+                (
+                    "app/design/frontend/theme/templates/component.phtml",
+                    "content-['app/design/frontend/theme/templates/component.phtml']",
+                ),
+                (
+                    "vendor/acme/theme/module/templates/component.phtml",
+                    "content-['vendor/acme/theme/module/templates/component.phtml']",
+                ),
+            ],
+            vec!["@source 'vendor/acme/theme'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       *
+        │       !/app
+        │       !/app/design
+        │       !/app/design/**
+        ├── ✗ app
+        │   └── ✗ design
+        │       └── ✗ frontend
+        │           └── ✗ theme
+        │               └── ✗ templates
+        │                   └── ✗ component.phtml
+        └── ✓ vendor
+            └── ✓ acme
+                └── ✓ theme
+                    └── ✓ module
+                        └── ✓ templates
+                            └── ✓ component.phtml
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['vendor/acme/theme/module/templates/component.phtml']"]
+        );
+    }
+
+    #[test]
+    fn test_ignore_node_modules_without_gitignore() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                (
+                    "packages/web/index.html",
+                    "content-['packages/web/index.html']",
+                ),
+                (
+                    "node_modules/index.html",
+                    "content-['node_modules/index.html']",
+                ),
+                (
+                    "packages/web/node_modules/index.html",
+                    "content-['packages/web/node_modules/index.html']",
+                ),
+            ],
+            vec!["@source '**/*'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ node_modules
+        │   └── ✗ index.html
+        └── ✓ packages
+            └── ✓ web
+                ├── ✓ index.html
+                └── ✗ node_modules
+                    └── ✗ index.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['packages/web/index.html']"]);
+
+        assert_eq!(files, vec!["packages/web/index.html",]);
+        assert_eq!(globs, vec!["*", "packages/*/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}", "packages/web/*/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn test_ignore_gitignore_in_node_modules_source() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                (".gitignore", "node_modules\ndist"),
+                (
+                    "node_modules/my-ui-lib/dist/index.html",
+                    "content-['node_modules/my-ui-lib/dist/index.html']",
+                ),
+                (
+                    "node_modules/my-ui-lib/node.exe",
+                    "content-['node_modules/my-ui-lib/node.exe']",
+                ),
+            ],
+            vec!["@source 'node_modules/my-ui-lib'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       node_modules
+        │       dist
+        └── ✓ node_modules
+            └── ✓ my-ui-lib
+                ├── ✓ dist
+                │   └── ✓ index.html
+                └── ✗ node.exe
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['node_modules/my-ui-lib/dist/index.html']"]
+        );
+        assert_eq!(files, vec!["node_modules/my-ui-lib/dist/index.html"]);
+        assert_eq!(globs, vec!["node_modules/my-ui-lib/*", "node_modules/my-ui-lib/dist/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}"]);
+        assert_eq!(normalized_sources, vec!["node_modules/my-ui-lib/**/*"]);
+    }
+
+    #[test]
+    fn test_manually_scanning_files_should_follow_all_rules() {
+        // Create a temporary working directory
+        let dir = tempdir().unwrap().into_path();
+
+        // Create files
+        create_files_in(
+            &dir,
+            &[
+                // Ignore all `.jsx` files, and all `generated` folders
+                (".gitignore", "*.jsx\ngenerated/"),
+                // .tsx files are allowed
+                (
+                    "src/components/button.tsx",
+                    "content-['src/components/button.tsx']",
+                ),
+                // .jsx files are not allowed
+                (
+                    "src/components/button.jsx",
+                    "content-['src/components/button.jsx']",
+                ),
+            ],
+        );
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source '**/*'",
+        )]);
+
+        let candidates = scanner.scan();
+        assert_eq!(candidates, vec!["content-['src/components/button.tsx']"]);
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ .gitignore
+        │       *.jsx
+        │       generated/
+        └── ✓ src
+            └── ✓ components
+                ├── ✗ button.jsx
+                └── ✓ button.tsx
+        ");
+
+        // Create 2 new files, one "good" and one "bad" file, and manually scan them. This should
+        // only return the "good" file because the "bad" one is ignored by a `.gitignore` file.
+        create_files_in(
+            &dir,
+            &[
+                (
+                    "src/components/good.tsx",
+                    "content-['src/components/good.tsx']",
+                ),
+                (
+                    "src/components/bad.jsx",
+                    "content-['src/components/bad.jsx']",
+                ),
+            ],
+        );
+
+        let candidates = scanner.scan_content(vec![
+            ChangedContent::File(dir.join("src/components/good.tsx"), "tsx".to_owned()),
+            ChangedContent::File(dir.join("src/components/bad.jsx"), "jsx".to_owned()),
+        ]);
+
+        assert_eq!(candidates, vec!["content-['src/components/good.tsx']"]);
+
+        // Create a generated file in a nested folder that is ignored by a `.gitignore` file higher
+        // up the tree.
+        create_files_in(
+            &dir,
+            &[
+                (
+                    "src/components/generated/bad.tsx",
+                    "content-['src/components/generated/bad.tsx']",
+                ),
+                (
+                    "src/components/generated/bad.jsx",
+                    "content-['src/components/generated/bad.jsx']",
+                ),
+            ],
+        );
+
+        let candidates = scanner.scan_content(vec![
+            ChangedContent::File(
+                dir.join("src/components/generated/bad.tsx"),
+                "tsx".to_owned(),
+            ),
+            ChangedContent::File(
+                dir.join("src/components/generated/bad.jsx"),
+                "jsx".to_owned(),
+            ),
+        ]);
+
+        assert!(candidates.is_empty());
+    }
+
+    #[test]
+    fn test_works_with_utf8_special_character_paths() {
+        let ScanResult {
+            candidates,
+            files,
+            globs,
+            normalized_sources,
+            tree,
+            ..
+        } = scan_with_globs(
+            &[
+                ("src/💩.js", "content-['src/💩.js']"),
+                ("src/🤦‍♂️.tsx", "content-['src/🤦‍♂️.tsx']"),
+                ("src/🤦‍♂️/foo.tsx", "content-['src/🤦‍♂️/foo.tsx']"),
+            ],
+            vec!["@source '**/*'", "@source not 'src/🤦‍♂️'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        └── ✓ src
+            ├── ✓ 💩.js
+            ├── ✗ 🤦‍♂️
+            │   └── ✗ foo.tsx
+            └── ✓ 🤦‍♂️.tsx
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['src/💩.js']", "content-['src/🤦‍♂️.tsx']"]
+        );
+
+        assert_eq!(files, vec!["src/💩.js", "src/🤦‍♂️.tsx"]);
+        assert_eq!(globs, vec!["*", "src/*/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}"]);
+        assert_eq!(normalized_sources, vec!["**/*"]);
+    }
+
+    #[test]
+    fn test_glob_with_symlinks() {
+        let dir = tempdir().unwrap().into_path();
+        create_files_in(
+            &dir,
+            &[
+                (".gitignore", "node_modules\ndist"),
+                (
+                    "node_modules/.pnpm/@org+my-ui-library/dist/index.ts",
+                    "content-['node_modules/.pnpm/@org+my-ui-library/dist/index.ts']",
+                ),
+                // Make sure the `@org` does exist
+                ("node_modules/@org/.gitkeep", ""),
+            ],
+        );
+        let _ = symlink(
+            dir.join("node_modules/.pnpm/@org+my-ui-library"),
+            dir.join("node_modules/@org/my-ui-library"),
+        );
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source 'node_modules'",
+        )]);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ .gitignore
+        │       node_modules
+        │       dist
+        └── ✓ node_modules
+            ├── ✓ .pnpm
+            │   └── ✓ @org+my-ui-library
+            │       └── ✓ dist
+            │           └── ✓ index.ts
+            └── ✓ @org
+                ├── ✓ .gitkeep
+                └── ✓ my-ui-library → ../.pnpm/@org+my-ui-library
+                    └── ✓ dist
+                        └── ✓ index.ts
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['node_modules/.pnpm/@org+my-ui-library/dist/index.ts']"]
+        );
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source 'node_modules/@org/my-ui-library'",
+        )]);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ .gitignore
+        │       node_modules
+        │       dist
+        └── ✓ node_modules
+            ├── ✓ .pnpm
+            │   └── ✓ @org+my-ui-library
+            │       └── ✓ dist
+            │           └── ✓ index.ts
+            └── ✓ @org
+                ├── ✗ .gitkeep
+                └── ✓ my-ui-library → ../.pnpm/@org+my-ui-library
+                    └── ✓ dist
+                        └── ✓ index.ts
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['node_modules/.pnpm/@org+my-ui-library/dist/index.ts']"]
+        );
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source 'node_modules/@org'",
+        )]);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ .gitignore
+        │       node_modules
+        │       dist
+        └── ✓ node_modules
+            ├── ✓ .pnpm
+            │   └── ✓ @org+my-ui-library
+            │       └── ✓ dist
+            │           └── ✓ index.ts
+            └── ✓ @org
+                ├── ✓ .gitkeep
+                └── ✓ my-ui-library → ../.pnpm/@org+my-ui-library
+                    └── ✓ dist
+                        └── ✓ index.ts
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['node_modules/.pnpm/@org+my-ui-library/dist/index.ts']"]
+        );
+    }
+
+    #[test]
+    fn test_globs_with_recursive_symlinks() {
+        let dir = tempdir().unwrap().into_path();
+        create_files_in(
+            &dir,
+            &[
+                ("b/index.html", "content-['b/index.html']"),
+                ("z/index.html", "content-['z/index.html']"),
+            ],
+        );
+
+        // Create recursive symlinks:
+        //
+        // - `a → b`, `b/c → c`, `c → a` form a cycle
+        // - `b/root → .` points back at the root directory
+        let _ = symlink(dir.join("b"), dir.join("a"));
+        let _ = symlink(dir.join("c"), dir.join("b/c"));
+        let _ = symlink(&dir, dir.join("b/root"));
+        let _ = symlink(dir.join("a"), dir.join("c"));
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source '.'",
+        )]);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✓ a → b
+        │   ├── ✗ c → ../c
+        │   ├── ✓ index.html
+        │   └── ✗ root → ..
+        ├── ✓ b
+        │   ├── ✗ c → ../c
+        │   ├── ✓ index.html
+        │   └── ✗ root → ..
+        ├── ✓ c → a
+        │   ├── ✗ c → .
+        │   ├── ✓ index.html
+        │   └── ✗ root → ..
+        └── ✓ z
+            └── ✓ index.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec!["content-['b/index.html']", "content-['z/index.html']"]
+        );
+    }
+
+    #[test]
+    fn test_partial_globs_with_symlinks() {
+        let dir = tempdir().unwrap().into_path();
+        create_files_in(&dir, &[("abcd/xyz.html", "content-['abcd/xyz.html']")]);
+        let _ = symlink(dir.join("abcd"), dir.join("efgh"));
+
+        // No sources should find nothing
+        let mut scanner = Scanner::new(vec![]);
+        let candidates = scanner.scan();
+        assert!(candidates.is_empty());
+
+        // Full symlinked folder name, should find the file
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source 'efgh/*.html'",
+        )]);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✓ abcd
+        │   └── ✓ xyz.html
+        └── ✓ efgh → abcd
+            └── ✓ xyz.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['abcd/xyz.html']"]);
+
+        // Partially referencing the symlinked folder with a glob, should find the file
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source 'ef*/*.html'",
+        )]);
+        let candidates = scanner.scan();
+
+        assert_eq!(candidates, vec!["content-['abcd/xyz.html']"]);
+    }
+
+    #[test]
+    fn test_symlinked_sources_within_the_scanned_tree_can_be_ignored() {
+        let dir = tempdir().unwrap().into_path();
+        create_files_in(
+            &dir,
+            &[
+                ("src/keep.html", "content-['src/keep.html']"),
+                (
+                    "actual-dir/ignore.html",
+                    "content-['actual-dir/ignore.html']",
+                ),
+                ("actual-file.html", "content-['actual-file.html']"),
+            ],
+        );
+
+        let _ = symlink(dir.join("actual-dir"), dir.join("linked-dir"));
+        let _ = symlink_file(dir.join("actual-file.html"), dir.join("linked-file.html"));
+
+        let base = dir.join("src");
+        let mut scanner = Scanner::new(vec![
+            public_source_entry_from_pattern(base.clone(), "@source '../**/*'"),
+            public_source_entry_from_pattern(base.clone(), "@source not '../actual-dir'"),
+            public_source_entry_from_pattern(base.clone(), "@source not '../linked-dir'"),
+            public_source_entry_from_pattern(base.clone(), "@source not '../actual-file.html'"),
+            public_source_entry_from_pattern(base.clone(), "@source not '../linked-file.html'"),
+        ]);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ actual-dir
+        │   └── ✗ ignore.html
+        ├── ✗ actual-file.html
+        ├── ✗ linked-dir → actual-dir
+        │   └── ✗ ignore.html
+        ├── ✗ linked-file.html → actual-file.html
+        └── ✓ src
+            └── ✓ keep.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['src/keep.html']"]);
+
+        let mut scanner = Scanner::new(vec![
+            public_source_entry_from_pattern(base.clone(), "@source '../**/*'"),
+            public_source_entry_from_pattern(base.clone(), "@source not '../actual-dir/**/*.html'"),
+            public_source_entry_from_pattern(base.clone(), "@source not '../linked-dir/**/*.html'"),
+            public_source_entry_from_pattern(base.clone(), "@source not '../actual-file.html'"),
+            public_source_entry_from_pattern(base.clone(), "@source not '../linked-file.html'"),
+        ]);
+        let candidates = scanner.scan();
+
+        assert_eq!(candidates, vec!["content-['src/keep.html']"]);
+    }
+
+    #[test]
+    fn test_symlinked_sources_outside_the_scanned_tree_can_be_ignored() {
+        let dir = tempdir().unwrap().into_path();
+        create_files_in(
+            &dir,
+            &[
+                (
+                    "actual-dir/ignore.html",
+                    "content-['actual-dir/ignore.html']",
+                ),
+                ("project/keep.html", "content-['project/keep.html']"),
+            ],
+        );
+
+        let _ = symlink(dir.join("actual-dir"), dir.join("project/linked-dir"));
+
+        let base = dir.join("project");
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            base.clone(),
+            "@source '**/*'",
+        )]);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✓ actual-dir
+        │   └── ✓ ignore.html
+        └── ✓ project
+            ├── ✓ keep.html
+            └── ✓ linked-dir → ../actual-dir
+                └── ✓ ignore.html
+        ");
+
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['actual-dir/ignore.html']",
+                "content-['project/keep.html']",
+            ]
+        );
+
+        let mut scanner = Scanner::new(vec![
+            public_source_entry_from_pattern(base.clone(), "@source '**/*'"),
+            public_source_entry_from_pattern(base.clone(), "@source not 'linked-dir'"),
+        ]);
+        let candidates = scanner.scan();
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✗ actual-dir
+        │   └── ✗ ignore.html
+        └── ✓ project
+            ├── ✓ keep.html
+            └── ✗ linked-dir → ../actual-dir
+                └── ✗ ignore.html
+        ");
+
+        assert_eq!(candidates, vec!["content-['project/keep.html']"]);
+    }
+
+    #[test]
+    fn test_files_behind_symlinks_are_tracked_with_their_canonical_paths() {
+        let dir = tempdir().unwrap().into_path();
+        create_files_in(
+            &dir,
+            &[
+                (
+                    "packages/repro/source.html",
+                    "content-['packages/repro/source.html']",
+                ),
+                (
+                    "packages/repro/nested/deep.html",
+                    "content-['packages/repro/nested/deep.html']",
+                ),
+                (
+                    "packages/other/index.html",
+                    "content-['packages/other/index.html']",
+                ),
+            ],
+        );
+
+        // Mimic a pnpm workspace where `node_modules` contains a symlink to the actual package
+        fs::create_dir_all(dir.join("node_modules")).unwrap();
+        let _ = symlink(dir.join("packages/repro"), dir.join("node_modules/repro"));
+
+        // A directly symlinked file
+        let _ = symlink_file(
+            dir.join("packages/other/index.html"),
+            dir.join("linked.html"),
+        );
+
+        let mut scanner = Scanner::new(vec![
+            public_source_entry_from_pattern(
+                dir.clone(),
+                "@source 'node_modules/repro/source.html'",
+            ),
+            // The symlink sits multiple levels up from the file
+            public_source_entry_from_pattern(
+                dir.clone(),
+                "@source 'node_modules/repro/nested/deep.html'",
+            ),
+            public_source_entry_from_pattern(dir.clone(), "@source 'linked.html'"),
+        ]);
+
+        let candidates = scanner.scan();
+        assert_eq!(
+            candidates,
+            vec![
+                "content-['packages/other/index.html']",
+                "content-['packages/repro/nested/deep.html']",
+                "content-['packages/repro/source.html']",
+            ]
+        );
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✓ linked.html → packages/other/index.html
+        ├── ✓ node_modules
+        │   └── ✓ repro → ../packages/repro
+        │       ├── ✓ nested
+        │       │   └── ✓ deep.html
+        │       └── ✓ source.html
+        └── ✓ packages
+            ├── ✓ other
+            │   └── ✓ index.html
+            └── ✓ repro
+                ├── ✓ nested
+                │   └── ✓ deep.html
+                └── ✓ source.html
+        ");
+
+        // Both the symlinked paths and the canonical paths should be tracked, such that file
+        // watchers watching the returned files also watch the real files on disk.
+        let files = scanned_files(&mut scanner, &dir);
+        assert_eq!(
+            files,
+            vec![
+                "linked.html",
+                "node_modules/repro/nested/deep.html",
+                "node_modules/repro/source.html",
+                "packages/other/index.html",
+                "packages/repro/nested/deep.html",
+                "packages/repro/source.html",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_changes_to_the_canonical_path_of_a_symlinked_file_are_detected() {
+        let dir = tempdir().unwrap().into_path();
+        create_files_in(&dir, &[("packages/repro/source.html", "content-['v1']")]);
+
+        // Mimic a pnpm workspace where `node_modules` contains a symlink to the actual package
+        fs::create_dir_all(dir.join("node_modules")).unwrap();
+        let _ = symlink(dir.join("packages/repro"), dir.join("node_modules/repro"));
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source 'node_modules/repro/source.html'",
+        )]);
+
+        let candidates = scanner.scan();
+        assert_eq!(candidates, vec!["content-['v1']"]);
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✓ node_modules
+        │   └── ✓ repro → ../packages/repro
+        │       └── ✓ source.html
+        └── ✓ packages
+            └── ✓ repro
+                └── ✓ source.html
+        ");
+
+        // Update the real file on disk. This is the path file watchers will report changes for.
+        create_files_in(&dir, &[("packages/repro/source.html", "content-['v2']")]);
+
+        let candidates = scanner.scan_content(vec![ChangedContent::File(
+            dir.join("packages/repro/source.html"),
+            "html".into(),
+        )]);
+        assert_eq!(candidates, vec!["content-['v2']"]);
+    }
+
+    #[test]
+    fn test_new_files_behind_symlinks_are_detected_at_their_canonical_path() {
+        let dir = tempdir().unwrap().into_path();
+        create_files_in(&dir, &[("packages/repro/a.html", "content-['a']")]);
+
+        // Mimic a pnpm workspace where `node_modules` contains a symlink to the actual package
+        fs::create_dir_all(dir.join("node_modules")).unwrap();
+        let _ = symlink(dir.join("packages/repro"), dir.join("node_modules/repro"));
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source 'node_modules/repro/*.html'",
+        )]);
+
+        let candidates = scanner.scan();
+        assert_eq!(candidates, vec!["content-['a']"]);
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✓ node_modules
+        │   └── ✓ repro → ../packages/repro
+        │       └── ✓ a.html
+        └── ✓ packages
+            └── ✓ repro
+                └── ✓ a.html
+        ");
+
+        // Create a new file in the real directory. File watchers watching the real directory
+        // will report the new file with its canonical path.
+        create_files_in(&dir, &[("packages/repro/b.html", "content-['b']")]);
+
+        let candidates = scanner.scan_content(vec![ChangedContent::File(
+            dir.join("packages/repro/b.html"),
+            "html".into(),
+        )]);
+        assert_eq!(candidates, vec!["content-['b']"]);
+
+        assert_snapshot!(fs_tree(&dir, &scanned_files(&mut scanner, &dir)), @"
+        .
+        ├── ✓ node_modules
+        │   └── ✓ repro → ../packages/repro
+        │       ├── ✓ a.html
+        │       └── ✓ b.html
+        └── ✓ packages
+            └── ✓ repro
+                ├── ✓ a.html
+                └── ✗ b.html
+        ");
+    }
+
+    // https://github.com/tailwindlabs/tailwindcss/pull/20408
+    #[test]
+    fn test_resolving_globs_does_not_traverse_gitignored_directories() {
+        let ScanResult {
+            files, globs, tree, ..
+        } = scan_with_globs(
+            &[
+                (".gitignore", "/vendor\n"),
+                ("vendor/pkg/canary/index.html", ""),
+                ("src/index.html", ""),
+            ],
+            vec!["@source '**/*'", "@source './vendor/pkg/canary'"],
+        );
+
+        assert_snapshot!(tree, @"
+        . (git)
+        ├── ✗ .gitignore
+        │       /vendor
+        ├── ✓ src
+        │   └── ✓ index.html
+        └── ✓ vendor
+            └── ✓ pkg
+                └── ✓ canary
+                    └── ✓ index.html
+        ");
+
+        assert_eq!(
+            files,
+            vec!["src/index.html", "vendor/pkg/canary/index.html"]
+        );
+        assert_eq!(globs, vec![
+            "*",
+            "src/**/*.{aspx,astro,cjs,cts,eex,erb,gjs,gts,haml,handlebars,hbs,heex,html,jade,js,jsx,liquid,md,mdx,mjs,mts,mustache,njk,nunjucks,php,pug,py,razor,rb,rhtml,rs,slim,svelte,tpl,ts,tsx,twig,vue}",
+
+            // This should not include `**` or `**.*.{aspx,...}` otherwise this might be scanned recursively.
+            "vendor/pkg/canary/*",
+        ]);
+    }
+
+    #[test]
+    fn test_extract_used_css_variables_from_css() {
+        let dir = tempdir().unwrap().into_path();
+        create_files_in(
+            &dir,
+            &[
+                (
+                    "src/index.css",
+                    r#"
+                        @theme {
+                            --color-red: #ff0000; /* Not used, so don't extract */
+                            --color-green: #00ff00; /* Not used, so don't extract */
+                        }
+
+                        .button {
+                            color: var(--color-red); /* Used, so extract */
+                        }
+                    "#,
+                ),
+                ("src/used-at-start.css", "var(--color-used-at-start)"),
+                // Here to verify that we don't crash when trying to find `var(` in front of the
+                // variable.
+                ("src/defined-at-start.css", "--color-defined-at-start: red;"),
+            ],
+        );
+        fs::write(
+            dir.join("src/invalid.css"),
+            b".button { color: var(--color-\x80); }",
+        )
+        .unwrap();
+
+        let mut scanner = Scanner::new(vec![public_source_entry_from_pattern(
+            dir.clone(),
+            "@source './'",
+        )]);
+        let candidates = scanner.scan();
+
+        assert_eq!(candidates, vec!["--color-red", "--color-used-at-start"]);
+    }
+}

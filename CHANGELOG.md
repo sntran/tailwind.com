@@ -6,6 +6,21 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
+## Unreleased
+
+### Changed
+
+- The scanner of Tailwind CSS is a copy in the repository
+  (`native/scanner`), not a dependency on the git repository of Tailwind
+  CSS: three crates with no change in their code, and manifests of ours
+  with the names `tailwind-com-scanner`,
+  `tailwind-com-classification-macros` and `tailwind-com-ignore`.
+  crates.io takes a crate only when each dependency is on crates.io.
+  `scripts/scanner.sh` makes the copy, and CI compares it with the tag of
+  Tailwind CSS and runs its tests.
+- CI checks that crates.io takes the three crates
+  (`cargo publish --dry-run`).
+
 ## 0.2.0 - 2026-11-12
 
 Each version of Tailwind CSS 4, from 4.0.0 to 4.3.5, in one file.

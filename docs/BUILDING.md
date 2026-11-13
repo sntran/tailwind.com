@@ -163,11 +163,12 @@ download or find `tailwind.com`.
 ## A release
 
 The packages have one version of their own: `package.json`, `mix.exs`,
-`src/tailwind.app.src` and the crate (`sh scripts/sync-upstream.sh check`
-compares them). The version of Tailwind CSS that the compiler follows is
+`src/tailwind.app.src`, and the Rust crates (`[workspace.package]` and
+the three crates of the scanner in `[workspace.dependencies]` of
+`Cargo.toml`). `sh scripts/sync-upstream.sh check` compares them. The version of Tailwind CSS that the compiler follows is
 in `UPSTREAM`. `tailwind.com --version` prints the two.
 
-Before the tag, set the new version in these four files, the `tag` of
+Before the tag, set the new version in these places, the `tag` of
 the Phoenix example in `README.md`, and the title of the section
 "Unreleased" of `CHANGELOG.md`. A tag `vX.Y.Z` with the version of the
 packages starts the release job of CI. The job:

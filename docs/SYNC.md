@@ -49,7 +49,7 @@ file has no entry: add one (`port`, `gen`, `copy`, `dep` or `skip`).
 | What | Where |
 |---|---|
 | The version and the commit | `UPSTREAM`, `VERSION` in `index.rs`, `src/tailwind.erl`, the docs |
-| The scanner of Tailwind CSS | the tag of `tailwindcss-oxide` in `native/tailwind/Cargo.toml` |
+| The scanner of Tailwind CSS | `native/scanner`: the three crates of the new tag (`scripts/scanner.sh`). When `native/scanner/manifests` changes, change our manifests in the same way |
 | Lightning CSS | the crate version for the npm version of `pnpm-workspace.yaml` of Tailwind CSS |
 | The stylesheets | `native/tailwind/assets/*.css`, from the npm package |
 | The plugins of the standalone program | their versions in the lock file of Tailwind CSS go to `UPSTREAM` and to `tests/upstream/tools/package.json`, and `tests/upstream/tools/build-plugin-bundles.mjs` makes `native/tailwind/assets/plugins/` again |
