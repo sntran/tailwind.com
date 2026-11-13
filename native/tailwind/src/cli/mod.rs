@@ -828,6 +828,12 @@ pub fn run(mut argv: Vec<String>) -> i32 {
     if options.watch.is_some() {
         return watch(build, &options, &mut previous, &style, &stdin_text);
     }
+    // The process ends now, and the system frees its memory: a drop of
+    // the compiler only costs time (about a sixth of a large build). In
+    // a run of `run_with`, the caller continues, so the build drops.
+    if !context::embedded() {
+        std::mem::forget(build);
+    }
     0
 }
 

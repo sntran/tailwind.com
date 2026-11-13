@@ -31,6 +31,10 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 
 ### Changed
 
+- A build with no `--watch` does not free the compiler at its end: the
+  system frees the memory of the process. A build of a large project
+  (1000 files, about 5600 classes) takes 28% less time. A watch, and a run
+  of `run_with` (the NIF), free the compiler as before.
 - The scanner of Tailwind CSS is a copy in the repository
   (`native/scanner`), not a dependency on the git repository of Tailwind
   CSS: three crates with no change in their code, and manifests of ours
