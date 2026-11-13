@@ -2,6 +2,8 @@
 #
 #   make            build/tailwind.com: one file for all the systems
 #   make native     target/release/tailwind: a program for this computer
+#   make nif        build/nif: the native NIF objects for BEAM.com
+#                   (docs/NIF.md)
 #   make wasm       build/tailwind.wasm: the program for WASI. With
 #                   WASI_SDK_PATH (a wasi-sdk), the program has JavaScript
 #                   for @plugin and @config.
@@ -13,7 +15,7 @@
 
 BUILD ?= $(CURDIR)/build
 
-.PHONY: all native wasm test test-rust test-cli test-wasm test-mix tlc
+.PHONY: all native nif wasm test test-rust test-cli test-wasm test-mix tlc
 
 all: $(BUILD)/tailwind.com
 
@@ -22,6 +24,9 @@ $(BUILD)/tailwind.com: FORCE
 
 native:
 	cargo build --release
+
+nif:
+	sh scripts/nif.sh $(BUILD)/nif
 
 wasm:
 	cargo build --release --target wasm32-wasip1

@@ -42,7 +42,7 @@ impl Events {
             let _ = enabled;
             false
         };
-        let debug = std::env::var_os("TAILWIND_WATCH_DEBUG").is_some_and(|value| value == "1");
+        let debug = super::context::var("TAILWIND_WATCH_DEBUG").is_some_and(|value| value == "1");
         let events = Self { active, debug };
         if active {
             events.debug(&format!("events ({})", events.name()));
@@ -64,7 +64,7 @@ impl Events {
     /// Print a line of `TAILWIND_WATCH_DEBUG`.
     pub fn debug(&self, text: &str) {
         if self.debug {
-            eprintln!("watch: {text}");
+            super::context::err(&format!("watch: {text}\n"));
         }
     }
 

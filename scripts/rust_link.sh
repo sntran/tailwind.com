@@ -17,12 +17,18 @@
 # OUT has a size of 4 modulo 8, the link of the program puts 4 bytes of
 # zero after it, before the next .eh_frame. So OUT then gets one more CIE
 # (native/tailwind/c_src/eh_frame_pad.ld). See C43 in docs/UPSTREAM.md of BEAM.com.
+#
+# RUST_LINK_SCRIPT, when it is set, is one more linker script for the two
+# links (scripts/nif.sh gives native/nif/sections.ld).
 set -eu
 C=$1 cpu=$2 name=$3 out=$4
 shift 4
 root=$(cd "$(dirname "$0")/.." && pwd)
 ld=$C/bin/$cpu-linux-cosmo-ld
 objcopy=$C/bin/$cpu-unknown-cosmo-objcopy
+if [ -n "${RUST_LINK_SCRIPT:-}" ]; then
+    set -- -T "$RUST_LINK_SCRIPT" "$@"
+fi
 eh_frame_mod8() {
     sh "$objcopy" -O binary --only-section=.eh_frame "$out.r" "$out.eh"
     echo $(($(wc -c < "$out.eh") % 8))

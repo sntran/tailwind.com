@@ -34,14 +34,14 @@ impl FileSystem {
 /// is the system at run time. (`std::env::split_paths` is for the system
 /// of the build, and is not there for WASI.)
 pub fn node_path() -> Vec<PathBuf> {
-    let Some(paths) = std::env::var_os("NODE_PATH") else { return Vec::new() };
+    let Some(paths) = super::context::var("NODE_PATH") else { return Vec::new() };
     #[cfg(tw_js)]
     let windows = crate::compat::js::engine::platform() == "win32";
     // A build with no JavaScript engine has no C code for this question.
     #[cfg(not(tw_js))]
     let windows = cfg!(windows);
     let separator = if windows { ';' } else { ':' };
-    paths.to_string_lossy().split(separator).filter(|path| !path.is_empty()).map(PathBuf::from).collect()
+    paths.split(separator).filter(|path| !path.is_empty()).map(PathBuf::from).collect()
 }
 
 fn kind(file_type: std::fs::FileType) -> FileKind {
@@ -106,9 +106,9 @@ impl ModuleLoader for FileSystem {
             return;
         }
         if is_error {
-            eprintln!("{text}");
+            super::context::err(&format!("{text}\n"));
         } else {
-            println!("{text}");
+            super::context::out(&format!("{text}\n"));
         }
     }
 
@@ -117,17 +117,27 @@ impl ModuleLoader for FileSystem {
     }
 
     fn cwd(&self) -> String {
-        std::env::current_dir().map(|dir| dir.to_string_lossy().into_owned()).unwrap_or_else(|_| "/".to_string())
+        let cwd = super::context::cwd();
+        if cwd.as_os_str().is_empty() {
+            "/".to_string()
+        } else {
+            cwd.to_string_lossy().into_owned()
+        }
     }
 
     fn env(&self) -> Vec<(String, String)> {
         // The environment of the program, as `process.env` of Node.js. A
         // variable that is not Unicode text is not there.
-        std::env::vars_os().filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?))).collect()
+        super::context::vars()
     }
 
     fn argv(&self) -> Vec<String> {
-        let mut args = std::env::args_os().map(|arg| arg.to_string_lossy().into_owned());
+        // In a run of `run_with`, the arguments of the run, after the name
+        // of the program.
+        let mut args: Box<dyn Iterator<Item = String>> = match super::context::args() {
+            Some(args) => Box::new(std::iter::once("tailwindcss".to_string()).chain(args)),
+            None => Box::new(std::env::args_os().map(|arg| arg.to_string_lossy().into_owned())),
+        };
         let program = args.next().unwrap_or_else(|| "tailwindcss".to_string());
         let mut argv = vec![program.clone(), program];
         argv.extend(args);

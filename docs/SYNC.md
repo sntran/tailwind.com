@@ -120,7 +120,7 @@ command of step 1.
   `build-plugin-bundles.mjs`, and then the cases of
   `tests/upstream/cli-js` with a name that starts with `ts-`.
 - **Cosmopolitan**: `COSMOCC_VERSION` and its SHA-256 in
-  `scripts/build.sh` and in the workflow.
+  `scripts/cosmo.sh` and in the workflow.
 - **The method for Rust on Cosmopolitan** (`native/tailwind/c_src/cosmo_rust.c`,
   `scripts/rust_link.sh`) and **the file events** (`native/tailwind/c_src/watch.c`)
   come from BEAM.com: a fix there applies here.

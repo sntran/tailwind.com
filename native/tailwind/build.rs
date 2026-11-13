@@ -32,8 +32,46 @@ fn compat_patches() {
     std::fs::write(out, text).unwrap();
 }
 
+/// Write `embedded_packages.rs`: the files of the store of packages in
+/// the program (`EMBEDDED` of `src/cli/engine.rs`). The variable
+/// TAILWIND_COM_EMBED_PACKAGES names a store (a directory: the newest
+/// package in full, and each older version as a patch file).
+/// `scripts/nif.sh` gives it, for the native NIF objects of BEAM.com.
+/// With no variable, the list is empty.
+fn embedded_packages() {
+    use std::fmt::Write;
+    println!("cargo:rerun-if-env-changed=TAILWIND_COM_EMBED_PACKAGES");
+    let mut text = String::from("static EMBEDDED: &[(&str, &[u8])] = &[\n");
+    if let Some(store) = std::env::var_os("TAILWIND_COM_EMBED_PACKAGES").filter(|value| !value.is_empty()) {
+        let store = std::path::PathBuf::from(store);
+        let mut files = Vec::new();
+        let mut directories = vec![store.clone()];
+        while let Some(directory) = directories.pop() {
+            println!("cargo:rerun-if-changed={}", directory.display());
+            for entry in std::fs::read_dir(&directory).unwrap_or_else(|error| panic!("{}: {error}", directory.display())).flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    directories.push(path);
+                } else {
+                    files.push(path);
+                }
+            }
+        }
+        files.sort();
+        for path in files {
+            let name: Vec<String> =
+                path.strip_prefix(&store).unwrap().components().map(|part| part.as_os_str().to_string_lossy().into_owned()).collect();
+            writeln!(text, "    ({:?}, include_bytes!({:?})),", name.join("/"), path.display().to_string()).unwrap();
+        }
+    }
+    text.push_str("];\n");
+    let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("embedded_packages.rs");
+    std::fs::write(out, text).unwrap();
+}
+
 fn main() {
     compat_patches();
+    embedded_packages();
     println!("cargo:rustc-check-cfg=cfg(tw_js)");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=WASI_SDK_PATH");

@@ -100,6 +100,11 @@ An Erlang project uses the module `tailwind` (`tailwind:install/0`,
 `tailwind:run/2`), with the same configuration in the application
 environment.
 
+The program can also run in the Erlang VM, as a NIF: no process and no
+download, and a small build takes a third of the time. A builder (for
+example the builder of BEAM.com) builds the NIF and puts it in `priv`,
+and the project does not change. See [`docs/NIF.md`](docs/NIF.md).
+
 ## npm
 
 This repository is also the npm package `tailwind.com`:
@@ -317,6 +322,7 @@ runs it in the browser, with a small WASI host in JavaScript
 | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/TESTING.md`](docs/TESTING.md) | Build `tailwind.com`, and the tests. |
 | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) | The time, the memory and the size, against the official programs. |
 | [`docs/SITE.md`](docs/SITE.md) | The site on GitHub Pages: `tailwind.wasm` in the browser, with each version. |
+| [`docs/NIF.md`](docs/NIF.md) | The program as a NIF in the Erlang VM, for a builder such as the builder of BEAM.com. |
 | [`docs/SYNC.md`](docs/SYNC.md) | Move to a new version of Tailwind CSS. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What comes next. |
 | [`CHANGELOG.md`](CHANGELOG.md) | The changes of each version. |

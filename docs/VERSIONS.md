@@ -121,6 +121,13 @@ TAILWIND_COM_PACKAGES=build/packages TAILWINDCSS_VERSION=4.2.4 target/release/ta
 `scripts/packages.sh` downloads a package from the npm registry and
 checks its SHA-256 against the file `PACKAGES`.
 
+A program can also have the store in it, with no ZIP directory: the
+native NIF objects for BEAM.com do (`scripts/nif.sh`). The variable
+`TAILWIND_COM_EMBED_PACKAGES` of the build names a store (for example
+the directory `tailwindcss` that `scripts/build.sh` makes), and
+`native/tailwind/build.rs` puts its files into the program. The program
+looks in this store last. A build with no variable has no store in it.
+
 ## A new version of Tailwind CSS
 
 ```sh

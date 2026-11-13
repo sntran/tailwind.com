@@ -1,0 +1,24 @@
+# The NIF of tailwind.com: the program `tailwind` in the Erlang VM, for
+# the module tailwind_nif (src/tailwind_nif.erl). See docs/NIF.md.
+[package]
+name = "tailwind_nif"
+version.workspace = true
+edition = "2021"
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+
+[lib]
+# `cargo build` gives a library that `erlang:load_nif/2` loads.
+# scripts/nif.sh builds the crate as a staticlib (--crate-type), for the
+# native NIF objects of BEAM.com.
+crate-type = ["cdylib"]
+
+[features]
+# The native NIF objects of BEAM.com (scripts/nif.sh): the C code of the
+# crate tailwind comes from cosmocc.
+ape = ["tailwind/ape"]
+
+[dependencies]
+rustler = "0.39"
+tailwind = { path = "../tailwind" }

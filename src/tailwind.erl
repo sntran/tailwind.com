@@ -13,6 +13,10 @@ Configuration (the application environment of `tailwind`):
 - `{sha256, "HEX"}`: the SHA-256 that the download must have.
 - `{PROFILE, [{args, [...]}, {cd, "DIR"}, {env, #{...}}]}`: the arguments
   of a profile for `run/2`.
+- `{nif, true | false | "PATH"}`: the program as a NIF (the module
+  `tailwind_nif`). `true` (the default): the NIF when it is in `priv`,
+  else the file. `false`: the file only. `"PATH"`: the NIF at this path,
+  else the file.
 
 The module needs Erlang/OTP 29 or later.
 """.
@@ -28,6 +32,7 @@ The module needs Erlang/OTP 29 or later.
     install/0,
     install/1,
     latest_version/0,
+    nif/0,
     run/2
 ]).
 
@@ -82,13 +87,45 @@ config_for(Profile) when is_atom(Profile) ->
     end.
 
 -doc """
-The path of tailwind.com.
+The path of tailwind.com: the path of the configuration, else
+`tailwind.com` in the priv directory of the application `tailwind` when
+it is there (for example in the zip of a program of BEAM.com), else
+`_build/tailwind.com`.
 """.
 -spec bin_path() -> string().
 bin_path() ->
     case application:get_env(tailwind, path) of
-        {ok, Path} -> to_list(Path);
-        undefined -> filename:absname(filename:join("_build", "tailwind.com"))
+        {ok, Path} ->
+            to_list(Path);
+        undefined ->
+            case priv_path() of
+                false -> filename:absname(filename:join("_build", "tailwind.com"));
+                Priv -> Priv
+            end
+    end.
+
+%% tailwind.com in the priv directory of the application tailwind, or
+%% false when it is not there.
+-spec priv_path() -> string() | false.
+priv_path() ->
+    case code:priv_dir(tailwind) of
+        {error, bad_name} ->
+            false;
+        Dir ->
+            Path = filename:join(Dir, "tailwind.com"),
+            filelib:is_regular(Path) andalso Path
+    end.
+
+-doc """
+True when a run uses the NIF (`tailwind_nif`) and not the file
+tailwind.com: the configuration `nif` permits it, and the NIF loads.
+""".
+-spec nif() -> boolean().
+nif() ->
+    case application:get_env(tailwind, nif, true) of
+        false -> false;
+        true -> tailwind_nif:available();
+        Path -> tailwind_nif:load(Path) =:= ok
     end.
 
 -doc """
@@ -98,13 +135,15 @@ tailwind.com is an Actually Portable Executable (its first bytes are
 `MZ`): on Windows it is a program, and on the other systems the shell
 starts it, because the kernel does not start such a file in all cases. A
 file of another type (a program for this system only) starts directly.
+A file in `/zip` (the zip of a program of BEAM.com) also starts
+directly: the shell cannot read `/zip`, and BEAM.com starts the file.
 """.
 -spec command([string()]) -> {string(), [string()]}.
 command(Args) ->
     Path = bin_path(),
-    case {os:type(), is_ape(Path), os:find_executable("sh")} of
-        {{win32, _}, _, _} -> {Path, Args};
-        {_, true, Sh} when Sh =/= false -> {Sh, [Path | Args]};
+    Direct = element(1, os:type()) =:= win32 orelse lists:prefix("/zip/", Path) orelse not is_ape(Path),
+    case Direct orelse os:find_executable("sh") of
+        Sh when is_list(Sh) -> {Sh, [Path | Args]};
         _ -> {Path, Args}
     end.
 
@@ -119,13 +158,13 @@ is_ape(Path) ->
     end.
 
 -doc """
-The version of Tailwind CSS that the installed file uses for the version
-of the configuration. The result is `error` when the file is not there,
-or when it does not have that version.
+The version of Tailwind CSS that the installed file (or the NIF) uses for
+the version of the configuration. The result is `error` when the file is
+not there, or when it does not have that version.
 """.
 -spec bin_version() -> {ok, string()} | error.
 bin_version() ->
-    case filelib:is_regular(bin_path()) of
+    case nif() orelse filelib:is_regular(bin_path()) of
         false ->
             error;
         true ->
@@ -154,6 +193,9 @@ configuration: it gets the variable `TAILWINDCSS_VERSION`, unless the
 The output goes to the group leader. The result is the exit status. When
 this process ends, the standard input of the program closes, and a watch
 (`--watch`) stops.
+
+When `nif/0` is true, the program runs in the VM (`tailwind_nif:run/2`),
+with the same arguments, output and result.
 """.
 -spec run(profile(), [string()]) -> non_neg_integer().
 run(Profile, ExtraArgs) when is_atom(Profile), is_list(ExtraArgs) ->
@@ -164,6 +206,15 @@ run(Profile, ExtraArgs) when is_atom(Profile), is_list(ExtraArgs) ->
     Status.
 
 exec(Args, Options, Fun, Acc0) ->
+    case nif() of
+        true ->
+            Run = maps:from_list([{Key, Value} || {Key, Value} <- Options, Key =:= cd orelse Key =:= env]),
+            tailwind_nif:run(Args, Run, fun(_Stream, Data, Acc) -> Fun(Data, Acc) end, Acc0);
+        false ->
+            exec_port(Args, Options, Fun, Acc0)
+    end.
+
+exec_port(Args, Options, Fun, Acc0) ->
     {Exe, Argv} = command(Args),
     Port = open_port(
         {spawn_executable, Exe},

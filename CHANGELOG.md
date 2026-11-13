@@ -12,6 +12,22 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 
 - `tailwind::scanner`: the scanner of Tailwind CSS, for a program that
   finds the candidates of a project.
+- The NIF: the program in the Erlang VM, with no process and no
+  download (the crate `native/nif` and the module `tailwind_nif`,
+  `docs/NIF.md`). When a builder puts the NIF in `priv/native`,
+  `tailwind:run/2` and `Tailwind.run/2` use it, and the project does not
+  change. The configuration `nif` selects the NIF or the file.
+- The native NIF objects for BEAM.com: `libtailwind_nif.x86_64.o` and
+  `libtailwind_nif.aarch64.o` with each release (`make nif`,
+  `scripts/nif.sh`). `beam.com` loads them with no compiler, and they
+  have each version of Tailwind CSS 4: the store of the packages is in
+  the objects (`TAILWIND_COM_EMBED_PACKAGES`). CI loads them in
+  `beam.com` on x86_64 and aarch64 (`tests/nif_object.erl`).
+- `tailwind.com` in the priv directory of the application `tailwind` is
+  the default path when the configuration has no `path`, and a path in
+  `/zip` (the zip of a program of BEAM.com) starts with no shell.
+- `tailwind::cli::run_with`: the program as a part of another program,
+  with its own working directory, environment, output and stop.
 
 ### Changed
 

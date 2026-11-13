@@ -28,6 +28,10 @@ defmodule Tailwind do
     * `:url` - the URL of the download; `$program` in it is the version
       of this package, and `$version` is the version of Tailwind CSS
     * `:sha256` - the SHA-256 that the download must have
+    * `:nif` - the program as a NIF (`:tailwind_nif`): `true` (the
+      default) uses the NIF when it is in `priv`, `false` uses the file
+      only, and a path uses the NIF at that path. With the NIF, there is
+      no download, and no process of the operating system
 
   One file runs on Linux, macOS, Windows, FreeBSD, NetBSD and OpenBSD, on
   x86_64 and aarch64. Thus there is no `:target`.
@@ -60,7 +64,7 @@ defmodule Tailwind do
           """)
 
         :error ->
-          if File.exists?(bin_path()) do
+          if File.exists?(bin_path()) or :tailwind.nif() do
             Logger.warning("""
             The installed tailwind.com has no Tailwind CSS #{configured_version}. \
             Please run `mix tailwind.install` or update the version in your config files.\
@@ -108,13 +112,24 @@ defmodule Tailwind do
   Returns the path of `tailwind.com`.
 
   The path of the configuration (`config :tailwind, path: ...`) has
-  priority. The default is `tailwind.com` in the `_build` directory of
+  priority. Then `tailwind.com` in the priv directory of the application
+  `tailwind`, when it is there (for example in the zip of a program of
+  BEAM.com). The default is `tailwind.com` in the `_build` directory of
   the project.
   """
   def bin_path do
+    priv =
+      case :code.priv_dir(:tailwind) do
+        {:error, _} -> nil
+        dir -> Path.join(dir, "tailwind.com")
+      end
+
     cond do
       path = Application.get_env(:tailwind, :path) ->
         Path.expand(path)
+
+      priv && File.regular?(priv) ->
+        priv
 
       Code.ensure_loaded?(Mix.Project) ->
         Path.join(Path.dirname(Mix.Project.build_path()), "tailwind.com")
@@ -170,12 +185,13 @@ defmodule Tailwind do
   end
 
   @doc """
-  Installs, if not available, and then runs `tailwind.com`.
+  Installs, if not available, and then runs `tailwind.com`. With the
+  NIF (`:nif`), there is nothing to install.
 
   Returns the same as `run/2`.
   """
   def install_and_run(profile, args) do
-    File.exists?(bin_path()) || start_unique_install_worker()
+    :tailwind.nif() || File.exists?(bin_path()) || start_unique_install_worker()
     run(profile, args)
   end
 

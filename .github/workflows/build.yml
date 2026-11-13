@@ -206,6 +206,80 @@ jobs:
           submodules: true
       - run: cargo publish --dry-run -p tailwind-classification-macros -p tailwind-ignore -p tailwind-scanner -p tailwind
 
+  # The NIF (docs/NIF.md): the tests of the Erlang and Elixir modules, with
+  # the program as a NIF in the VM.
+  nif:
+    name: The NIF
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+      - run: cargo build --release -p tailwind -p tailwind_nif
+      - run: sh scripts/packages.sh build/packages
+      - run: mix test
+        env:
+          TAILWIND_NIF: target/release/libtailwind_nif
+          TAILWIND_COM: target/release/tailwind
+          TAILWIND_COM_PACKAGES: ${{ github.workspace }}/build/packages
+
+  # The native NIF objects for BEAM.com (docs/NIF.md): the release has
+  # them, and beam.com loads them with no compiler.
+  nif-objects:
+    name: The native NIF objects for BEAM.com
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+      - name: Cache cosmocc
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: build/cosmocc
+          key: cosmocc-${{ env.COSMOCC_VERSION }}
+      - name: The Rust toolchains
+        run: rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component rust-src
+      - run: make nif
+      - run: ls -l build/nif
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: nif-objects
+          path: build/nif/libtailwind_nif.*.o
+          if-no-files-found: error
+
+  # The objects in the beam.com of the release "edge" of BEAM.com, on each
+  # CPU: the load, a build, a JavaScript plugin, and a watch
+  # (tests/nif_object.erl).
+  nif-beam:
+    name: The NIF objects in beam.com on ${{ matrix.os }}
+    needs: nif-objects
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, ubuntu-26.04-arm]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: nif-objects
+          path: build/nif
+      - name: beam.com
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/beam.com" https://github.com/sntran/BEAM.com/releases/download/edge/beam.com
+          chmod +x "$RUNNER_TEMP/beam.com"
+          sh "$RUNNER_TEMP/beam.com" --version
+      - run: BEAM_COM_NIF_DEBUG=1 sh "$RUNNER_TEMP/beam.com" tests/nif_object.erl -- build/nif/libtailwind_nif
+
   tlc:
     name: The TLA+ models
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
@@ -323,7 +397,7 @@ jobs:
       - name: The APE loader
         if: matrix.vm != 'freebsd'
         run: |
-          sha=$(sed -n 's/^COSMOCC_SHA256=${COSMOCC_SHA256:-\(.*\)}$/\1/p' scripts/build.sh)
+          sha=$(sed -n 's/^COSMOCC_SHA256=${COSMOCC_SHA256:-\(.*\)}$/\1/p' scripts/cosmo.sh)
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/cosmocc.zip" \
             "https://github.com/jart/cosmopolitan/releases/download/$COSMOCC_VERSION/cosmocc-$COSMOCC_VERSION.zip"
           echo "$sha  $RUNNER_TEMP/cosmocc.zip" | sha256sum -c -
@@ -536,7 +610,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     # A release waits for every compatibility gate, including the
     # standalone-reference and BSD system tests.
-    needs: [test, standalone, wasm, site, tlc, systems, bsd, mix, npm]
+    needs: [test, standalone, wasm, site, tlc, systems, bsd, mix, nif, nif-objects, npm]
     runs-on: ubuntu-26.04
     permissions:
       contents: write
@@ -572,13 +646,14 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - run: cd dist && sha256sum tailwind.com tailwind.wasm tailwind.com-*.tgz > SHA256SUMS
+      - run: cd dist && sha256sum tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o > SHA256SUMS
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             dist/tailwind.com
             dist/tailwind.wasm
             dist/tailwind.com-*.tgz
+            dist/libtailwind_nif.*.o
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -588,10 +663,10 @@ jobs:
           cd dist
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             # A re-run can reach this step after a later publication failed.
-            gh release upload "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz SHA256SUMS \
+            gh release upload "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SHA256SUMS \
               --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz SHA256SUMS \
+            gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SHA256SUMS \
               --repo "$GITHUB_REPOSITORY" --generate-notes \
               --title "$GITHUB_REF_NAME (Tailwind CSS $oldest to $TAILWINDCSS_VERSION)"
           fi
@@ -658,7 +733,7 @@ jobs:
   pages:
     name: The site on GitHub Pages
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test, standalone, wasm, site, tlc, systems, bsd, mix, npm]
+    needs: [test, standalone, wasm, site, tlc, systems, bsd, mix, nif, nif-objects, npm]
     permissions:
       contents: read
       actions: read

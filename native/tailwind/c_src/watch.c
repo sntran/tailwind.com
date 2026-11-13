@@ -18,6 +18,12 @@
  *
  * When the events of a system do not start, tw_watch_start() gives 0.
  * When they stop, tw_watch_wait() gives -1. The program then polls.
+ *
+ * With TW_WATCH_INOTIFY_ONLY (the native NIF object for BEAM.com,
+ * scripts/nif.sh), the file has inotify only, and the other systems poll.
+ * The object can then use only the functions of the C library that
+ * beam.com gives to an object, and these do not have the kqueue and
+ * Windows functions.
  */
 #include <cosmo.h>
 #include <errno.h>
@@ -30,7 +36,7 @@
 #include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(TW_WATCH_INOTIFY_ONLY)
 #include "libc/nt/createfile.h"
 #include "libc/nt/dll.h"
 #include "libc/nt/enum/accessmask.h"
@@ -100,6 +106,17 @@ static long linux_syscall(long n, long a, long b, long c)
                   W_CREATE | W_DELETE | W_DELETE_SELF | W_MOVE_SELF)
 
 static int ifd = -1;
+
+/* The value of POLLIN on Linux. In Cosmopolitan, POLLIN is a variable
+ * with the value of the system, and beam.com does not give it to an
+ * object. */
+#ifdef TW_WATCH_INOTIFY_ONLY
+#define W_POLLIN 0x001
+#else
+#define W_POLLIN POLLIN
+#endif
+
+#ifndef TW_WATCH_INOTIFY_ONLY
 
 /* --- macOS and the BSDs: kqueue ---------------------------------------- */
 
@@ -591,6 +608,12 @@ static int nt_start(void)
 
 #endif
 
+#else /* TW_WATCH_INOTIFY_ONLY */
+
+static int kq = -1;
+
+#endif
+
 static int nt_on;
 
 /* --- The interface ----------------------------------------------------- */
@@ -598,14 +621,15 @@ static int nt_on;
 /* Start the events. Gives 1 when this system has events, else 0. */
 int tw_watch_start(void)
 {
-    struct rlimit rl;
-
     if (IsLinux()) {
         if (ifd < 0)
             ifd = (int)linux_syscall(NR_INOTIFY_INIT1, W_NONBLOCK | W_CLOEXEC, 0, 0);
         return ifd >= 0;
     }
+#ifndef TW_WATCH_INOTIFY_ONLY
     if (IsXnu() || IsFreebsd() || IsNetbsd() || IsOpenbsd()) {
+        struct rlimit rl;
+
         if (kq < 0 && (kq = sys_kqueue()) >= 0) {
             kq_max_files = KQ_MAX_FILES;
             if (getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur / 2 < (rlim_t)kq_max_files)
@@ -615,6 +639,7 @@ int tw_watch_start(void)
     }
     if (IsWindows())
         return nt_on = nt_start();
+#endif
     return 0;
 }
 
@@ -636,7 +661,9 @@ void tw_watch_add(const char *path, int kind)
     if (ifd >= 0) {
         if (kind == TW_DIR)
             linux_syscall(NR_INOTIFY_ADD_WATCH, ifd, (long)path, W_EVENTS);
-    } else if (kq >= 0) {
+    }
+#ifndef TW_WATCH_INOTIFY_ONLY
+    else if (kq >= 0) {
         if (kind != TW_TREE)
             kq_watch(path);
     }
@@ -644,6 +671,7 @@ void tw_watch_add(const char *path, int kind)
     else if (nt_on) {
         nt_watch(path, kind);
     }
+#endif
 #endif
 }
 
@@ -653,7 +681,7 @@ static int wait_once(int ms)
 {
     if (ifd >= 0) {
         char buf[16384];
-        struct pollfd pfd = {ifd, POLLIN, 0};
+        struct pollfd pfd = {ifd, W_POLLIN, 0};
         int n = poll(&pfd, 1, ms);
         if (n <= 0)
             return n < 0 && errno != EINTR ? -1 : 0;
@@ -661,6 +689,7 @@ static int wait_once(int ms)
         }
         return 1;
     }
+#ifndef TW_WATCH_INOTIFY_ONLY
     if (kq >= 0) {
         char evs[KQ_MAX_EVENTS * sizeof(struct kev_freebsd)];
         int n = kev_wait(evs, KQ_MAX_EVENTS, ms);
@@ -672,6 +701,7 @@ static int wait_once(int ms)
 #ifdef __x86_64__
     if (nt_on)
         return nt_wait(ms);
+#endif
 #endif
     return -1;
 }

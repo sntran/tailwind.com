@@ -4,6 +4,7 @@
 //! so this program can replace it.
 
 pub mod args;
+pub mod context;
 pub mod engine;
 pub mod events;
 pub mod modules;
@@ -15,9 +16,10 @@ pub mod source_maps;
 use crate::index::{compile, CompileOptions, Root};
 use crate::{Error, Result};
 use args::{Parsed, Value};
+use context::{errln, outln};
 use engine::{AnyCompiler, Selection};
 use source_maps::SourceMap;
-use std::io::{IsTerminal, Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
@@ -44,8 +46,8 @@ struct Style {
 
 impl Style {
     fn new() -> Self {
-        let forced = std::env::var_os("FORCE_COLOR").is_some_and(|v| v != "0");
-        let on = forced || (std::env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal());
+        let forced = context::var("FORCE_COLOR").is_some_and(|v| v != "0");
+        let on = forced || (context::var("NO_COLOR").is_none() && context::terminal());
         Self { on }
     }
     fn wrap(&self, open: &str, close: &str, text: &str) -> String {
@@ -158,7 +160,7 @@ pub fn resolve_path(base: &Path, path: &str) -> PathBuf {
 /// The path for a message, relative to the current directory when it is
 /// in it.
 fn relative(path: &Path) -> String {
-    let cwd = std::env::current_dir().unwrap_or_default();
+    let cwd = context::cwd();
     match path.strip_prefix(&cwd) {
         Ok(rest) if !rest.as_os_str().is_empty() => format!("./{}", rest.display()),
         _ => path.display().to_string(),
@@ -309,7 +311,7 @@ fn create_build_from(options: &Options, input: &(String, Stamp), from: Option<St
 fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), from: Option<String>, quiet: bool) -> Result<Build> {
     let input_base = match &options.input {
         Some(path) => path.parent().unwrap_or(Path::new("")).to_path_buf(),
-        None => std::env::current_dir().unwrap_or_default(),
+        None => context::cwd(),
     };
 
     // The resolver gives each path before it reads the file, so each stamp
@@ -364,7 +366,7 @@ fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), fr
     };
     // `console.warn` of the compiler writes to the standard error.
     for warning in compiler.take_warnings() {
-        eprintln!("{warning}");
+        errln!("{warning}");
     }
     ensure_source_detection_root_exists(compiler.root())?;
 
@@ -459,7 +461,7 @@ fn write(
             // The optimizer recovers from an error in the CSS, and gives
             // a warning: the official program prints it.
             if let Some(warnings) = &optimized.warnings {
-                eprintln!("{warnings}");
+                errln!("{warnings}");
             }
             previous.optimized_css = optimized.code;
             if let Some(raw) = optimized.map {
@@ -484,7 +486,7 @@ fn write(
                 let base_path = match &options.output {
                     Some(output) => output.parent().unwrap_or(Path::new("")),
                     None => {
-                        cwd = std::env::current_dir().unwrap_or_default();
+                        cwd = context::cwd();
                         &cwd
                     }
                 };
@@ -500,11 +502,7 @@ fn write(
     let did_change = previous.output.as_deref() != Some(output);
     match &options.output {
         Some(file) => output_file(file, output).map_err(|e| Error::new(format!("{}: {e}", file.display())))?,
-        None if did_change => {
-            let mut stdout = std::io::stdout().lock();
-            let _ = writeln!(stdout, "{output}");
-            let _ = stdout.flush();
-        }
+        None if did_change => outln!("{output}"),
         None => {}
     }
     previous.output = Some(output.to_string());
@@ -512,7 +510,7 @@ fn write(
 }
 
 fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options, String> {
-    let cwd = std::env::current_dir().unwrap_or_default();
+    let cwd = context::cwd();
     let base = resolve_path(&cwd, &parsed.text("cwd", None).unwrap_or_else(|| ".".into()));
 
     let output = match parsed.text("output", Some("o")) {
@@ -653,8 +651,10 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
 
     // The end of stdin stops the watch, so a parent process that ends does
     // not leave this process. `--watch=always` keeps the watch.
+    // In a run of `run_with`, there is no standard input: the caller stops
+    // the watch (`Context::stop`).
     #[cfg(not(target_family = "wasm"))]
-    if options.watch == Some(false) && !options.input_is_stdin {
+    if options.watch == Some(false) && !options.input_is_stdin && !context::embedded() {
         let flag = stdin_closed.clone();
         std::thread::spawn(move || {
             let mut buffer = [0u8; 1024];
@@ -681,6 +681,10 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
             events.debug("stop (the end of stdin)");
             return 0;
         }
+        if context::stopped() {
+            events.debug("stop (the caller)");
+            return 0;
+        }
         let interval = match options.poll {
             Some(interval) => interval,
             None if events.active() => Duration::from_millis(EVENTS_INTERVAL_MS),
@@ -689,6 +693,10 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
         let woke = events.wait(interval);
         if stdin_closed.load(std::sync::atomic::Ordering::SeqCst) {
             events.debug("stop (the end of stdin)");
+            return 0;
+        }
+        if context::stopped() {
+            events.debug("stop (the caller)");
             return 0;
         }
 
@@ -724,9 +732,9 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
             events.debug(if woke { "build (event)" } else { "build (interval)" });
         }
         match result {
-            Ok(true) if !options.silent => eprintln!("Done in {}", format_duration(start.elapsed())),
+            Ok(true) if !options.silent => errln!("Done in {}", format_duration(start.elapsed())),
             Ok(_) => {}
-            Err(e) => eprintln!("{}", format_error(style, &e)),
+            Err(e) => errln!("{}", format_error(style, &e)),
         }
     }
 }
@@ -736,14 +744,23 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
 /// names it.
 fn print_version() -> i32 {
     match engine::select() {
-        Ok(Selection::Native { version, .. }) => println!("tailwind.com v{PROGRAM_VERSION} (tailwindcss v{version})"),
-        Ok(selection) => println!("tailwind.com v{PROGRAM_VERSION} (tailwindcss v{}, {} engine)", selection.version(), selection.engine()),
+        Ok(Selection::Native { version, .. }) => outln!("tailwind.com v{PROGRAM_VERSION} (tailwindcss v{version})"),
+        Ok(selection) => outln!("tailwind.com v{PROGRAM_VERSION} (tailwindcss v{}, {} engine)", selection.version(), selection.engine()),
         Err(message) => {
-            eprintln!("{message}");
+            errln!("{message}");
             return 1;
         }
     }
     0
+}
+
+/// Run the program, as a part of another program: with the working
+/// directory, the environment and the output of `context`, and with no
+/// standard input. The result is the exit status. A watch (`--watch`)
+/// runs until `context.stop` is true.
+pub fn run_with(argv: Vec<String>, context: context::Context) -> i32 {
+    let _guard = context::enter(context, argv.clone());
+    run(argv)
 }
 
 /// Run the program. The result is the exit status.
@@ -760,31 +777,33 @@ pub fn run(mut argv: Vec<String>) -> i32 {
         return print_version();
     }
     if parsed.flag("help", Some("h")) {
-        print!("{}", help_text(&style));
+        context::out(&help_text(&style));
         return 0;
     }
     if let Some(invalid) = parsed.rest.first() {
-        println!("{}\n\n{} {invalid}", header(&style), style.dim("Invalid command:"));
-        print!("{}", help_text(&style).split_once("\n\n").map_or("", |(_, rest)| rest));
+        outln!("{}\n\n{} {invalid}", header(&style), style.dim("Invalid command:"));
+        context::out(help_text(&style).split_once("\n\n").map_or("", |(_, rest)| rest));
         return 1;
     }
 
     let options = match parse_options(&parsed, &style) {
         Ok(options) => options,
         Err(message) => {
-            eprintln!("{message}");
+            errln!("{message}");
             return 1;
         }
     };
 
     if !options.silent {
-        eprintln!("{}\n", header(&style));
+        errln!("{}\n", header(&style));
     }
 
     let start = Instant::now();
     let stdin_text = if options.input_is_stdin {
         let mut text = String::new();
-        let _ = std::io::stdin().read_to_string(&mut text);
+        if !context::embedded() {
+            let _ = std::io::stdin().read_to_string(&mut text);
+        }
         Some(text)
     } else {
         None
@@ -798,12 +817,12 @@ pub fn run(mut argv: Vec<String>) -> i32 {
     let build = match first {
         Ok(build) => build,
         Err(e) => {
-            eprintln!("{}", format_error(&style, &e));
+            errln!("{}", format_error(&style, &e));
             return 1;
         }
     };
     if !options.silent {
-        eprintln!("Done in {}", format_duration(start.elapsed()));
+        errln!("Done in {}", format_duration(start.elapsed()));
     }
 
     if options.watch.is_some() {
