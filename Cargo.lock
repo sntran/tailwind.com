@@ -1314,7 +1314,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tailwind-com"
+name = "tailwind"
 version = "0.2.0"
 dependencies = [
  "cc",
@@ -1325,11 +1325,11 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "tailwind-com-scanner",
+ "tailwind-scanner",
 ]
 
 [[package]]
-name = "tailwind-com-classification-macros"
+name = "tailwind-classification-macros"
 version = "0.2.0"
 dependencies = [
  "proc-macro2",
@@ -1338,7 +1338,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tailwind-com-ignore"
+name = "tailwind-ignore"
 version = "0.2.0"
 dependencies = [
  "bstr",
@@ -1355,7 +1355,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tailwind-com-scanner"
+name = "tailwind-scanner"
 version = "0.2.0"
 dependencies = [
  "bexpand",
@@ -1369,8 +1369,8 @@ dependencies = [
  "rayon",
  "regex",
  "rustc-hash",
- "tailwind-com-classification-macros",
- "tailwind-com-ignore",
+ "tailwind-classification-macros",
+ "tailwind-ignore",
  "tempfile",
  "tracing",
  "tracing-subscriber",

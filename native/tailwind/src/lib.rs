@@ -37,7 +37,7 @@ pub use index::{compile, CompileOptions, Compiler, Root, Source, Stylesheet, VER
 pub use version::Version;
 
 /// The scanner of Tailwind CSS: it finds the candidates in the files of a
-/// project (the crate `tailwind-com-scanner`, `native/scanner` of the
+/// project (the crate `tailwind-scanner`, `native/scanner` of the
 /// repository).
 #[cfg(feature = "cli")]
 pub use tailwindcss_oxide as scanner;

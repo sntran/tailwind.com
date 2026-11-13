@@ -18,14 +18,14 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 - The scanner of Tailwind CSS is a copy in the repository
   (`native/scanner`), not a dependency on the git repository of Tailwind
   CSS: three crates with no change in their code, and manifests of ours
-  with the names `tailwind-com-scanner`,
-  `tailwind-com-classification-macros` and `tailwind-com-ignore`.
+  with the names `tailwind-scanner`,
+  `tailwind-classification-macros` and `tailwind-ignore`.
   crates.io takes a crate only when each dependency is on crates.io.
   `scripts/scanner.sh` makes the copy, and CI compares it with the tag of
   Tailwind CSS and runs its tests.
-- The crate of the compiler has the name `tailwind-com`, for crates.io;
-  its library and its program keep the name `tailwind`. Its README is the
-  documentation of the crate, with examples that `cargo test` runs.
+- The crate of the compiler, `tailwind`, is ready for crates.io. Its
+  README is the documentation of the crate, with examples that
+  `cargo test` runs.
 - The C code (QuickJS and the code for Cosmopolitan) is in
   `native/tailwind/c_src`, in the crate: a crate of crates.io builds only
   from its own files.

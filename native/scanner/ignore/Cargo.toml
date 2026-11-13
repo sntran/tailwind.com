@@ -4,10 +4,10 @@
 # Tailwind CSS is native/scanner/manifests/ignore.toml. The crate is from
 # ripgrep, by Andrew Gallant, and Tailwind CSS changed it.
 [package]
-name = "tailwind-com-ignore"
+name = "tailwind-ignore"
 version.workspace = true
 authors = ["Andrew Gallant <jamslam@gmail.com>"]
-description = "The fork of the crate ignore (from ripgrep) that the scanner of Tailwind CSS uses, for tailwind-com-scanner"
+description = "The fork of the crate ignore (from ripgrep) that the scanner of Tailwind CSS uses, for tailwind-scanner"
 license = "Unlicense OR MIT"
 repository.workspace = true
 readme = "README.md"

@@ -2,11 +2,11 @@
 # in its files (native/scanner/README.md). This manifest is ours: the
 # manifest of Tailwind CSS is native/scanner/manifests/oxide.toml.
 [package]
-name = "tailwind-com-scanner"
+name = "tailwind-scanner"
 version.workspace = true
 edition = "2021"
 license = "MIT"
-description = "The scanner of Tailwind CSS (crates/oxide of Tailwind CSS), as the crate tailwind-com uses it"
+description = "The scanner of Tailwind CSS (crates/oxide of Tailwind CSS), as the crate tailwind uses it"
 repository.workspace = true
 # src/main.rs is a throughput benchmark of the extractor, not a program.
 autobins = false

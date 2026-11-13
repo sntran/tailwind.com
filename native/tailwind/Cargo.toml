@@ -1,7 +1,5 @@
 [package]
-# The name on crates.io. The library and the program have the name
-# `tailwind`.
-name = "tailwind-com"
+name = "tailwind"
 version.workspace = true
 edition = "2021"
 # The fork of the crate ignore in the scanner needs 1.88.

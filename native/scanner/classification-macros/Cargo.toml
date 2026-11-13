@@ -3,11 +3,11 @@
 # (native/scanner/README.md). This manifest is ours: the manifest of
 # Tailwind CSS is native/scanner/manifests/classification-macros.toml.
 [package]
-name = "tailwind-com-classification-macros"
+name = "tailwind-classification-macros"
 version.workspace = true
 edition = "2021"
 license = "MIT"
-description = "The classification macros of the scanner of Tailwind CSS (crates/classification-macros of Tailwind CSS), for tailwind-com-scanner"
+description = "The classification macros of the scanner of Tailwind CSS (crates/classification-macros of Tailwind CSS), for tailwind-scanner"
 repository.workspace = true
 
 [lib]

@@ -63,7 +63,7 @@ jobs:
           git diff --exit-code -- native/scanner
           test -z "$(git status --porcelain -- native/scanner)"
       - name: The tests of the scanner
-        run: cargo test --release -p tailwind-com-scanner -p tailwind-com-ignore -p tailwind-com-classification-macros
+        run: cargo test --release -p tailwind-scanner -p tailwind-ignore -p tailwind-classification-macros
       - name: Clippy
         # --no-deps: the compiler only. The scanner (native/scanner) is a
         # copy of the code of Tailwind CSS, with no change.
@@ -204,7 +204,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: true
-      - run: cargo publish --dry-run -p tailwind-com-classification-macros -p tailwind-com-ignore -p tailwind-com-scanner -p tailwind-com
+      - run: cargo publish --dry-run -p tailwind-classification-macros -p tailwind-ignore -p tailwind-scanner -p tailwind
 
   tlc:
     name: The TLA+ models
@@ -635,7 +635,7 @@ jobs:
           fi
           version=${GITHUB_REF_NAME#v}
           packages=
-          for crate in tailwind-com-classification-macros tailwind-com-ignore tailwind-com-scanner tailwind-com; do
+          for crate in tailwind-classification-macros tailwind-ignore tailwind-scanner tailwind; do
             status=$(curl -s -o /dev/null -w '%{http_code}' -A "tailwind.com release" "https://crates.io/api/v1/crates/$crate/$version")
             if [ "$status" = 200 ]; then
               echo "$crate $version is on crates.io already."

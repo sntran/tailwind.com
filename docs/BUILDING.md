@@ -88,8 +88,8 @@ The compiler is a library with no command line program, no scanner and
 no optimizer:
 
 ```sh
-cargo build -p tailwind-com --no-default-features                  # no JavaScript
-cargo build -p tailwind-com --no-default-features --features js    # with @plugin and @config
+cargo build -p tailwind --no-default-features                  # no JavaScript
+cargo build -p tailwind --no-default-features --features js    # with @plugin and @config
 ```
 
 ```rust
@@ -196,16 +196,16 @@ can use only 4.3.5. That release stays as it is.
 
 ## The crates
 
-The compiler is the crate `tailwind-com` on crates.io
-(`native/tailwind`, with the library and the program `tailwind`). It
+The compiler is the crate `tailwind` on crates.io (`native/tailwind`,
+with the library and the program `tailwind`). It
 needs the three crates of the scanner (`native/scanner/README.md`):
 
 | Crate | Directory |
 |---|---|
-| `tailwind-com` | `native/tailwind` |
-| `tailwind-com-scanner` | `native/scanner/oxide` |
-| `tailwind-com-classification-macros` | `native/scanner/classification-macros` |
-| `tailwind-com-ignore` | `native/scanner/ignore` |
+| `tailwind` | `native/tailwind` |
+| `tailwind-scanner` | `native/scanner/oxide` |
+| `tailwind-classification-macros` | `native/scanner/classification-macros` |
+| `tailwind-ignore` | `native/scanner/ignore` |
 
 A crate of crates.io builds alone, from the files of its package. So
 `native/tailwind` has the C code that `build.rs` compiles
@@ -218,7 +218,7 @@ examples.
 The job `crates` of `.github/workflows/build.yml` runs
 
 ```sh
-cargo publish --dry-run -p tailwind-com-classification-macros -p tailwind-com-ignore -p tailwind-com-scanner -p tailwind-com
+cargo publish --dry-run -p tailwind-classification-macros -p tailwind-ignore -p tailwind-scanner -p tailwind
 ```
 
 for each push: Cargo makes each package, and builds it alone. The

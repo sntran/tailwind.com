@@ -72,11 +72,11 @@ for cpu in $CPUS; do
     log "Building the Rust library for $cpu"
     if [ "$cpu" = aarch64 ]; then
         RUSTFLAGS="-C target-feature=+reserve-x18,+reserve-x28" \
-            cargo "+$nightly" rustc -q -p tailwind-com --lib --release --features ape --crate-type staticlib \
+            cargo "+$nightly" rustc -q -p tailwind --lib --release --features ape --crate-type staticlib \
             --target $target -Zbuild-std=std,panic_unwind --target-dir "$root/target/reserved"
         cp "$root/target/reserved/$target/release/libtailwind.a" "$d/libtailwind.a"
     else
-        cargo rustc -q -p tailwind-com --lib --release --features ape --crate-type staticlib --target $target
+        cargo rustc -q -p tailwind --lib --release --features ape --crate-type staticlib --target $target
         cp "$root/target/$target/release/libtailwind.a" "$d/libtailwind.a"
     fi
     args=; for s in $SYMS; do args="$args --redefine-sym $s=tw_rs_$s"; done

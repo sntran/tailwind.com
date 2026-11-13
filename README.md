@@ -291,7 +291,7 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Rust
 
-The compiler is also a Rust crate, `tailwind-com`, with the library
+The compiler is also a Rust crate, `tailwind`, with the library
 `tailwind`: compile a stylesheet and build the CSS of the candidates in a
 Rust program, as each version of Tailwind CSS 4. The scanner of Tailwind
 CSS is `tailwind::scanner`. See [`native/tailwind/README.md`](native/tailwind/README.md).

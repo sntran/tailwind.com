@@ -84,7 +84,7 @@ check() {
     expect src/tailwind.app.src "{vsn, \"$p\"}"
     w=$(awk '/^\[workspace\.package\]/ { on = 1; next } /^\[/ { on = 0 } on && /^version *=/ { gsub(/[" ]/, ""); sub(/version=/, ""); print; exit }' Cargo.toml)
     [ "$w" = "$p" ] || { log "Cargo.toml has the version $w in [workspace.package], not $p"; status=1; }
-    for crate in tailwind-com-scanner tailwind-com-classification-macros tailwind-com-ignore; do
+    for crate in tailwind-scanner tailwind-classification-macros tailwind-ignore; do
         expect Cargo.toml "package = \"$crate\", version = \"$p\""
     done
     [ $status = 0 ] && log "all the files agree with UPSTREAM (Tailwind CSS $v), and the packages have the version $p"

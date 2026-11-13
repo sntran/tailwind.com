@@ -1,4 +1,4 @@
-# tailwind-com
+# tailwind
 
 A Tailwind CSS 4 compiler in Rust: the compiler of
 [tailwind.com](https://github.com/sntran/tailwind.com). It follows
@@ -14,11 +14,11 @@ trademark of Tailwind Labs Inc.
 
 ```toml
 [dependencies]
-tailwind-com = "0.2"
+tailwind = "0.2"
 ```
 
-The name of the library is `tailwind`. Compile a stylesheet one time,
-then build the CSS of a list of candidates (class names):
+Compile a stylesheet one time, then build the CSS of a list of
+candidates (class names):
 
 ```rust
 use tailwind::cli::resolve::load_stylesheet;
@@ -43,7 +43,7 @@ the CSS of all the candidates, as the watch of Tailwind CSS does.
 ### The candidates of a project
 
 `tailwind::scanner` is the scanner of Tailwind CSS (the crate
-`tailwind-com-scanner`): it finds the candidates in the files of a
+`tailwind-scanner`): it finds the candidates in the files of a
 project, with the rules of `.gitignore`.
 
 ```rust

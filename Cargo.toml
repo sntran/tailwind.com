@@ -20,9 +20,9 @@ repository = "https://github.com/sntran/tailwind.com"
 # The crates of the scanner (native/scanner/README.md), with the names of
 # the crates of Tailwind CSS in the code.
 [workspace.dependencies]
-tailwindcss-oxide = { package = "tailwind-com-scanner", version = "0.2.0", path = "native/scanner/oxide" }
-classification-macros = { package = "tailwind-com-classification-macros", version = "0.2.0", path = "native/scanner/classification-macros" }
-ignore = { package = "tailwind-com-ignore", version = "0.2.0", path = "native/scanner/ignore" }
+tailwindcss-oxide = { package = "tailwind-scanner", version = "0.2.0", path = "native/scanner/oxide" }
+classification-macros = { package = "tailwind-classification-macros", version = "0.2.0", path = "native/scanner/classification-macros" }
+ignore = { package = "tailwind-ignore", version = "0.2.0", path = "native/scanner/ignore" }
 
 # The compiler builds for speed. Its dependencies build for size: Lightning
 # CSS (for --minify and --optimize) is the largest part of the program, and
@@ -33,5 +33,5 @@ codegen-units = 1
 opt-level = "s"
 strip = "symbols"
 
-[profile.release.package.tailwind-com]
+[profile.release.package.tailwind]
 opt-level = 3
