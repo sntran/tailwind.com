@@ -43,25 +43,40 @@ disk, and no program starts. BEAM.com needs no Rust and no compiler for
 the NIF:
 
 1. Each release of tailwind.com has the two objects,
-   `libtailwind_nif.x86_64.o` and `libtailwind_nif.aarch64.o` (14 MB
-   each, 4.1 MB deflated in a zip), with their SHA-256 in `SHA256SUMS`. Use the objects of the release of the
-   Erlang and Elixir modules: the functions of the NIF change with the
-   module.
+   `libtailwind_nif.x86_64.o` and `libtailwind_nif.aarch64.o` (15 MB
+   each, 4.5 MB deflated in a zip), with their SHA-256 in `SHA256SUMS`,
+   and the file `SOURCE`: the package of the objects, in the form of a
+   file `SOURCE` of BEAM.com (`git URL commit=SHA tag=TAG`). Use the
+   objects of the release of the Erlang and Elixir modules: the functions
+   of the NIF change with the module.
 2. Put them at `priv/native/libtailwind_nif.x86_64.o` and `.aarch64.o` of
    the application `tailwind`. In `beam.com`, they are NIF files of
-   `beam.com`: `lib/beam_com/priv/nifs/tailwind-VSN/native/`, with `VSN`
-   the version of the package `tailwind` of tailwind.com. The script
+   `beam.com`, in a directory `lib/beam_com/priv/nifs/tailwind-NAME`
+   with the file `SOURCE` of the release (BEAM.com PR 195). The script
    `scripts/assemble.erl` of BEAM.com adds them to a `beam.com`:
 
    ```sh
+   # SOURCE of the release, for example:
+   # git https://github.com/sntran/tailwind.com commit=SHA tag=vX.Y.Z
    beam.com scripts/assemble.erl -- beam.com beam-tailwind.com \
-     lib/beam_com/priv/nifs/tailwind-0.2.0/native/libtailwind_nif.x86_64.o=libtailwind_nif.x86_64.o \
-     lib/beam_com/priv/nifs/tailwind-0.2.0/native/libtailwind_nif.aarch64.o=libtailwind_nif.aarch64.o
+     lib/beam_com/priv/nifs/tailwind-SHORTSHA/SOURCE=SOURCE \
+     lib/beam_com/priv/nifs/tailwind-SHORTSHA/native/libtailwind_nif.x86_64.o=libtailwind_nif.x86_64.o \
+     lib/beam_com/priv/nifs/tailwind-SHORTSHA/native/libtailwind_nif.aarch64.o=libtailwind_nif.aarch64.o
    ```
 
-   `beam-tailwind.com DIR -o OUT` then puts them into the priv directory
-   of the package `tailwind` of the project, and `tailwind_nif` loads
-   them.
+   With `commit=` or `tag=`, BEAM.com does not compare the version, so
+   the text after `tailwind-` is only a name. A project gets the objects
+   when the commit of tailwind.com in its `mix.lock` starts with `SHA`,
+   or when its `mix.exs` has `tag: "vX.Y.Z"`. A project with another
+   commit, a fork, or the Hex package `tailwind` gets no objects, and it
+   uses the file tailwind.com. Without a file `SOURCE`, only the name
+   and the version of the directory select the objects, and the Hex
+   package `tailwind` of the same version would get them too.
+
+   The Mix build of BEAM.com puts the NIF files into
+   `_build/ENV/lib/tailwind/priv` after `mix compile`: then
+   `mix assets.deploy` uses the NIF and downloads nothing, and the
+   release has the NIF.
 
 An object has one global name, `tailwind_nif_nif_init`. It uses only what
 each `beam.com` gives to an object: the `enif_*` functions (Rustler calls

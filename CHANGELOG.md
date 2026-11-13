@@ -8,6 +8,22 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 
 ## Unreleased
 
+### Fixed
+
+- A list of paths in the `env` of a profile (the `NODE_PATH` of a new
+  Phoenix project) becomes one value with the path separator of the
+  system, as the Hex package `tailwind` does: `;` on Windows (also in
+  `beam.com`, where `os:type()` is `{unix, windows}`), else `:`. Before,
+  `mix assets.deploy` stopped with an error of `open_port/2`.
+- `mix tailwind.install`, and the install of `install_and_run/2`, write
+  `tailwind.com` to the priv directory of the application `tailwind`
+  (`install_path/0`), not to `_build/`. A release then has the file, and
+  a program can build CSS at run time (in BEAM.com, from `/zip`).
+  `bin_path/0` still finds a file in `_build/`.
+- The start of the application does not check the version of
+  `tailwind.com` or of the NIF: the first run does. A program that builds
+  no CSS loads no NIF and runs no program.
+
 ### Added
 
 - `tailwind::scanner`: the scanner of Tailwind CSS, for a program that
@@ -26,6 +42,9 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 - `tailwind.com` in the priv directory of the application `tailwind` is
   the default path when the configuration has no `path`, and a path in
   `/zip` (the zip of a program of BEAM.com) starts with no shell.
+- Each release has the file `SOURCE` (`git URL commit=SHA tag=TAG`): the
+  package of its NIF objects, for the directory of NIF files of a custom
+  build of BEAM.com (`docs/NIF.md`).
 - `tailwind::cli::run_with`: the program as a part of another program,
   with its own working directory, environment, output and stop.
 

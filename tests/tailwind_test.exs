@@ -68,6 +68,32 @@ defmodule TailwindTest do
       assert Path.basename(Path.dirname(Tailwind.bin_path())) == "_build"
     end
 
+    test "the Erlang module joins a list of paths in env with the path separator" do
+      Application.put_env(:tailwind, :default,
+        args: [],
+        env: %{"NODE_PATH" => ["/a/deps", ~c"/b/_build/prod"], "ONE" => "x", "CHARS" => ~c"y"}
+      )
+
+      env = :tailwind.config_for(:default).env
+      assert env[~c"NODE_PATH"] == ~c"/a/deps:/b/_build/prod"
+      assert env[~c"ONE"] == ~c"x"
+      assert env[~c"CHARS"] == ~c"y"
+    end
+
+    test "the path separator is ; on Windows, also in beam.com" do
+      assert :tailwind.path_separator({:win32, :nt}) == ~c";"
+      assert :tailwind.path_separator({:unix, :windows}) == ~c";"
+      assert :tailwind.path_separator({:unix, :linux}) == ~c":"
+      assert :tailwind.path_separator({:unix, :darwin}) == ~c":"
+    end
+
+    test "install_path/0 is the path of the configuration, or tailwind.com in priv" do
+      Application.put_env(:tailwind, :path, "/x/tailwind.com")
+      assert Tailwind.install_path() == "/x/tailwind.com"
+      Application.delete_env(:tailwind, :path)
+      assert Tailwind.install_path() == Path.join(:code.priv_dir(:tailwind), "tailwind.com")
+    end
+
     test "the Erlang module reads the same configuration", %{dir: dir} do
       assert :tailwind.configured_version() == to_charlist(@version)
       config = :tailwind.config_for(:default)
@@ -164,6 +190,35 @@ defmodule TailwindTest do
       refute output =~ "\e["
     end
 
+    test "run/2 joins a list of paths in env, as the config of phx.new has it", %{dir: dir} do
+      # The plugin is only in the second directory of NODE_PATH.
+      plugin = Path.join(dir, "deps/my-plugin")
+      File.mkdir_p!(plugin)
+
+      File.write!(Path.join(plugin, "index.js"), """
+      module.exports = function ({ addUtilities }) {
+        addUtilities({ '.from-node-path': { color: 'red' } })
+      }
+      """)
+
+      File.write!(Path.join(dir, "assets/app.css"), """
+      @import "tailwindcss" source(none);
+      @source "../lib";
+      @plugin "my-plugin";
+      """)
+
+      File.write!(Path.join(dir, "lib/page.html.heex"), ~s(<div class="from-node-path"></div>\n))
+
+      Application.put_env(:tailwind, :default,
+        args: ~w(--input=assets/app.css --output=priv/app.css),
+        cd: dir,
+        env: %{"NODE_PATH" => [Path.join(dir, "node_modules"), Path.join(dir, "deps")]}
+      )
+
+      capture_io(fn -> assert Tailwind.run(:default, []) == 0 end)
+      assert File.read!(Path.join(dir, "priv/app.css")) =~ ".from-node-path {"
+    end
+
     test "run/2 raises with no arguments" do
       Application.put_env(:tailwind, :empty, args: [])
       assert_raise RuntimeError, ~r/no arguments/, fn -> Tailwind.run(:empty, []) end
@@ -206,6 +261,19 @@ defmodule TailwindTest do
       assert File.read!(target) == File.read!(source)
       assert Bitwise.band(File.stat!(target).mode, 0o111) != 0
       assert Tailwind.bin_version() == {:ok, @version}
+    end
+
+    @tag :port
+    test "install/1 writes to the priv directory, and bin_path/0 then finds it" do
+      source = Application.get_env(:tailwind, :test_program)
+      Application.delete_env(:tailwind, :path)
+      target = Path.join(:code.priv_dir(:tailwind), "tailwind.com")
+      on_exit(fn -> File.rm(target) end)
+
+      assert Tailwind.install("file://" <> source) == :ok
+      assert File.read!(target) == File.read!(source)
+      assert Bitwise.band(File.stat!(target).mode, 0o111) != 0
+      assert Tailwind.bin_path() == target
     end
 
     test "install/1 checks the SHA-256 of the configuration", %{dir: dir} do

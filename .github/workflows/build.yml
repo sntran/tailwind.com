@@ -646,7 +646,11 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - run: cd dist && sha256sum tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o > SHA256SUMS
+      # The package of the NIF objects, for a custom build of BEAM.com:
+      # the file SOURCE of a directory of NIF files (docs/NIF.md).
+      - name: SOURCE
+        run: printf 'git https://github.com/%s commit=%s tag=%s\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_REF_NAME" > dist/SOURCE
+      - run: cd dist && sha256sum tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE > SHA256SUMS
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
@@ -663,10 +667,10 @@ jobs:
           cd dist
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             # A re-run can reach this step after a later publication failed.
-            gh release upload "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SHA256SUMS \
+            gh release upload "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE SHA256SUMS \
               --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SHA256SUMS \
+            gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE SHA256SUMS \
               --repo "$GITHUB_REPOSITORY" --generate-notes \
               --title "$GITHUB_REF_NAME (Tailwind CSS $oldest to $TAILWINDCSS_VERSION)"
           fi
