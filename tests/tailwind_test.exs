@@ -84,6 +84,7 @@ defmodule TailwindTest do
       assert Tailwind.bin_version() == {:ok, @version}
     end
 
+    @tag :file
     test "bin_version/0 is :error when the file is not there" do
       Application.put_env(:tailwind, :path, "/no/such/tailwind.com")
       assert Tailwind.bin_version() == :error

@@ -12,6 +12,13 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 
 - `tailwind::scanner`: the scanner of Tailwind CSS, for a program that
   finds the candidates of a project.
+- The NIF: the program in the Erlang VM, with no process and no
+  download (the crate `native/nif` and the module `tailwind_nif`,
+  `docs/NIF.md`). When a builder puts the NIF in `priv/native`,
+  `tailwind:run/2` and `Tailwind.run/2` use it, and the project does not
+  change. The configuration `nif` selects the NIF or the file.
+- `tailwind::cli::run_with`: the program as a part of another program,
+  with its own working directory, environment, output and stop.
 
 ### Changed
 

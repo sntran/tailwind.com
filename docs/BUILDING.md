@@ -158,7 +158,8 @@ node tests/upstream/tools/gen-node-api.mjs
 or later, the versions of BEAM.com: the Erlang module uses `-doc`
 attributes and `maybe`. `rebar3 compile`
 builds the Erlang module only. They do not build the Rust code: they
-download or find `tailwind.com`.
+download or find `tailwind.com`, or use the NIF that a builder puts in
+`priv/native` (the crate `native/nif`, [`NIF.md`](NIF.md)).
 
 ## A release
 
