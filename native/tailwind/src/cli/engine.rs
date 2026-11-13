@@ -131,7 +131,7 @@ impl crate::script::Package for DirectoryPackage {
 /// of the file of the program.
 fn stores() -> Vec<PathBuf> {
     let mut stores = Vec::new();
-    if let Some(packages) = std::env::var_os(PACKAGES_VARIABLE).filter(|value| !value.is_empty()) {
+    if let Some(packages) = super::context::var(PACKAGES_VARIABLE).filter(|value| !value.is_empty()) {
         stores.push(PathBuf::from(packages));
     }
     stores.push(PathBuf::from(ZIP_PACKAGES));
@@ -200,8 +200,8 @@ impl Selection {
 
 /// The version that the environment asks for.
 pub fn requested_version() -> String {
-    match std::env::var(VERSION_VARIABLE) {
-        Ok(version) if !version.trim().is_empty() => version.trim().trim_start_matches('v').to_string(),
+    match super::context::var(VERSION_VARIABLE) {
+        Some(version) if !version.trim().is_empty() => version.trim().trim_start_matches('v').to_string(),
         _ => crate::index::VERSION.to_string(),
     }
 }
@@ -213,7 +213,7 @@ pub fn requested_version() -> String {
 /// these versions use it, and each other version uses the script engine.
 pub fn select() -> std::result::Result<Selection, String> {
     let version = requested_version();
-    let engine = std::env::var(ENGINE_VARIABLE).unwrap_or_default();
+    let engine = super::context::var(ENGINE_VARIABLE).unwrap_or_default();
     let native_version = crate::index::VERSION;
 
     let missing = |version: &str| -> String {
