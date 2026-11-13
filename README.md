@@ -221,8 +221,8 @@ A differential fuzzer also compares the two compilers live on new random
 stylesheets, classes and projects, in CI for each change of the compiler
 and each night.
 
-The scanner of source files is the Rust crate of Tailwind CSS itself
-(`tailwindcss-oxide`), and `--minify` and `--optimize` use the same
+The scanner of source files is the Rust code of Tailwind CSS itself
+(`crates/oxide`, a copy with no change in `native/scanner`), and `--minify` and `--optimize` use the same
 version of Lightning CSS with the same options.
 
 ## JavaScript plugins and configs
@@ -288,6 +288,14 @@ differences.
   program. Use the official Hex package or program for it.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+## Rust
+
+The compiler is also a Rust crate, `tailwind`, with the library
+`tailwind`: compile a stylesheet and build the CSS of the candidates in a
+Rust program, as each version of Tailwind CSS 4. The scanner of Tailwind
+CSS is `tailwind::scanner`. See [`native/tailwind/README.md`](native/tailwind/README.md).
+The release job publishes it to crates.io.
 
 ## WebAssembly
 

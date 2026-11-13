@@ -16,7 +16,7 @@
 # __eh_frame_end, and stops at an entry of length 0. When the .eh_frame of
 # OUT has a size of 4 modulo 8, the link of the program puts 4 bytes of
 # zero after it, before the next .eh_frame. So OUT then gets one more CIE
-# (c_src/eh_frame_pad.ld). See C43 in docs/UPSTREAM.md of BEAM.com.
+# (native/tailwind/c_src/eh_frame_pad.ld). See C43 in docs/UPSTREAM.md of BEAM.com.
 set -eu
 C=$1 cpu=$2 name=$3 out=$4
 shift 4
@@ -29,7 +29,7 @@ eh_frame_mod8() {
 }
 sh "$ld" -r -u "$name" -o "$out.r" "$@"
 if [ "$(eh_frame_mod8)" = 4 ]; then
-    sh "$ld" -r -u "$name" -T "$root/c_src/eh_frame_pad.ld" -o "$out.r" "$@"
+    sh "$ld" -r -u "$name" -T "$root/native/tailwind/c_src/eh_frame_pad.ld" -o "$out.r" "$@"
     if [ "$(eh_frame_mod8)" != 0 ]; then
         echo "rust_link.sh: the .eh_frame of $out has a bad size" >&2
         exit 1

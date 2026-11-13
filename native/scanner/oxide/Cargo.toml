@@ -1,0 +1,38 @@
+# The scanner of Tailwind CSS: crates/oxide of Tailwind CSS, with no change
+# in its files (native/scanner/README.md). This manifest is ours: the
+# manifest of Tailwind CSS is native/scanner/manifests/oxide.toml.
+[package]
+name = "tailwind-scanner"
+version.workspace = true
+edition = "2021"
+license = "MIT"
+description = "The scanner of Tailwind CSS (crates/oxide of Tailwind CSS), as the crate tailwind uses it"
+repository.workspace = true
+# src/main.rs is a throughput benchmark of the extractor, not a program.
+autobins = false
+
+[lib]
+# The name of the crate of Tailwind CSS: the code uses it.
+name = "tailwindcss_oxide"
+
+[dependencies]
+bstr = "1.11.3"
+globwalk = "0.9.1"
+log = "0.4.22"
+rayon = "1.10.0"
+fxhash = { package = "rustc-hash", version = "2.1.1" }
+tracing = { version = "0.1.40", features = [] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+walkdir = "2.5.0"
+dunce = "1.0.5"
+bexpand = "1.2.0"
+fast-glob = "0.4.3"
+classification-macros = { workspace = true }
+ignore = { workspace = true }
+regex = "1.11.1"
+
+[dev-dependencies]
+insta = "1.48.0"
+tempfile = "3.13.0"
+pretty_assertions = "1.4.1"
+unicode-width = "0.2.0"

@@ -49,7 +49,7 @@ file has no entry: add one (`port`, `gen`, `copy`, `dep` or `skip`).
 | What | Where |
 |---|---|
 | The version and the commit | `UPSTREAM`, `VERSION` in `index.rs`, `src/tailwind.erl`, the docs |
-| The scanner of Tailwind CSS | the tag of `tailwindcss-oxide` in `native/tailwind/Cargo.toml` |
+| The scanner of Tailwind CSS | `native/scanner`: the three crates of the new tag (`scripts/scanner.sh`). When `native/scanner/manifests` changes, change our manifests in the same way |
 | Lightning CSS | the crate version for the npm version of `pnpm-workspace.yaml` of Tailwind CSS |
 | The stylesheets | `native/tailwind/assets/*.css`, from the npm package |
 | The plugins of the standalone program | their versions in the lock file of Tailwind CSS go to `UPSTREAM` and to `tests/upstream/tools/package.json`, and `tests/upstream/tools/build-plugin-bundles.mjs` makes `native/tailwind/assets/plugins/` again |
@@ -121,6 +121,6 @@ command of step 1.
   `tests/upstream/cli-js` with a name that starts with `ts-`.
 - **Cosmopolitan**: `COSMOCC_VERSION` and its SHA-256 in
   `scripts/build.sh` and in the workflow.
-- **The method for Rust on Cosmopolitan** (`c_src/cosmo_rust.c`,
-  `scripts/rust_link.sh`) and **the file events** (`c_src/watch.c`)
+- **The method for Rust on Cosmopolitan** (`native/tailwind/c_src/cosmo_rust.c`,
+  `scripts/rust_link.sh`) and **the file events** (`native/tailwind/c_src/watch.c`)
   come from BEAM.com: a fix there applies here.

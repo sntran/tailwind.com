@@ -12,8 +12,9 @@ native/tailwind/        the compiler and the command line program (Rust)
   assets/compat.js      the plugin layer of Tailwind CSS, in the program (generated)
   assets/typescript.js  the TypeScript transform, in the program (generated)
   assets/plugins/       the three plugins of the standalone program of Tailwind CSS (generated)
-c_src/                  the entry in C, the calls of Rust for Cosmopolitan, the file events
-c_src/quickjs/, js.c    QuickJS, and its API for Rust
+  c_src/                the entry in C, the calls of Rust for Cosmopolitan, the file events
+  c_src/quickjs/, js.c  QuickJS, and its API for Rust
+native/scanner/         the scanner of Tailwind CSS: a copy of its three crates (native/scanner/README.md)
 scripts/build.sh        the link of the Rust library into tailwind.com
 src/tailwind.erl        Erlang: install and run tailwind.com
 lib/                    Elixir: the module Tailwind and the Mix tasks
@@ -89,12 +90,12 @@ There are two paths (`compat.rs`):
 
 ### The engine
 
-`c_src/quickjs` is QuickJS (Fabrice Bellard) as a git submodule, with no
-change: see `c_src/QUICKJS.md` for the version and the files. The build has no
+`native/tailwind/c_src/quickjs` is QuickJS (Fabrice Bellard) as a git submodule, with no
+change: see `native/tailwind/c_src/QUICKJS.md` for the version and the files. The build has no
 `quickjs-libc`, so JavaScript has no `std`, no `os`, no files and no
 network.
 
-`c_src/js.c` is a small API over QuickJS (`js.h`). Only UTF-8 text goes
+`native/tailwind/c_src/js.c` is a small API over QuickJS (`js.h`). Only UTF-8 text goes
 across it, so the Rust code needs no QuickJS types and no generated
 bindings:
 
@@ -383,7 +384,7 @@ source map, the JSON text has none of these keys.
 `src/cli/` follows `@tailwindcss/cli` and `@tailwindcss/node`:
 
 - `mod.rs`: the options, the build, the write of the output, the watch.
-- `events.rs`: the file events of `c_src/watch.c` for the watch, and
+- `events.rs`: the file events of `native/tailwind/c_src/watch.c` for the watch, and
   the lines of `TAILWIND_WATCH_DEBUG`.
 - `modules.rs`: the files of the JavaScript modules of `@plugin` and
   `@config`, and their record for the watch.
@@ -402,9 +403,12 @@ source map, the JSON text has none of these keys.
   optimizer, with a new source map: the parts of `magic-string`
   (`generateMap` with `hires: 'boundary'`) and of
   `@jridgewell/remapping` that Tailwind CSS uses for it.
-- The scanner is the crate `tailwindcss-oxide` of Tailwind CSS: the
-  detection of source files, `.gitignore`, and the extraction of
-  candidates are the code of Tailwind CSS itself.
+- The scanner is the code of Tailwind CSS itself: the detection of
+  source files, `.gitignore`, and the extraction of candidates. Its three
+  crates (`crates/oxide`, `crates/classification-macros` and
+  `crates/ignore` of Tailwind CSS) are a copy with no change in
+  `native/scanner`, with our manifests, so that crates.io can take them
+  (`native/scanner/README.md`).
 
 ### The watch
 
@@ -429,7 +433,7 @@ The program compares the files itself at each tick, so an event only
 wakes it. A lost event or a false event changes the time of a build, not
 its result.
 
-The events are in `c_src/watch.c`. It uses the method of the file
+The events are in `native/tailwind/c_src/watch.c`. It uses the method of the file
 watcher of BEAM.com (`c_src/cosmo/beam_com_watch.c`):
 
 | System | Events | Interval |
@@ -502,7 +506,7 @@ program stops with the process that started it.
 the two with `cosmocc` into one Actually Portable Executable. This is
 the method of BEAM.com for Rust:
 
-- `c_src/cosmo_rust.c` translates the calls of the Rust standard library
+- `native/tailwind/c_src/cosmo_rust.c` translates the calls of the Rust standard library
   that have the numbers of Linux in them (errno, the clocks, the flags
   of `open` and `mmap`, the futex, `stat`) to Cosmopolitan, which sets
   these values for each system at run time. `objcopy --redefine-sym`
@@ -511,7 +515,7 @@ the method of BEAM.com for Rust:
   standard library builds again with these registers reserved
   (`-Zbuild-std`, a nightly Rust).
 - `scripts/rust_link.sh` makes one object with one global name,
-  `tailwind_main`, and `c_src/main.c` calls it.
+  `tailwind_main`, and `native/tailwind/c_src/main.c` calls it.
 
 ### The size of the file
 

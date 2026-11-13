@@ -1,0 +1,46 @@
+# The fork of the crate ignore that the scanner of Tailwind CSS uses:
+# crates/ignore of Tailwind CSS, with no change in its files
+# (native/scanner/README.md). This manifest is ours: the manifest of
+# Tailwind CSS is native/scanner/manifests/ignore.toml. The crate is from
+# ripgrep, by Andrew Gallant, and Tailwind CSS changed it.
+[package]
+name = "tailwind-ignore"
+version.workspace = true
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+description = "The fork of the crate ignore (from ripgrep) that the scanner of Tailwind CSS uses, for tailwind-scanner"
+license = "Unlicense OR MIT"
+repository.workspace = true
+readme = "README.md"
+edition = "2024"
+rust-version = "1.88"
+
+[lib]
+# The name of the crate of ripgrep: the scanner uses it.
+name = "ignore"
+bench = false
+
+[dependencies]
+crossbeam-deque = "0.8.3"
+globset = "0.4.20"
+log = "0.4.20"
+memchr = "2.6.3"
+same-file = "1.0.6"
+walkdir = "2.4.0"
+dunce = "1.0.5"
+
+[dependencies.regex-automata]
+version = "0.4.18"
+default-features = false
+features = ["std", "perf", "syntax", "meta", "nfa", "hybrid", "dfa-onepass"]
+
+[target.'cfg(windows)'.dependencies.winapi-util]
+version = "0.1.2"
+
+[dev-dependencies]
+bstr = { version = "1.6.2", default-features = false, features = ["std"] }
+crossbeam-channel = "0.5.15"
+
+[features]
+# DEPRECATED. It is a no-op. SIMD is done automatically through runtime
+# dispatch.
+simd-accel = []

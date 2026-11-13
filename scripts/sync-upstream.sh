@@ -50,20 +50,22 @@ check() {
     . ./UPSTREAM
     v=$TAILWINDCSS_VERSION
     expect native/tailwind/src/index.rs "pub const VERSION: &str = \"$v\";"
-    expect native/tailwind/Cargo.toml "tag = \"v$v\""
+    # The scanner (native/scanner): the copy of the tag of UPSTREAM. The
+    # job "test" of CI compares the files with the tag (scripts/scanner.sh).
+    expect native/scanner/README.md "the tag of the version in \`UPSTREAM\`"
     expect native/tailwind/Cargo.toml "lightningcss = { version = \"=$LIGHTNINGCSS_CRATE\""
     expect src/tailwind.erl "-define(LATEST, \"$v\")."
     expect tests/upstream/README.md "\`v$v\`"
     expect tests/upstream/README.md "$TAILWINDCSS_COMMIT"
     # QuickJS: the submodule is at the commit of UPSTREAM.
-    if [ ! -f c_src/quickjs/quickjs.c ]; then
-        log "c_src/quickjs is empty: run git submodule update --init"
+    if [ ! -f native/tailwind/c_src/quickjs/quickjs.c ]; then
+        log "native/tailwind/c_src/quickjs is empty: run git submodule update --init"
         status=1
-    elif [ "$(cat c_src/quickjs/VERSION)" != "$QUICKJS_VERSION" ]; then
-        log "c_src/quickjs has the version $(cat c_src/quickjs/VERSION), not $QUICKJS_VERSION"
+    elif [ "$(cat native/tailwind/c_src/quickjs/VERSION)" != "$QUICKJS_VERSION" ]; then
+        log "native/tailwind/c_src/quickjs has the version $(cat native/tailwind/c_src/quickjs/VERSION), not $QUICKJS_VERSION"
         status=1
-    elif [ -e c_src/quickjs/.git ] && [ "$(git -C c_src/quickjs rev-parse HEAD)" != "$QUICKJS_COMMIT" ]; then
-        log "c_src/quickjs is not at the commit $QUICKJS_COMMIT"
+    elif [ -e native/tailwind/c_src/quickjs/.git ] && [ "$(git -C native/tailwind/c_src/quickjs rev-parse HEAD)" != "$QUICKJS_COMMIT" ]; then
+        log "native/tailwind/c_src/quickjs is not at the commit $QUICKJS_COMMIT"
         status=1
     fi
     # The plugins of the standalone program, and the TypeScript transform:
@@ -80,7 +82,11 @@ check() {
     p=$(sed -n 's/^  "version": "\([^"]*\)",$/\1/p' package.json)
     expect mix.exs "@version \"$p\""
     expect src/tailwind.app.src "{vsn, \"$p\"}"
-    expect native/tailwind/Cargo.toml "version = \"$p\""
+    w=$(awk '/^\[workspace\.package\]/ { on = 1; next } /^\[/ { on = 0 } on && /^version *=/ { gsub(/[" ]/, ""); sub(/version=/, ""); print; exit }' Cargo.toml)
+    [ "$w" = "$p" ] || { log "Cargo.toml has the version $w in [workspace.package], not $p"; status=1; }
+    for crate in tailwind-scanner tailwind-classification-macros tailwind-ignore; do
+        expect Cargo.toml "package = \"$crate\", version = \"$p\""
+    done
     [ $status = 0 ] && log "all the files agree with UPSTREAM (Tailwind CSS $v), and the packages have the version $p"
     return $status
 }
@@ -167,7 +173,6 @@ apply() {
     log "The version numbers"
     sed -i.bak "s|pub const VERSION: &str = \"$old\";|pub const VERSION: \&str = \"$new\";|" native/tailwind/src/index.rs
     sed -i.bak "s|tailwindcss v$old \||tailwindcss v$new \||" native/tailwind/src/index.rs
-    sed -i.bak "s|tag = \"v$old\"|tag = \"v$new\"|" native/tailwind/Cargo.toml
     sed -i.bak "s|-define(LATEST, \"$old\").|-define(LATEST, \"$new\").|; s|{version, \"$old\"}|{version, \"$new\"}|" src/tailwind.erl
     sed -i.bak "s|version: \"$old\"|version: \"$new\"|" lib/tailwind.ex README.md
     sed -i.bak "s|v$old|v$new|g; s|@$old|@$new|g; s|$TAILWINDCSS_COMMIT|$commit|" tests/upstream/README.md
@@ -177,6 +182,13 @@ apply() {
     find native src lib tests/upstream/tools -name '*.bak' -exec rm -f {} +
     set_key TAILWINDCSS_VERSION "$new"
     set_key TAILWINDCSS_COMMIT "$commit"
+
+    log "The scanner: the crates of the tag v$new (native/scanner)"
+    sh scripts/scanner.sh "$clone"
+    if ! git diff --quiet -- native/scanner/manifests; then
+        log "the manifests of the scanner changed: change native/scanner/*/Cargo.toml in the same way"
+        git diff --stat -- native/scanner/manifests >&2
+    fi
 
     log "Lightning CSS: the crate of the npm version that Tailwind CSS uses"
     npm_version=$(sed -n 's/^ *lightningcss: *\([0-9.]*\).*/\1/p' "$clone/pnpm-workspace.yaml" | head -1)
@@ -254,7 +266,6 @@ apply() {
 
     check
     log "The tests: each failure is behavior of Tailwind CSS $new to port"
-    cargo update -p tailwindcss-oxide > /dev/null 2>&1 || true
     if cargo test --release --no-fail-fast > "$work/test.log" 2>&1; then
         log "all the tests pass: Tailwind CSS $new needs no change by hand"
     else

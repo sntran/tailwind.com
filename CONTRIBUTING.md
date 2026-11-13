@@ -72,7 +72,7 @@ minutes. The job deletes the branch at its end.
 - The plugin layer for `@plugin` and `@config` is the JavaScript of
   Tailwind CSS, and not a port. Do not edit the files of
   `native/tailwind/assets` (`compat.js`, `typescript.js`, `plugins/`)
-  or `c_src/quickjs`: scripts make the files, and the directory is a
+  or `native/tailwind/c_src/quickjs`: scripts make the files, and the directory is a
   copy (see [`docs/BUILDING.md`](docs/BUILDING.md)).
 - A part of Node.js in `native/tailwind/js` follows Node.js 22: add a
   case to `native/tailwind/tests/fixtures/node_api_cases.cjs` and

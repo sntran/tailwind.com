@@ -1,0 +1,25 @@
+# The classification macros of the scanner of Tailwind CSS:
+# crates/classification-macros of Tailwind CSS, with no change in its files
+# (native/scanner/README.md). This manifest is ours: the manifest of
+# Tailwind CSS is native/scanner/manifests/classification-macros.toml.
+[package]
+name = "tailwind-classification-macros"
+version.workspace = true
+edition = "2021"
+license = "MIT"
+description = "The classification macros of the scanner of Tailwind CSS (crates/classification-macros of Tailwind CSS), for tailwind-scanner"
+repository.workspace = true
+
+[lib]
+proc-macro = true
+# The name of the crate of Tailwind CSS: the scanner uses it.
+name = "classification_macros"
+
+[dependencies]
+# The feature `full`: the code uses `syn::RangeLimits` and the fields of
+# `syn::ExprRange`. The manifest of Tailwind CSS does not ask for it, and
+# gets it from another crate of the build; a crate of crates.io builds
+# alone.
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"

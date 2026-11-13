@@ -1,6 +1,28 @@
 [workspace]
 resolver = "2"
-members = ["native/tailwind"]
+members = [
+    "native/tailwind",
+    "native/scanner/oxide",
+    "native/scanner/classification-macros",
+    "native/scanner/ignore",
+]
+# `cargo build`, `cargo test` and `cargo clippy` with no -p: the compiler
+# only. The scanner (native/scanner) is a copy of the code of Tailwind
+# CSS: CI runs its own tests with -p.
+default-members = ["native/tailwind"]
+
+# The version of the packages (package.json, mix.exs, src/tailwind.app.src
+# and these crates): sh scripts/sync-upstream.sh check compares them.
+[workspace.package]
+version = "0.2.0"
+repository = "https://github.com/sntran/tailwind.com"
+
+# The crates of the scanner (native/scanner/README.md), with the names of
+# the crates of Tailwind CSS in the code.
+[workspace.dependencies]
+tailwindcss-oxide = { package = "tailwind-scanner", version = "0.2.0", path = "native/scanner/oxide" }
+classification-macros = { package = "tailwind-classification-macros", version = "0.2.0", path = "native/scanner/classification-macros" }
+ignore = { package = "tailwind-ignore", version = "0.2.0", path = "native/scanner/ignore" }
 
 # The compiler builds for speed. Its dependencies build for size: Lightning
 # CSS (for --minify and --optimize) is the largest part of the program, and

@@ -5,7 +5,7 @@
 # Usage: sh scripts/build.sh [OUT]          (default: build/tailwind.com)
 #
 # The program is the Rust crate native/tailwind as a staticlib (the std of
-# the target *-unknown-linux-musl), with the calls of c_src/cosmo_rust.c,
+# the target *-unknown-linux-musl), with the calls of native/tailwind/c_src/cosmo_rust.c,
 # linked with cosmocc into one Actually Portable Executable. This is the
 # method of BEAM.com for a library of Rust.
 #
@@ -34,8 +34,8 @@ CPUS=${CPUS:-x86_64 aarch64}
 
 log() { echo "build.sh: $*" >&2; }
 
-if [ ! -f "$root/c_src/quickjs/quickjs.c" ]; then
-    log "c_src/quickjs is empty: run git submodule update --init"
+if [ ! -f "$root/native/tailwind/c_src/quickjs/quickjs.c" ]; then
+    log "native/tailwind/c_src/quickjs is empty: run git submodule update --init"
     exit 1
 fi
 
@@ -53,7 +53,7 @@ if [ ! -x "$C/bin/cosmocc" ]; then
     rm -f "$C.zip"
 fi
 
-# The calls of the Rust library that c_src/cosmo_rust.c translates.
+# The calls of the Rust library that native/tailwind/c_src/cosmo_rust.c translates.
 SYMS="syscall clock_gettime clock_nanosleep __errno_location pthread_attr_init
 pthread_attr_destroy pthread_attr_setstacksize pthread_attr_getstack
 pthread_attr_getguardsize pthread_getattr_np pthread_create open openat mmap
@@ -82,9 +82,9 @@ for cpu in $CPUS; do
     args=; for s in $SYMS; do args="$args --redefine-sym $s=tw_rs_$s"; done
     # shellcheck disable=SC2086
     sh "$C/bin/$cpu-unknown-cosmo-objcopy" $args "$d/libtailwind.a"
-    sh "$C/bin/$cpu-unknown-cosmo-cc" -O2 -c -o "$d/shim.o" "$root/c_src/cosmo_rust.c"
+    sh "$C/bin/$cpu-unknown-cosmo-cc" -O2 -c -o "$d/shim.o" "$root/native/tailwind/c_src/cosmo_rust.c"
     # The file events of the watch.
-    sh "$C/bin/$cpu-unknown-cosmo-cc" -O2 -c -o "$d/watch.o" "$root/c_src/watch.c"
+    sh "$C/bin/$cpu-unknown-cosmo-cc" -O2 -c -o "$d/watch.o" "$root/native/tailwind/c_src/watch.c"
     # The JavaScript engine: QuickJS and its API for Rust. The C library of
     # the file is Cosmopolitan, so cosmocc compiles these files (with the
     # feature `ape`, native/tailwind/build.rs compiles nothing).
@@ -93,8 +93,8 @@ for cpu in $CPUS; do
     for f in quickjs/quickjs quickjs/libregexp quickjs/libunicode quickjs/cutils quickjs/dtoa js; do
         o=$d/js_$(basename "$f").o
         sh "$C/bin/$cpu-unknown-cosmo-cc" -O2 -fwrapv -funsigned-char -D_GNU_SOURCE \
-            "-DCONFIG_VERSION=\"$(cat "$root/c_src/quickjs/VERSION")\"" \
-            -c -o "$o" "$root/c_src/$f.c" &
+            "-DCONFIG_VERSION=\"$(cat "$root/native/tailwind/c_src/quickjs/VERSION")\"" \
+            -c -o "$o" "$root/native/tailwind/c_src/$f.c" &
         js_objects="$js_objects $o"
     done
     wait
@@ -107,7 +107,7 @@ for cpu in $CPUS; do
     objects="$objects $cpu"
 done
 
-cp "$root/c_src/main.c" "$work/main.c"
+cp "$root/native/tailwind/c_src/main.c" "$work/main.c"
 case "$CPUS" in
     "x86_64 aarch64") cc=cosmocc ;;
     *) cc=$CPUS-unknown-cosmo-cc ;;

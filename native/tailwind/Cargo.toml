@@ -1,11 +1,36 @@
 [package]
 name = "tailwind"
-version = "0.2.0"
+version.workspace = true
 edition = "2021"
-rust-version = "1.85"
+# The fork of the crate ignore in the scanner needs 1.88.
+rust-version = "1.88"
 license = "Apache-2.0"
-description = "A Tailwind CSS compiler in one file"
-repository = "https://github.com/sntran/tailwind.com"
+description = "A Tailwind CSS 4 compiler in Rust, with each version of Tailwind CSS 4 from 4.0.0"
+repository.workspace = true
+readme = "README.md"
+keywords = ["tailwindcss", "tailwind", "css", "compiler"]
+categories = ["web-programming", "compilers"]
+# The files of the crate on crates.io. The tests read the records of the
+# repository (tests/upstream), so they are not in the crate. Of QuickJS,
+# only the files that build.rs compiles, and their headers.
+include = [
+    "/Cargo.toml",
+    "/README.md",
+    "/build.rs",
+    "/src/**/*.rs",
+    "/assets/**",
+    "/c_src/js.c",
+    "/c_src/js.h",
+    "/c_src/wasi/setjmp.h",
+    "/c_src/quickjs/quickjs.c",
+    "/c_src/quickjs/libregexp.c",
+    "/c_src/quickjs/libunicode.c",
+    "/c_src/quickjs/cutils.c",
+    "/c_src/quickjs/dtoa.c",
+    "/c_src/quickjs/*.h",
+    "/c_src/quickjs/VERSION",
+    "/c_src/quickjs/LICENSE",
+]
 
 build = "build.rs"
 
@@ -36,8 +61,9 @@ ape = ["cli"]
 
 [dependencies]
 indexmap = "2"
-# The scanner of Tailwind CSS, from the same release as the compiler.
-tailwindcss-oxide = { git = "https://github.com/tailwindlabs/tailwindcss.git", tag = "v4.3.5", optional = true }
+# The scanner of Tailwind CSS, from the same release as the compiler: a
+# copy in native/scanner (scripts/scanner.sh).
+tailwindcss-oxide = { workspace = true, optional = true }
 # The version that the npm package lightningcss 1.33.0 has: the optimizer
 # of Tailwind CSS 4.3.5.
 lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["sourcemap"], optional = true }
