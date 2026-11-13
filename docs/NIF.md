@@ -6,9 +6,10 @@ of the operating system, and no file to download. A build of a small
 project takes about a third of the time of a port, because no program
 starts (see [Speed](#speed)).
 
-The NIF is a choice. tailwind.com gives the NIF (the crate `native/nif`
-and the module `tailwind_nif`), and a builder builds it. A project with
-no NIF runs the file tailwind.com as a port, as before.
+The NIF is a choice. tailwind.com gives the NIF: the crate `native/nif`,
+the module `tailwind_nif`, and, with each release, the native NIF
+objects for BEAM.com. A builder puts the NIF in `priv`. A project with no
+NIF runs the file tailwind.com as a port, as before.
 
 ## A project
 
@@ -30,9 +31,66 @@ The configuration `nif` selects:
 config :tailwind, nif: false
 ```
 
-## A builder
+## BEAM.com
 
-A builder (for example the builder of BEAM.com) does these steps:
+`beam.com` is one static file with no `dlopen()`. It loads a native NIF
+object in place of a library: for `erlang:load_nif("PATH", 0)`, it loads
+`PATH.x86_64.o` or `PATH.aarch64.o` (the CPU of the computer) into the
+running program (`docs/NIFS.md` of BEAM.com). So BEAM.com needs no Rust
+and no compiler for the NIF:
+
+1. Each release of tailwind.com has the two objects,
+   `libtailwind_nif.x86_64.o` and `libtailwind_nif.aarch64.o`, with
+   their SHA-256 in `SHA256SUMS`. Use the objects of the release of the
+   Erlang and Elixir modules: the functions of the NIF change with the
+   module.
+2. Put them at `priv/native/libtailwind_nif.x86_64.o` and `.aarch64.o` of
+   the application `tailwind`. In `beam.com`, they are NIF files of
+   `beam.com`: `lib/beam_com/priv/nifs/tailwind-VSN/native/`, with `VSN`
+   the version of the package `tailwind` of tailwind.com. The script
+   `scripts/assemble.erl` of BEAM.com adds them to a `beam.com`:
+
+   ```sh
+   beam.com scripts/assemble.erl -- beam.com beam-tailwind.com \
+     lib/beam_com/priv/nifs/tailwind-0.2.0/native/libtailwind_nif.x86_64.o=libtailwind_nif.x86_64.o \
+     lib/beam_com/priv/nifs/tailwind-0.2.0/native/libtailwind_nif.aarch64.o=libtailwind_nif.aarch64.o
+   ```
+
+   `beam-tailwind.com DIR -o OUT` then puts them into the priv directory
+   of the package `tailwind` of the project, and `tailwind_nif` loads
+   them.
+
+An object has one global name, `tailwind_nif_nif_init`. It uses only what
+each `beam.com` gives to an object: the `enif_*` functions (Rustler calls
+them by name) and the functions of the C library of
+`c_src/cosmo/beam_com_nif_libc.h` of BEAM.com. The table must have the
+names that BEAM.com added on 2026-11-11 (`asinf`, `atanf`, `expm1`,
+`malloc_usable_size` and `__hostos`): a `beam.com` before that does not
+load the object, and the error names the first name that is not there.
+
+The object is the program of the file tailwind.com, with the NIF in
+place of `main()`, and with two differences:
+
+- The watch has the file events of Linux (inotify). On macOS, the BSDs
+  and Windows, it polls the files every 250 ms: the table of `beam.com`
+  does not have the functions of kqueue and of Windows.
+- The older versions of Tailwind CSS are not in the object.
+  `priv/tailwindcss` of the application can have them (as for another
+  VM, below). This is not tested in `beam.com` yet.
+
+`make nif` (`scripts/nif.sh`) builds the objects in `build/nif`, with the
+cosmocc and the Rust of `make`, and python3. The job `nif-beam` of CI
+loads them in the `beam.com` of the release `edge` of BEAM.com, on
+x86_64 and aarch64, with `tests/nif_object.erl`:
+
+```sh
+make nif
+sh beam.com tests/nif_object.erl -- build/nif/libtailwind_nif
+```
+
+## Another VM
+
+For a VM that loads a library, a builder does these steps:
 
 1. Build the crate `native/nif` (the package `tailwind_nif`) of the same
    commit as the Erlang and Elixir modules. `cargo build --release -p
@@ -41,10 +99,7 @@ A builder (for example the builder of BEAM.com) does these steps:
    the crate `cc` compiles it with the C compiler of `CC` or of
    `CC_<target>`.
 2. Put the library at `priv/native/libtailwind_nif.so` of the application
-   `tailwind` (`libtailwind_nif.dll` on Windows). For a VM that links its
-   NIFs into its program, build the crate as a `staticlib` (`cargo rustc
-   -p tailwind_nif --crate-type staticlib`): the entry point of the
-   module `tailwind_nif` is `tailwind_nif_nif_init` (Rustler).
+   `tailwind` (`libtailwind_nif.dll` on Windows).
 3. Optional: the older versions of Tailwind CSS. The NIF has the
    compiler of Tailwind CSS 4.3.5 only. For each other version, it uses
    the npm package `tailwindcss` of that version in

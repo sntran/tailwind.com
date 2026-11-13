@@ -17,6 +17,10 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   `docs/NIF.md`). When a builder puts the NIF in `priv/native`,
   `tailwind:run/2` and `Tailwind.run/2` use it, and the project does not
   change. The configuration `nif` selects the NIF or the file.
+- The native NIF objects for BEAM.com: `libtailwind_nif.x86_64.o` and
+  `libtailwind_nif.aarch64.o` with each release (`make nif`,
+  `scripts/nif.sh`). `beam.com` loads them with no compiler. CI loads
+  them in `beam.com` on x86_64 and aarch64 (`tests/nif_object.erl`).
 - `tailwind::cli::run_with`: the program as a part of another program,
   with its own working directory, environment, output and stop.
 

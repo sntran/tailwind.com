@@ -58,7 +58,9 @@ and `PACKAGES="4.2.4 4.3.0" make` a file with these versions only. See
 
 `scripts/build.sh` has the steps, and its header names the environment
 variables (`COSMOCC`, `COSMOCC_VERSION`, `RUST_NIGHTLY`, `CPUS`,
-`PACKAGES`).
+`PACKAGES`). `scripts/cosmo.sh` has the steps that `scripts/nif.sh` (the
+native NIF objects for BEAM.com, `make nif`, [`NIF.md`](NIF.md)) also
+uses.
 `CPUS=x86_64 sh scripts/build.sh` makes a file for x86_64 only, with no
 nightly Rust. See "The file tailwind.com" in
 [`INTERNALS.md`](INTERNALS.md) for how the link works.

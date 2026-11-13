@@ -9,9 +9,15 @@ repository.workspace = true
 publish = false
 
 [lib]
-# `cargo build` gives a library that `erlang:load_nif/2` loads. A builder
-# of BEAM.com builds the crate as a staticlib (--crate-type).
+# `cargo build` gives a library that `erlang:load_nif/2` loads.
+# scripts/nif.sh builds the crate as a staticlib (--crate-type), for the
+# native NIF objects of BEAM.com.
 crate-type = ["cdylib"]
+
+[features]
+# The native NIF objects of BEAM.com (scripts/nif.sh): the C code of the
+# crate tailwind comes from cosmocc.
+ape = ["tailwind/ape"]
 
 [dependencies]
 rustler = "0.39"
