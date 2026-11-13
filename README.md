@@ -60,7 +60,7 @@ tailwind.com [--input input.css] [--output output.css] [--watch] [--poll=ms] [op
 In `mix.exs`, replace the Hex package `tailwind`:
 
 ```elixir
-{:tailwind, github: "sntran/tailwind.com", tag: "v0.2.0", runtime: Mix.env() == :dev}
+{:tailwind, github: "sntran/tailwind.com", tag: "v0.3.0", runtime: Mix.env() == :dev}
 ```
 
 The modules of a release download the `tailwind.com` of that release.

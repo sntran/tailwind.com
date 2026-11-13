@@ -6,7 +6,10 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
-## Unreleased
+## 0.3.0 - 2026-11-13
+
+The program in the Erlang VM, as a NIF (with native NIF objects for
+BEAM.com in each release), and builds of about half the time of before.
 
 ### Fixed
 

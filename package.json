@@ -1,6 +1,6 @@
 {
   "name": "tailwind.com",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Tailwind CSS in one executable file, with no Node.js at run time: npx tailwind.com, and the same compiler as WebAssembly",
   "license": "Apache-2.0",
   "repository": {

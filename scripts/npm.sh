@@ -7,7 +7,7 @@
 #   sh scripts/npm.sh TAILWIND_COM TAILWIND_WASM TAG
 #
 # TAILWIND_COM and TAILWIND_WASM: the files of the release. TAG: the tag of
-# the GitHub release that has the file, for example v0.2.0.
+# the GitHub release that has the file, for example v0.3.0.
 set -eu
 [ $# -eq 3 ] || { echo "usage: $0 TAILWIND_COM TAILWIND_WASM TAG" >&2; exit 2; }
 com=$1 wasm=$2 tag=$3
