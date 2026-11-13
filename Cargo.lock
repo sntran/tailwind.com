@@ -1391,6 +1391,7 @@ dependencies = [
  "mimalloc",
  "parcel_sourcemap",
  "proptest",
+ "rustc-hash",
  "serde",
  "serde_json",
  "tailwind-scanner",

@@ -16,6 +16,7 @@ mod cosmo_allocator;
 pub mod css_functions;
 pub mod css_parser;
 pub mod design_system;
+pub mod hash;
 pub mod index;
 pub mod optimize;
 pub mod patch;

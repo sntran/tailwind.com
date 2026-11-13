@@ -5,7 +5,7 @@
 
 use crate::ast::AtRule;
 use crate::utils::escape::{escape, unescape};
-use indexmap::IndexMap;
+use crate::hash::IndexMap;
 use std::cell::RefCell;
 
 /// The options of a theme value, as bits.
@@ -340,7 +340,7 @@ impl Theme {
     /// The values of a namespace. The key `None` is the value of the
     /// namespace itself.
     pub fn namespace(&self, namespace: &str) -> IndexMap<Option<String>, String> {
-        let mut result = IndexMap::new();
+        let mut result = IndexMap::default();
         let prefix = format!("{namespace}-");
         let nested_prefix = format!("{prefix}-");
         for (key, value) in self.values.borrow().iter() {

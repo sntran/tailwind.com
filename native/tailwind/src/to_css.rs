@@ -2,7 +2,7 @@
 
 use crate::ast::AstNode;
 use crate::source_maps::{utf16_len, Source, SourceLocation};
-use std::collections::HashMap;
+use crate::hash::HashMap;
 use std::rc::Rc;
 
 /// Print a syntax tree as CSS. Each level of depth adds two spaces.
@@ -26,7 +26,7 @@ pub fn to_css_tracked(ast: &mut [AstNode]) -> String {
     }
 
     // Copies of one object of upstream have the `dst` of the last copy.
-    let mut shared: HashMap<*const (), Option<SourceLocation>> = HashMap::new();
+    let mut shared: HashMap<*const (), Option<SourceLocation>> = HashMap::default();
     collect_shared(ast, &mut shared);
     if !shared.is_empty() {
         apply_shared(ast, &shared);

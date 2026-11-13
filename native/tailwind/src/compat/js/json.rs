@@ -6,7 +6,7 @@ use crate::candidate::{Candidate, CandidateModifier, FunctionalCandidate, Static
 use crate::source_maps::SourceLocation;
 use serde_json::{json, Map, Value};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use crate::hash::HashMap;
 use std::rc::Rc;
 
 /// The key of the context node that is at the place of `@tailwind

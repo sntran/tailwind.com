@@ -18,7 +18,7 @@ use crate::utils::infer_data_type::{is_positive_integer, is_valid_opacity_value,
 use crate::utils::js::{js_number, js_number_to_string};
 use crate::utils::math_operators::add_whitespace_around_math_operators;
 use crate::utils::segment::segment;
-use indexmap::IndexMap;
+use crate::hash::IndexMap;
 use std::rc::Rc;
 
 /// True for a bare modifier that is the opacity of a shadow.
@@ -37,7 +37,7 @@ pub(crate) fn empty_fallbacks(text: &'static str) -> &'static str {
         return text;
     }
     thread_local! {
-        static OLD: std::cell::RefCell<std::collections::HashMap<&'static str, &'static str>> = Default::default();
+        static OLD: std::cell::RefCell<crate::hash::HashMap<&'static str, &'static str>> = Default::default();
     }
     OLD.with(|old| *old.borrow_mut().entry(text).or_insert_with(|| Box::leak(text.replace(", )", ",)").into_boxed_str())))
 }

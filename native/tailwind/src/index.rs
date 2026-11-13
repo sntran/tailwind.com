@@ -45,9 +45,9 @@ use crate::walk::{walk, WalkAction};
 use crate::{
     Error, Features, Polyfills, Result, FEATURES_AT_THEME, FEATURES_NONE, FEATURES_UTILITIES, POLYFILLS_ALL,
 };
-use indexmap::IndexMap;
+use crate::hash::IndexMap;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use crate::hash::HashSet;
 use std::rc::Rc;
 
 pub use crate::at_import::Stylesheet;
@@ -335,7 +335,7 @@ pub fn compile(css: &str, options: CompileOptions) -> Result<Compiler> {
     let utilities_path = find_utilities(&mut parsed.ast, &mut Vec::new());
 
     let mut all_valid_candidates = Vec::new();
-    let mut all_valid_candidates_set = HashSet::new();
+    let mut all_valid_candidates_set = HashSet::default();
     let mut default_did_change = false;
     for candidate in parsed.inline_candidates {
         if !parsed.design_system.invalid_candidates.borrow().contains(&candidate) {
@@ -493,8 +493,8 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
         features: FEATURES_NONE,
         important: false,
         theme: Theme::new(),
-        custom_variants: IndexMap::new(),
-        custom_variant_dependencies: IndexMap::new(),
+        custom_variants: IndexMap::default(),
+        custom_variant_dependencies: IndexMap::default(),
         custom_utilities: Vec::new(),
         has_first_theme_rule: false,
         has_utilities_node: false,

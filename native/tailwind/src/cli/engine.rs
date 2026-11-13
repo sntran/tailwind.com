@@ -32,7 +32,7 @@ use crate::patch::{self, Entry, Patch};
 use crate::version::Version;
 use crate::Result;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use crate::hash::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -110,7 +110,7 @@ impl DirectoryPackage {
         if !is_version(version) {
             return None;
         }
-        let package = Self { store, version: version.to_string(), patches: RefCell::new(HashMap::new()) };
+        let package = Self { store, version: version.to_string(), patches: RefCell::new(HashMap::default()) };
         let json: serde_json::Value = serde_json::from_str(&package.read("package.json")?).ok()?;
         let name = json.get("name").and_then(|value| value.as_str())?;
         let found = json.get("version").and_then(|value| value.as_str())?;

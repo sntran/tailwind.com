@@ -86,7 +86,7 @@ pub fn compile_candidates(
     respect_important: bool,
 ) -> Vec<SortedNode> {
     let mut sorted: Vec<SortedNode> = Vec::new();
-    let mut matches: indexmap::IndexMap<&str, Rc<Vec<Rc<Candidate>>>> = indexmap::IndexMap::new();
+    let mut matches: crate::hash::IndexMap<&str, Rc<Vec<Rc<Candidate>>>> = crate::hash::IndexMap::default();
 
     // Parse the candidates and the variants.
     for raw in raw_candidates {
@@ -226,7 +226,7 @@ fn for_each_declaration(ast: &[AstNode], visit: &mut dyn FnMut(&Declaration)) {
 }
 
 /// Make each copy of a shared declaration with `!important` important.
-fn apply_shared_important(ast: &mut [AstNode], shared: &std::collections::HashMap<*const (), bool>) {
+fn apply_shared_important(ast: &mut [AstNode], shared: &crate::hash::HashMap<*const (), bool>) {
     for node in ast {
         if let AstNode::Declaration(d) = node {
             if d.loc.identity().and_then(|identity| shared.get(&identity).copied()) == Some(true) {

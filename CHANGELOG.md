@@ -47,6 +47,9 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   above, a large build takes 124 ms, not 232 ms, and the peak memory does
   not change. The file is 370 KB larger. The native NIF objects keep the
   allocator of `beam.com`.
+- The maps of the compiler use FxHash (the crate `rustc-hash`, which the
+  scanner uses too), not the SipHash of `std` (`src/hash.rs`). A large
+  build has 7% fewer instructions.
 - The scanner of Tailwind CSS is a copy in the repository
   (`native/scanner`), not a dependency on the git repository of Tailwind
   CSS: three crates with no change in their code, and manifests of ours

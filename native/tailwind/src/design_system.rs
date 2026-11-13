@@ -11,7 +11,7 @@ use crate::utilities::{create_utilities, with_alpha, Utilities};
 use crate::utils::variables::extract_used_variables;
 use crate::variants::{create_variants, Variants};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use crate::hash::{HashMap, HashSet};
 use std::rc::Rc;
 
 /// The flags of `compile_ast_nodes`, as bits.
@@ -55,7 +55,7 @@ pub struct DesignSystem {
     /// declaration.
     pub shared_declarations: RefCell<HashMap<*const (), bool>>,
 
-    parsed_variants: RefCell<indexmap::IndexMap<String, Option<Rc<Variant>>>>,
+    parsed_variants: RefCell<crate::hash::IndexMap<String, Option<Rc<Variant>>>>,
     parsed_candidates: RefCell<HashMap<String, Rc<Vec<Rc<Candidate>>>>>,
     compiled: RefCell<CompiledCache>,
     tracked: RefCell<HashSet<String>>,
@@ -70,18 +70,18 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         theme,
         utilities,
         variants,
-        invalid_candidates: RefCell::new(HashSet::new()),
+        invalid_candidates: RefCell::new(HashSet::default()),
         warnings: RefCell::new(Vec::new()),
         important: false,
         resolve_theme_value_hook: None,
         track_sources: std::cell::Cell::new(false),
         #[cfg(tw_js)]
         js: None,
-        shared_declarations: RefCell::new(HashMap::new()),
-        parsed_variants: RefCell::new(indexmap::IndexMap::new()),
-        parsed_candidates: RefCell::new(HashMap::new()),
-        compiled: RefCell::new(HashMap::new()),
-        tracked: RefCell::new(HashSet::new()),
+        shared_declarations: RefCell::new(HashMap::default()),
+        parsed_variants: RefCell::new(crate::hash::IndexMap::default()),
+        parsed_candidates: RefCell::new(HashMap::default()),
+        compiled: RefCell::new(HashMap::default()),
+        tracked: RefCell::new(HashSet::default()),
         variant_order: RefCell::new(None),
     }
 }
@@ -185,7 +185,7 @@ impl DesignSystem {
         // depends on the sort algorithm: this is the algorithm of V8.
         crate::utils::v8_sort::sort(&mut variants, |a, z| self.variants.compare(a.as_deref(), z.as_deref(), self));
 
-        let mut order = VariantOrder::new();
+        let mut order = VariantOrder::default();
         let mut prev: Option<&Rc<Variant>> = None;
         let mut index = 0u32;
         for variant in variants.iter().flatten() {

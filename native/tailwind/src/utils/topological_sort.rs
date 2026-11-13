@@ -1,6 +1,6 @@
 //! A topological sort: `utils/topological-sort.ts` of Tailwind CSS.
 
-use std::collections::HashMap;
+use crate::hash::HashMap;
 use std::hash::Hash;
 
 /// A circular dependency. These are the arguments of the upstream callback

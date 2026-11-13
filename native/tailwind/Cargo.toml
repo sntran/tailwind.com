@@ -71,6 +71,10 @@ ape-mimalloc = ["ape"]
 
 [dependencies]
 indexmap = "2"
+# The hash of the maps of the compiler (src/hash.rs): faster than the
+# SipHash of std for the short keys of the compiler. The scanner of
+# Tailwind CSS uses the same crate.
+rustc-hash = "2.1"
 # The scanner of Tailwind CSS, from the same release as the compiler: a
 # copy in native/scanner (scripts/scanner.sh).
 tailwindcss-oxide = { workspace = true, optional = true }

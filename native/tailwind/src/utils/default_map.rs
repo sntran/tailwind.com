@@ -1,7 +1,7 @@
 //! A map with default values: `utils/default-map.ts` of Tailwind CSS.
 
 use std::borrow::Borrow;
-use std::collections::HashMap;
+use crate::hash::HashMap;
 use std::hash::Hash;
 
 /// A map that makes a value for each key that it does not have. The map
@@ -17,7 +17,7 @@ pub struct DefaultMap<K, V, F> {
 impl<K: Eq + Hash, V, F: FnMut(&K) -> V> DefaultMap<K, V, F> {
     /// A map with a factory for the default values.
     pub fn new(factory: F) -> Self {
-        DefaultMap { map: HashMap::new(), factory }
+        DefaultMap { map: HashMap::default(), factory }
     }
 
     /// The value for the key. The factory makes the value when the map does
