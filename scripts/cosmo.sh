@@ -104,7 +104,14 @@ mimalloc_object() {
     # a thread-local variable. The thread pointer of the CPU (%fs:0 on
     # x86_64, tpidr_el0 on aarch64) is not the thread data of Cosmopolitan,
     # which has its own on each system (x28 on aarch64).
+    # MI_PRIM_HAS_PROCESS_ATTACH=1: no constructor and no destructor of
+    # the process. mimalloc starts at its first allocation. At the exit of
+    # the process, its destructor deleted the pthread key of its threads
+    # while the threads of the scanner still freed memory, and Cosmopolitan
+    # stopped on an assertion in pthread_getspecific(). The system frees
+    # the memory of the process.
     sh "$C/bin/$cpu-unknown-cosmo-cc" -O2 -DNDEBUG -D_GNU_SOURCE -DMI_USE_BUILTIN_THREAD_POINTER=0 \
+        -DMI_PRIM_HAS_PROCESS_ATTACH=1 \
         -I"$mi/include" -c -o "$o" "$mi/src/static.c"
 }
 
