@@ -189,6 +189,9 @@ struct Optimizer<'a> {
     css_theme_variables: IndexMap<Id, Vec<Id>>,
     /// The declarations with `color-mix(…)` of each list.
     color_mix_declarations: IndexMap<Id, Vec<Id>>,
+    /// The fallbacks of `color_mix_fallback`, by value: many declarations
+    /// have the same value, and the theme does not change in one run.
+    color_mix_fallbacks: std::cell::RefCell<HashMap<String, Option<String>>>,
     /// The `@keyframes` rules of the theme.
     keyframes: Vec<(Id, String)>,
     used_keyframe_names: HashSet<String>,
@@ -274,7 +277,7 @@ impl Optimizer<'_> {
                 // removal of the unused theme variables. A theme variable
                 // with a fallback is then not in its list.
                 if needs_color_mix && !switches::COLOR_MIX_FALLBACK_LAST.on() {
-                    if let Some(fallback_value) = color_mix_fallback(value, &self.design_system.theme) {
+                    if let Some(fallback_value) = self.color_mix_fallback(value) {
                         let fallback = self.arena.add(Item::Node(AstNode::Declaration(Declaration {
                             property: decl.property.clone(),
                             value: Some(fallback_value),
@@ -629,6 +632,16 @@ impl Optimizer<'_> {
         false
     }
 
+    /// `color_mix_fallback` of a value, from the cache of this run.
+    fn color_mix_fallback(&self, value: &str) -> Option<String> {
+        if let Some(found) = self.color_mix_fallbacks.borrow().get(value) {
+            return found.clone();
+        }
+        let fallback = color_mix_fallback(value, &self.design_system.theme);
+        self.color_mix_fallbacks.borrow_mut().insert(value.to_string(), fallback.clone());
+        fallback
+    }
+
     /// Add a fallback before each declaration that uses `color-mix(…)`.
     fn add_color_mix_fallbacks(&mut self) {
         let lists = std::mem::take(&mut self.color_mix_declarations);
@@ -638,7 +651,7 @@ impl Optimizer<'_> {
                 let Some(idx) = self.arena.children(parent).iter().position(|id| *id == declaration) else { continue };
                 let decl = self.declaration(declaration);
                 let Some(value) = &decl.value else { continue };
-                let Some(fallback_value) = color_mix_fallback(value, &self.design_system.theme) else { continue };
+                let Some(fallback_value) = self.color_mix_fallback(value) else { continue };
 
                 let fallback = AstNode::Declaration(Declaration {
                     property: decl.property.clone(),
@@ -737,6 +750,7 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
         seen_at_properties: HashSet::default(),
         css_theme_variables: IndexMap::default(),
         color_mix_declarations: IndexMap::default(),
+        color_mix_fallbacks: Default::default(),
         keyframes: Vec::new(),
         used_keyframe_names: HashSet::default(),
         first_theme_rule: if switches::REFERENCE_IMPORT_THEME.on() || !switches::REFERENCE_IMPORT_THEME_IS_NORMAL.on() {
