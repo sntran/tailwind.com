@@ -115,13 +115,13 @@ pub fn compile_candidates(
     for (raw, candidates) in &matches {
         let mut found = false;
         for candidate in candidates.iter() {
-            let rules = design_system.compile_ast_nodes(candidate, flags);
+            let rules = design_system.compiled_ast_nodes_owned(candidate, flags);
             if rules.is_empty() {
                 continue;
             }
             found = true;
 
-            for (rule_index, compiled) in rules.iter().enumerate() {
+            for (rule_index, compiled) in rules.into_iter().enumerate() {
                 // The more important variants have the higher bits.
                 let mut variant_order = VariantBits::default();
                 if let Some(map) = &variant_order_map {
@@ -132,8 +132,8 @@ pub fn compile_candidates(
                     }
                 }
                 sorted.push(SortedNode {
-                    node: compiled.node.clone(),
-                    properties: compiled.property_sort.clone(),
+                    node: compiled.node,
+                    properties: compiled.property_sort,
                     variants: variant_order,
                     candidate: raw.to_string(),
                     origin: (Rc::as_ptr(candidate), rule_index),
@@ -173,7 +173,13 @@ pub fn compile_candidates(
         z.properties.count.cmp(&a.properties.count).then_with(|| compare(&a.candidate, &z.candidate))
     };
     if crate::switches::COMPARE_WHOLE_NUMBERS.on() {
-        sorted.sort_by(by_order);
+        // Sort the indexes, not the nodes: a `SortedNode` is large, and a
+        // sort moves its items many times. A stable sort of the indexes
+        // gives the order of a stable sort of the nodes.
+        let mut order: Vec<usize> = (0..sorted.len()).collect();
+        order.sort_by(|&a, &z| by_order(&sorted[a], &sorted[z]));
+        let mut slots: Vec<Option<SortedNode>> = sorted.into_iter().map(Some).collect();
+        sorted = order.into_iter().map(|index| slots[index].take().expect("each index one time")).collect();
     } else {
         // Before 4.0.7, the order of the names was not consistent (`p-1`
         // before `p-02`, `p-02` before `p-0a`, `p-0a` before `p-1`). So the

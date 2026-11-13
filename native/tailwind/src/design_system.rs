@@ -58,6 +58,9 @@ pub struct DesignSystem {
     parsed_variants: RefCell<crate::hash::IndexMap<String, Option<Rc<Variant>>>>,
     parsed_candidates: RefCell<HashMap<String, Rc<Vec<Rc<Candidate>>>>>,
     compiled: RefCell<CompiledCache>,
+    /// False: `compiled_ast_nodes_owned` takes the nodes out of the cache
+    /// (`set_keep_compiled`).
+    keep_compiled: std::cell::Cell<bool>,
     tracked: RefCell<HashSet<String>>,
     variant_order: RefCell<Option<(usize, Rc<VariantOrder>)>>,
 }
@@ -81,6 +84,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         parsed_variants: RefCell::new(crate::hash::IndexMap::default()),
         parsed_candidates: RefCell::new(HashMap::default()),
         compiled: RefCell::new(HashMap::default()),
+        keep_compiled: std::cell::Cell::new(true),
         tracked: RefCell::new(HashSet::default()),
         variant_order: RefCell::new(None),
     }
@@ -139,6 +143,27 @@ impl DesignSystem {
         let compiled = Rc::new(compiled);
         self.compiled.borrow_mut().insert(key, compiled.clone());
         compiled
+    }
+
+    /// True (the default): a build copies the compiled nodes of a candidate
+    /// from the cache, and the next build uses the cache again (a watch).
+    /// False: a build takes the nodes out of the cache, with no copy, and
+    /// a next build compiles each candidate again. The program sets false
+    /// for a build with no `--watch`.
+    pub fn set_keep_compiled(&self, keep: bool) {
+        self.keep_compiled.set(keep);
+    }
+
+    /// The compiled nodes of a candidate (`compile_ast_nodes`), as values
+    /// of the caller: a copy of the cache, or, with `set_keep_compiled`
+    /// false, the nodes of the cache.
+    pub fn compiled_ast_nodes_owned(&self, candidate: &Rc<Candidate>, flags: CompileAstFlags) -> Vec<CompiledNode> {
+        let rules = self.compile_ast_nodes(candidate, flags);
+        if self.keep_compiled.get() {
+            return (*rules).clone();
+        }
+        self.compiled.borrow_mut().remove(&(flags, Rc::as_ptr(candidate)));
+        Rc::try_unwrap(rules).unwrap_or_else(|rules| (*rules).clone())
     }
 
     /// Replace a node in the cached rules of a candidate: the rule with the

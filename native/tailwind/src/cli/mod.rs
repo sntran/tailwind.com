@@ -811,6 +811,11 @@ pub fn run(mut argv: Vec<String>) -> i32 {
 
     let mut previous = Previous::default();
     let first = read_input(&options, &stdin_text).and_then(|input| create_build(&options, &input)).and_then(|mut build| {
+        // One build only: the build takes the compiled nodes out of the
+        // cache of the compiler, with no copy.
+        if options.watch.is_none() {
+            build.compiler.set_keep_compiled(false);
+        }
         build_once(&mut build, &options, &mut previous)?;
         Ok(build)
     });

@@ -50,6 +50,13 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 - The maps of the compiler use FxHash (the crate `rustc-hash`, which the
   scanner uses too), not the SipHash of `std` (`src/hash.rs`). A large
   build has 7% fewer instructions.
+- A build with no `--watch` takes the compiled nodes of each candidate
+  out of the cache of the compiler, with no copy
+  (`DesignSystem::set_keep_compiled`). A watch keeps the cache for its
+  next build, as before. The sort of the rules sorts their indexes, not
+  the rules. A large build has 7% fewer instructions. With the changes
+  above, a large build of the program of `cargo build` takes 83 ms, not
+  189 ms.
 - The scanner of Tailwind CSS is a copy in the repository
   (`native/scanner`), not a dependency on the git repository of Tailwind
   CSS: three crates with no change in their code, and manifests of ours

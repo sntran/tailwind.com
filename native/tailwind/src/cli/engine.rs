@@ -320,6 +320,14 @@ pub enum AnyCompiler {
 }
 
 impl AnyCompiler {
+    /// `DesignSystem::set_keep_compiled` of the native engine. For the
+    /// script engine, nothing changes.
+    pub fn set_keep_compiled(&self, keep: bool) {
+        if let AnyCompiler::Native(compiler) = self {
+            compiler.design_system().set_keep_compiled(keep);
+        }
+    }
+
     pub fn root(&self) -> &Root {
         match self {
             AnyCompiler::Native(compiler) => &compiler.root,
