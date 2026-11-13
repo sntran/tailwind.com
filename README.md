@@ -83,7 +83,8 @@ config :tailwind,
 `version` can be each version of Tailwind CSS 4, for example the
 `"4.3.0"` of a new Phoenix 1.8.9 project: the file has all of them.
 
-`mix tailwind.install` downloads `tailwind.com` to `_build/`, and
+`mix tailwind.install` downloads `tailwind.com` to the priv directory of
+the application `tailwind` (`Tailwind.install_path/0`), and
 `mix tailwind my_app` runs it. The watcher of the endpoint
 (`tailwind: {Tailwind, :install_and_run, [:my_app, ~w(--watch)]}`) works
 as before: the watch stops when the Phoenix server stops.
@@ -95,6 +96,13 @@ The output for the project of `mix phx.new` is the same as the output of
 the official program, byte for byte, for the two layouts of Phoenix 1.8:
 daisyUI in `assets/vendor` (to 1.8.5), and daisyUI in `deps/` with
 `NODE_PATH` and the `phoenix-colocated` import (1.8.6 and later).
+
+A release has the priv directory of the application `tailwind`, so a
+program can build CSS at run time with `Tailwind.run/2`. For that, the
+line of the dependency must not have `runtime: Mix.env() == :dev` (the
+line of a new Phoenix project): without it, the release does not have
+the application `tailwind`. In a program of BEAM.com, `tailwind.com` runs
+from `/zip`.
 
 An Erlang project uses the module `tailwind` (`tailwind:install/0`,
 `tailwind:run/2`), with the same configuration in the application

@@ -6,8 +6,8 @@ Configuration (the application environment of `tailwind`):
 
 - `{version, "4.3.5"}`: the version of Tailwind CSS. One tailwind.com has
   each version of Tailwind CSS 4.
-- `{path, "PATH"}`: the path of tailwind.com (default:
-  `"_build/tailwind.com"`).
+- `{path, "PATH"}`: the path of tailwind.com (default: `tailwind.com` in
+  the priv directory of the application `tailwind`, see `install_path/0`).
 - `{url, "URL"}`: the URL of the download. `$program` in it is the
   version of this package, and `$version` is the version of Tailwind CSS.
 - `{sha256, "HEX"}`: the SHA-256 that the download must have.
@@ -31,8 +31,10 @@ The module needs Erlang/OTP 29 or later.
     default_base_url/0,
     install/0,
     install/1,
+    install_path/0,
     latest_version/0,
     nif/0,
+    path_separator/1,
     run/2
 ]).
 
@@ -79,7 +81,7 @@ config_for(Profile) when is_atom(Profile) ->
                 args => [to_list(A) || A <- maps:get(args, Map, [])],
                 cd => to_list(maps:get(cd, Map, Cwd)),
                 env => maps:from_list(
-                    [{to_list(K), to_list(V)} || {K, V} <- maps:to_list(to_map(maps:get(env, Map, #{})))]
+                    [{to_list(K), env_value(V)} || {K, V} <- maps:to_list(to_map(maps:get(env, Map, #{})))]
                 )
             };
         undefined ->
@@ -101,6 +103,25 @@ bin_path() ->
             case priv_path() of
                 false -> filename:absname(filename:join("_build", "tailwind.com"));
                 Priv -> Priv
+            end
+    end.
+
+-doc """
+The path where `install/0` and `install/1` write tailwind.com: the path of
+the configuration, else `tailwind.com` in the priv directory of the
+application `tailwind`. A release has that directory, so a program can run
+tailwind.com at run time (in BEAM.com, from `/zip`). When the application
+is not known, the path is `_build/tailwind.com`.
+""".
+-spec install_path() -> string().
+install_path() ->
+    case application:get_env(tailwind, path) of
+        {ok, Path} ->
+            to_list(Path);
+        undefined ->
+            case code:priv_dir(tailwind) of
+                {error, bad_name} -> filename:absname(filename:join("_build", "tailwind.com"));
+                Dir -> filename:join(Dir, "tailwind.com")
             end
     end.
 
@@ -229,18 +250,18 @@ loop(Port, Fun, Acc) ->
     end.
 
 -doc """
-Download tailwind.com to `bin_path/0`, from the URL of the configuration.
+Download tailwind.com to `install_path/0`, from the URL of the configuration.
 """.
 -spec install() -> ok | {error, term()}.
 install() ->
     install(to_list(application:get_env(tailwind, url, ?BASE_URL))).
 
--doc "Download tailwind.com to `bin_path/0`, from this URL.".
+-doc "Download tailwind.com to `install_path/0`, from this URL.".
 -spec install(string() | binary()) -> ok | {error, term()}.
 install(BaseUrl) ->
     Url0 = re:replace(to_list(BaseUrl), "\\$version", configured_version(), [global, {return, list}]),
     Url = re:replace(Url0, "\\$program", program_version(), [global, {return, list}]),
-    Path = bin_path(),
+    Path = install_path(),
     Tmp = Path ++ ".download",
     maybe
         {ok, Body} ?= fetch(Url),
@@ -322,6 +343,25 @@ ssl_options() ->
         File2 when is_list(File2), is_integer(hd(File2)) -> [{cacertfile, File2} | Verify];
         Certs -> [{cacerts, Certs} | Verify]
     end.
+
+%% The value of a variable of the environment of a profile. A list of
+%% paths (each a binary or a string), such as the NODE_PATH of a new Phoenix
+%% project, becomes one string with the path separator of the system, as
+%% the Hex package tailwind does. A string (a list of characters) stays.
+env_value([First | _] = Paths) when is_binary(First); is_list(First) ->
+    lists:append(lists:join(path_separator(os:type()), [to_list(Path) || Path <- Paths]));
+env_value(V) ->
+    to_list(V).
+
+-doc """
+The path separator of a value of `os:type()`: `";"` on Windows, else
+`":"`. In beam.com on Windows, `os:type()` is `{unix, windows}`, not
+`{win32, nt}`.
+""".
+-spec path_separator({atom(), atom()}) -> string().
+path_separator({win32, _}) -> ";";
+path_separator({_, windows}) -> ";";
+path_separator(_) -> ":".
 
 to_list(V) when is_binary(V) -> binary_to_list(V);
 to_list(V) when is_atom(V) -> atom_to_list(V);

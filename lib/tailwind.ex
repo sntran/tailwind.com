@@ -24,7 +24,8 @@ defmodule Tailwind do
       of the file
     * `:version_check` - `false` stops the check of the version at the
       start of the application
-    * `:path` - the path of `tailwind.com` (default: `_build/tailwind.com`)
+    * `:path` - the path of `tailwind.com` (default: `tailwind.com` in the
+      priv directory of the application `tailwind`, see `install_path/0`)
     * `:url` - the URL of the download; `$program` in it is the version
       of this package, and `$version` is the version of Tailwind CSS
     * `:sha256` - the SHA-256 that the download must have
@@ -49,27 +50,6 @@ defmodule Tailwind do
 
             config :tailwind, :version, "#{latest_version()}"
         """)
-      end
-
-      configured_version = configured_version()
-
-      case bin_version() do
-        {:ok, ^configured_version} ->
-          :ok
-
-        {:ok, version} ->
-          Logger.warning("""
-          Outdated tailwind version. Expected #{configured_version}, got #{version}. \
-          Please run `mix tailwind.install` or update the version in your config files.\
-          """)
-
-        :error ->
-          if File.exists?(bin_path()) or :tailwind.nif() do
-            Logger.warning("""
-            The installed tailwind.com has no Tailwind CSS #{configured_version}. \
-            Please run `mix tailwind.install` or update the version in your config files.\
-            """)
-          end
       end
     end
 
@@ -113,9 +93,9 @@ defmodule Tailwind do
 
   The path of the configuration (`config :tailwind, path: ...`) has
   priority. Then `tailwind.com` in the priv directory of the application
-  `tailwind`, when it is there (for example in the zip of a program of
-  BEAM.com). The default is `tailwind.com` in the `_build` directory of
-  the project.
+  `tailwind`, when it is there: `install/1` writes it there. The default
+  is `tailwind.com` in the `_build` directory of the project, where the
+  versions before 0.3.0 installed it.
   """
   def bin_path do
     priv =
@@ -169,11 +149,18 @@ defmodule Tailwind do
       raise "no arguments passed to tailwind"
     end
 
+    # A list of paths (the NODE_PATH of a new Phoenix project) stays a
+    # list: `:tailwind.config_for/1` joins it with the path separator.
     env =
       config
       |> Keyword.get(:env, %{})
       |> Enum.reject(fn {_, value} -> is_nil(value) end)
-      |> Map.new(fn {key, value} -> {to_charlist(key), to_charlist(value)} end)
+      |> Map.new(fn
+        {key, value} when is_list(value) -> {to_charlist(key), value}
+        {key, value} -> {to_charlist(key), to_charlist(value)}
+      end)
+
+    check_version_once()
 
     Application.put_env(:tailwind, :__run__,
       args: Enum.map(args ++ extra_args, &to_charlist/1),
@@ -202,13 +189,28 @@ defmodule Tailwind do
   def default_base_url, do: to_string(:tailwind.default_base_url())
 
   @doc """
-  Installs `tailwind.com` with `configured_version/0`.
+  Returns the path where `install/1` writes `tailwind.com`.
+
+  The path of the configuration (`config :tailwind, path: ...`) has
+  priority. The default is `tailwind.com` in the priv directory of the
+  application `tailwind`: a release has that directory, so a program can
+  run `tailwind.com` at run time (in BEAM.com, from `/zip`).
+  """
+  def install_path do
+    case Application.get_env(:tailwind, :path) do
+      nil -> to_string(:tailwind.install_path())
+      path -> Path.expand(path)
+    end
+  end
+
+  @doc """
+  Installs `tailwind.com` with `configured_version/0`, to `install_path/0`.
   """
   def install(base_url \\ nil) do
     url = base_url || Application.get_env(:tailwind, :url, default_base_url())
     Application.put_env(:tailwind, :version, configured_version())
 
-    with_path(fn ->
+    with_path(install_path(), fn ->
       case :tailwind.install(to_charlist(url)) do
         :ok ->
           :ok
@@ -219,10 +221,44 @@ defmodule Tailwind do
     end)
   end
 
+  # The check of the version, at the first run of the VM (not at the start
+  # of the application: a program that compiles no CSS loads no NIF and
+  # runs no program).
+  defp check_version_once do
+    key = {__MODULE__, :version_checked}
+
+    if Application.get_env(:tailwind, :version_check, true) and
+         not :persistent_term.get(key, false) do
+      :persistent_term.put(key, true)
+      configured_version = configured_version()
+
+      case bin_version() do
+        {:ok, ^configured_version} ->
+          :ok
+
+        {:ok, version} ->
+          Logger.warning("""
+          Outdated tailwind version. Expected #{configured_version}, got #{version}. \
+          Please run `mix tailwind.install` or update the version in your config files.\
+          """)
+
+        :error ->
+          if File.exists?(bin_path()) or :tailwind.nif() do
+            Logger.warning("""
+            The installed tailwind.com has no Tailwind CSS #{configured_version}. \
+            Please run `mix tailwind.install` or update the version in your config files.\
+            """)
+          end
+      end
+    end
+  end
+
   # The Erlang module reads the path from the application environment.
-  defp with_path(fun) do
+  defp with_path(fun), do: with_path(bin_path(), fun)
+
+  defp with_path(path, fun) do
     previous = Application.fetch_env(:tailwind, :path)
-    Application.put_env(:tailwind, :path, to_charlist(bin_path()))
+    Application.put_env(:tailwind, :path, to_charlist(path))
 
     try do
       fun.()
