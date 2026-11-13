@@ -1,7 +1,6 @@
-//! A Tailwind CSS compiler.
-//!
-//! The modules follow the files of `packages/tailwindcss/src` of Tailwind
-//! CSS, so a change of Tailwind CSS has one clear place in this crate.
+#![doc = include_str!("../README.md")]
+// The modules follow the files of `packages/tailwindcss/src` of Tailwind
+// CSS, so a change of Tailwind CSS has one clear place in this crate.
 
 pub mod apply;
 pub mod ast;
@@ -36,6 +35,12 @@ pub mod walk;
 pub use compat::module_loader::{FileKind, FileStat, MemoryLoader, ModuleLoader};
 pub use index::{compile, CompileOptions, Compiler, Root, Source, Stylesheet, VERSION};
 pub use version::Version;
+
+/// The scanner of Tailwind CSS: it finds the candidates in the files of a
+/// project (the crate `tailwind-com-scanner`, `native/scanner` of the
+/// repository).
+#[cfg(feature = "cli")]
+pub use tailwindcss_oxide as scanner;
 
 /// An error of the compiler. The message is the message of Tailwind CSS.
 #[derive(Debug, Clone, PartialEq, Eq)]

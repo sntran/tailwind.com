@@ -2,8 +2,8 @@
 
 ## The source
 
-QuickJS is a git submodule (`c_src/quickjs`, see
-[`c_src/QUICKJS.md`](../c_src/QUICKJS.md)):
+QuickJS is a git submodule (`native/tailwind/c_src/quickjs`, see
+[`native/tailwind/c_src/QUICKJS.md`](../native/tailwind/c_src/QUICKJS.md)):
 
 ```sh
 git clone --recursive https://github.com/sntran/tailwind.com
@@ -13,7 +13,7 @@ git clone --recursive https://github.com/sntran/tailwind.com
 ## A program for this computer
 
 You need Rust 1.85 or later, and a C compiler (`cc`: GCC or Clang) for
-the JavaScript engine (QuickJS, `c_src/quickjs`). The crate `cc` finds
+the JavaScript engine (QuickJS, `native/tailwind/c_src/quickjs`). The crate `cc` finds
 the compiler, and `CC` selects another one.
 
 ```sh
@@ -79,7 +79,7 @@ then errors.
 
 `native/tailwind/build.rs` has the two things that QuickJS needs on
 WASI, with no change of its files: `-include malloc.h` (for
-`malloc_usable_size`), and an empty `setjmp.h` (`c_src/wasi`), because
+`malloc_usable_size`), and an empty `setjmp.h` (`native/tailwind/c_src/wasi`), because
 `dtoa.c` includes this header and uses nothing of it.
 
 ## The library only
@@ -88,8 +88,8 @@ The compiler is a library with no command line program, no scanner and
 no optimizer:
 
 ```sh
-cargo build -p tailwind --no-default-features                  # no JavaScript
-cargo build -p tailwind --no-default-features --features js    # with @plugin and @config
+cargo build -p tailwind-com --no-default-features                  # no JavaScript
+cargo build -p tailwind-com --no-default-features --features js    # with @plugin and @config
 ```
 
 ```rust
@@ -111,9 +111,9 @@ let css = compiler.build(&["flex".to_string(), "md:p-4".to_string()]);
 The repository has generated or copied parts. A build needs no Node.js
 for them.
 
-- `c_src/quickjs` is the git submodule of QuickJS, with no change.
+- `native/tailwind/c_src/quickjs` is the git submodule of QuickJS, with no change.
   `sh scripts/sync-quickjs.sh COMMIT_OR_TAG` moves it to another version
-  (see `c_src/QUICKJS.md`).
+  (see `native/tailwind/c_src/QUICKJS.md`).
 - `native/tailwind/assets/compat.js` is the plugin layer of Tailwind
   CSS with the parts of Node.js of `native/tailwind/js`, in one file.
   `native/tailwind/assets/compat/` has the plugin layer of each older
@@ -165,8 +165,9 @@ download or find `tailwind.com`.
 The packages have one version of their own: `package.json`, `mix.exs`,
 `src/tailwind.app.src`, and the Rust crates (`[workspace.package]` and
 the three crates of the scanner in `[workspace.dependencies]` of
-`Cargo.toml`). `sh scripts/sync-upstream.sh check` compares them. The version of Tailwind CSS that the compiler follows is
-in `UPSTREAM`. `tailwind.com --version` prints the two.
+`Cargo.toml`). `sh scripts/sync-upstream.sh check` compares them. The
+version of Tailwind CSS that the compiler follows is in `UPSTREAM`.
+`tailwind.com --version` prints the two.
 
 Before the tag, set the new version in these places, the `tag` of
 the Phoenix example in `README.md`, and the title of the section
@@ -184,9 +185,44 @@ packages starts the release job of CI. The job:
 3. Publishes the same package to GitHub Packages, with the name
    `@OWNER/tailwind.com` (GitHub Packages accepts only a name with the
    scope of the owner).
-4. Starts `.github/workflows/pages.yml`, so the site has the program of
+4. Publishes the four crates to crates.io, when the repository has the
+   secret `CARGO_REGISTRY_TOKEN` (see "The crates" below).
+5. Starts `.github/workflows/pages.yml`, so the site has the program of
    the new release ([`SITE.md`](SITE.md)).
 
 The release `v4.3.5` has the files of 0.1.0. The modules of 0.1.0
 downloaded from the release with the version of Tailwind CSS, and they
 can use only 4.3.5. That release stays as it is.
+
+## The crates
+
+The compiler is the crate `tailwind-com` on crates.io
+(`native/tailwind`, with the library and the program `tailwind`). It
+needs the three crates of the scanner (`native/scanner/README.md`):
+
+| Crate | Directory |
+|---|---|
+| `tailwind-com` | `native/tailwind` |
+| `tailwind-com-scanner` | `native/scanner/oxide` |
+| `tailwind-com-classification-macros` | `native/scanner/classification-macros` |
+| `tailwind-com-ignore` | `native/scanner/ignore` |
+
+A crate of crates.io builds alone, from the files of its package. So
+`native/tailwind` has the C code that `build.rs` compiles
+(`native/tailwind/c_src`, with QuickJS as a git submodule), and
+`include` in its manifest names the files of the package: not the tests,
+which read the records of the repository. The README of the crate is
+also its documentation (`src/lib.rs`), so `cargo test` runs its
+examples.
+
+The job `crates` of `.github/workflows/build.yml` runs
+
+```sh
+cargo publish --dry-run -p tailwind-com-classification-macros -p tailwind-com-ignore -p tailwind-com-scanner -p tailwind-com
+```
+
+for each push: Cargo makes each package, and builds it alone. The
+release job publishes the four crates in the same order. The first
+version of a new crate needs an API token of crates.io in the secret
+`CARGO_REGISTRY_TOKEN`. After that, the trusted publishing of crates.io
+can replace the token.

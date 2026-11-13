@@ -276,7 +276,7 @@ the smallest part of the stylesheet and of the candidates that still
 differs. The same seed gives the same cases. The workflow
 `.github/workflows/fuzz.yml` runs the fuzzer for each push that changes
 a file that the fuzzer tests (10 minutes): the compiler (`native/`,
-`c_src/`), the fuzzer, the records, `PACKAGES` or `UPSTREAM`. It also
+`native/tailwind/c_src/`), the fuzzer, the records, `PACKAGES` or `UPSTREAM`. It also
 runs each night (45 minutes) with no such condition. Each run has a new
 seed, and keeps the failures as the artifact `fuzz`.
 

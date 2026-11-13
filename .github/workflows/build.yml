@@ -193,9 +193,8 @@ jobs:
           # main.
           retention-days: 90
 
-  # The crates for crates.io (native/scanner/README.md): each crate must
-  # build alone from its package, as crates.io builds it. Now the three
-  # crates of the scanner.
+  # The crates for crates.io (docs/BUILDING.md, "The crates"): each crate
+  # must build alone from its package, as crates.io builds it.
   crates:
     name: The crates for crates.io
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
@@ -203,7 +202,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - run: cargo publish --dry-run -p tailwind-com-classification-macros -p tailwind-com-ignore -p tailwind-com-scanner
+        with:
+          submodules: true
+      - run: cargo publish --dry-run -p tailwind-com-classification-macros -p tailwind-com-ignore -p tailwind-com-scanner -p tailwind-com
 
   tlc:
     name: The TLA+ models
@@ -619,6 +620,30 @@ jobs:
           grep -q "\"name\": \"@$owner/tailwind.com\"" package.json
           printf '@%s:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$owner" "$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/ghp/npmrc"
           npm publish --userconfig "$RUNNER_TEMP/ghp/npmrc" --registry https://npm.pkg.github.com
+      # crates.io: the four crates, in the order of their dependencies. The
+      # first version of a new crate needs a token (the secret
+      # CARGO_REGISTRY_TOKEN); with no token, this step does nothing. A
+      # crate that has this version already is not published again, so a
+      # run again of the job can end the publication.
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "No secret CARGO_REGISTRY_TOKEN: the crates are not published."
+            exit 0
+          fi
+          version=${GITHUB_REF_NAME#v}
+          packages=
+          for crate in tailwind-com-classification-macros tailwind-com-ignore tailwind-com-scanner tailwind-com; do
+            status=$(curl -s -o /dev/null -w '%{http_code}' -A "tailwind.com release" "https://crates.io/api/v1/crates/$crate/$version")
+            if [ "$status" = 200 ]; then
+              echo "$crate $version is on crates.io already."
+            else
+              packages="$packages -p $crate"
+            fi
+          done
+          [ -z "$packages" ] || cargo publish $packages
       # The site has the program of each release: deploy it again, with
       # this release in the list. The token of a workflow can start a run
       # of workflow_dispatch, and no other event.

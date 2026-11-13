@@ -41,7 +41,7 @@ fn compare(name: &str, salt: i32, a: &Item, z: &Item) -> i64 {
         }
         "noise" => i64::from(hash(a, z, salt) % 3) - 1,
         "mostly" => {
-            if hash(a, z, salt) % 11 == 0 {
+            if hash(a, z, salt).is_multiple_of(11) {
                 zk - ak
             } else {
                 ak - zk

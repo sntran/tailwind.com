@@ -8,6 +8,11 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 
 ## Unreleased
 
+### Added
+
+- `tailwind::scanner`: the scanner of Tailwind CSS, for a program that
+  finds the candidates of a project.
+
 ### Changed
 
 - The scanner of Tailwind CSS is a copy in the repository
@@ -18,8 +23,15 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   crates.io takes a crate only when each dependency is on crates.io.
   `scripts/scanner.sh` makes the copy, and CI compares it with the tag of
   Tailwind CSS and runs its tests.
-- CI checks that crates.io takes the three crates
-  (`cargo publish --dry-run`).
+- The crate of the compiler has the name `tailwind-com`, for crates.io;
+  its library and its program keep the name `tailwind`. Its README is the
+  documentation of the crate, with examples that `cargo test` runs.
+- The C code (QuickJS and the code for Cosmopolitan) is in
+  `native/tailwind/c_src`, in the crate: a crate of crates.io builds only
+  from its own files.
+- CI checks that crates.io takes the four crates
+  (`cargo publish --dry-run`), and the release job publishes them when the
+  repository has the secret `CARGO_REGISTRY_TOKEN`.
 
 ## 0.2.0 - 2026-11-12
 

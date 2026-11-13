@@ -41,7 +41,7 @@ packages that Tailwind CSS uses for its source maps)
   (licenses/jridgewell.txt).
 
 QuickJS 2026-06-04 (the JavaScript engine for @plugin and @config, in
-c_src/quickjs)
+native/tailwind/c_src/quickjs)
   Copyright (c) 2017-2021 Fabrice Bellard; Copyright (c) 2017-2021
   Charlie Gordon.
   MIT License (licenses/quickjs.txt).
@@ -89,9 +89,9 @@ The other Rust crates of Cargo.lock
   Each crate has its license in its source (MIT, Apache-2.0, MPL-2.0,
   BSD or Unlicense). "cargo tree" lists them.
 
-c_src/cosmo_rust.c, c_src/eh_frame_pad.ld and scripts/rust_link.sh come
+native/tailwind/c_src/cosmo_rust.c, native/tailwind/c_src/eh_frame_pad.ld and scripts/rust_link.sh come
 from BEAM.com (Apache License 2.0), by the same author. The parts of
-c_src/watch.c for inotify and kqueue, and the job bsd of
+native/tailwind/c_src/watch.c for inotify and kqueue, and the job bsd of
 .github/workflows/build.yml, follow the file watcher and the job
 test-bsd of BEAM.com.
 https://github.com/sntran/BEAM.com

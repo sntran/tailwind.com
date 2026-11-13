@@ -58,14 +58,14 @@ check() {
     expect tests/upstream/README.md "\`v$v\`"
     expect tests/upstream/README.md "$TAILWINDCSS_COMMIT"
     # QuickJS: the submodule is at the commit of UPSTREAM.
-    if [ ! -f c_src/quickjs/quickjs.c ]; then
-        log "c_src/quickjs is empty: run git submodule update --init"
+    if [ ! -f native/tailwind/c_src/quickjs/quickjs.c ]; then
+        log "native/tailwind/c_src/quickjs is empty: run git submodule update --init"
         status=1
-    elif [ "$(cat c_src/quickjs/VERSION)" != "$QUICKJS_VERSION" ]; then
-        log "c_src/quickjs has the version $(cat c_src/quickjs/VERSION), not $QUICKJS_VERSION"
+    elif [ "$(cat native/tailwind/c_src/quickjs/VERSION)" != "$QUICKJS_VERSION" ]; then
+        log "native/tailwind/c_src/quickjs has the version $(cat native/tailwind/c_src/quickjs/VERSION), not $QUICKJS_VERSION"
         status=1
-    elif [ -e c_src/quickjs/.git ] && [ "$(git -C c_src/quickjs rev-parse HEAD)" != "$QUICKJS_COMMIT" ]; then
-        log "c_src/quickjs is not at the commit $QUICKJS_COMMIT"
+    elif [ -e native/tailwind/c_src/quickjs/.git ] && [ "$(git -C native/tailwind/c_src/quickjs rev-parse HEAD)" != "$QUICKJS_COMMIT" ]; then
+        log "native/tailwind/c_src/quickjs is not at the commit $QUICKJS_COMMIT"
         status=1
     fi
     # The plugins of the standalone program, and the TypeScript transform:
