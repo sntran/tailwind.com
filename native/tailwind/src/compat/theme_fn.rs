@@ -16,7 +16,7 @@ use crate::utilities::with_alpha;
 use crate::utils::escape::unescape;
 use crate::utils::js::{js_number_to_string, js_trim};
 use crate::utils::to_key_path::to_key_path;
-use indexmap::IndexMap;
+use crate::hash::IndexMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -196,7 +196,7 @@ impl CompatTheme {
 
         let spread = |key: &'static str| Val::Lazy(Rc::new(Lazy::Object(vec![Part::SpreadOrEmpty(key)])));
         let default_of = |key: &str| {
-            let mut map = Object::new();
+            let mut map = Object::default();
             map.insert("DEFAULT".to_string(), css_theme.get(&[key]).map_or(Val::Null, Val::Str));
             Val::object(map)
         };
@@ -298,13 +298,13 @@ impl Resolution<'_> {
     fn call(&self, lazy: &Lazy) -> Val {
         match lazy {
             Lazy::Theme(key) => self.theme(key, Val::Undefined),
-            Lazy::ThemeOrEmpty(key) => self.theme(key, Val::object(Object::new())),
+            Lazy::ThemeOrEmpty(key) => self.theme(key, Val::object(Object::default())),
             Lazy::Object(parts) => {
-                let mut map = Object::new();
+                let mut map = Object::default();
                 for part in parts {
                     match part {
                         Part::Spread(key) => map.extend(self.theme(key, Val::Undefined).entries()),
-                        Part::SpreadOrEmpty(key) => map.extend(self.theme(key, Val::object(Object::new())).entries()),
+                        Part::SpreadOrEmpty(key) => map.extend(self.theme(key, Val::object(Object::default())).entries()),
                         Part::Entry(key, value) => {
                             map.insert(key.to_string(), value.clone());
                         }
@@ -314,7 +314,7 @@ impl Resolution<'_> {
             }
             Lazy::Merge(values) => {
                 let values: Vec<Val> = values.iter().map(|value| self.resolve_value(value.clone())).collect();
-                Val::object(deep_merge(Object::new(), &values, &merge_theme_extension))
+                Val::object(deep_merge(Object::default(), &values, &merge_theme_extension))
             }
         }
     }
@@ -363,7 +363,7 @@ fn deep_merge(mut target: Object, sources: &[Val], customizer: &dyn Fn(&Val, &Va
             let value = if !matches!(merged, Val::Undefined) {
                 merged
             } else if let (Val::Obj(_), Val::Obj(_)) = (&target_value, &source_value) {
-                Val::object(deep_merge(Object::new(), &[target_value, source_value], customizer))
+                Val::object(deep_merge(Object::default(), &[target_value, source_value], customizer))
             } else {
                 source_value
             };
@@ -410,7 +410,7 @@ fn theme_fn(design_system: &DesignSystem, config_theme: &Object, resolve_value: 
             // No CSS value: use the CSS values that the configuration has.
             if matches!(css_value, Val::Null) {
                 if let Some(css_values) = &config_css_values {
-                    let mut local = Object::new();
+                    let mut local = Object::default();
                     for (key, _) in css_values.entries() {
                         local.insert(key.clone(), config_map.get(&key).cloned().unwrap_or(Val::Undefined));
                         copy.shift_remove(&key);
@@ -509,9 +509,9 @@ fn read_from_css(design_system: &DesignSystem, path: &[String]) -> (Val, Val) {
         return (Val::Null, none());
     }
 
-    let mut map: IndexMap<Option<String>, Val> = IndexMap::new();
-    let mut options: IndexMap<Option<String>, Val> = IndexMap::new();
-    let mut nested: IndexMap<Option<String>, IndexMap<String, (String, Val)>> = IndexMap::new();
+    let mut map: IndexMap<Option<String>, Val> = IndexMap::default();
+    let mut options: IndexMap<Option<String>, Val> = IndexMap::default();
+    let mut nested: IndexMap<Option<String>, IndexMap<String, (String, Val)>> = IndexMap::default();
 
     for (key, value) in &namespace {
         // A value that is not nested.
@@ -540,8 +540,8 @@ fn read_from_css(design_system: &DesignSystem, path: &[String]) -> (Val, Val) {
     for (key, extra) in nested {
         let Some(Val::Str(value)) = map.get(&key).cloned() else { continue };
 
-        let mut extra_object = Object::new();
-        let mut extra_options = Object::new();
+        let mut extra_object = Object::default();
+        let mut extra_options = Object::default();
         for (nested_key, (nested_value, nested_options)) in extra {
             extra_object.insert(nested_key.clone(), Val::Str(nested_value));
             extra_options.insert(nested_key, nested_options);
@@ -553,7 +553,7 @@ fn read_from_css(design_system: &DesignSystem, path: &[String]) -> (Val, Val) {
 
     // An object, as in Tailwind CSS v3.
     let to_object = |source: IndexMap<Option<String>, Val>| -> Object {
-        let mut object = Object::new();
+        let mut object = Object::default();
         for (key, value) in source {
             object.insert(key.unwrap_or_else(|| "DEFAULT".to_string()), value);
         }

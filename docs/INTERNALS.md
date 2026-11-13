@@ -517,6 +517,36 @@ the method of BEAM.com for Rust:
 - `scripts/rust_link.sh` makes one object with one global name,
   `tailwind_main`, and `native/tailwind/c_src/main.c` calls it.
 
+### The allocator
+
+A build spends about a third of its instructions in `malloc` and `free`
+(callgrind, on a project of 1000 files). The program of `cargo build`
+uses mimalloc 2 (the crate `mimalloc`, `src/main.rs`). The file uses the
+same mimalloc: `scripts/cosmo.sh` compiles its C source (from the crate
+`libmimalloc-sys` of `Cargo.lock`) with cosmocc, and
+`src/cosmo_allocator.rs` is the allocator of Rust (the feature
+`ape-mimalloc`). Three changes for Cosmopolitan:
+
+- `MI_USE_BUILTIN_THREAD_POINTER=0`: the id of a thread is the address of
+  a thread-local variable. The thread pointer of the CPU (`%fs:0`,
+  `tpidr_el0`) is not the thread data of Cosmopolitan.
+- `_GNU_SOURCE`, for the declaration of `madvise`.
+- `MI_PRIM_HAS_PROCESS_ATTACH=1`: no constructor and no destructor of
+  the process. mimalloc starts at its first allocation. Its destructor
+  deleted the pthread key of its threads at the exit, while the threads
+  of the scanner still freed memory, and Cosmopolitan stopped on an
+  assertion in `pthread_getspecific()` (in about one run in ten on a busy
+  computer).
+
+mimalloc 2, not 3: the two are as fast, and mimalloc 3 keeps more memory
+(a peak of 117 MB, not 91 MB, for the program of `cargo build` on that
+project). The native NIF objects keep the allocator of `beam.com`: its
+table for objects does not have `madvise` and `mprotect`.
+
+A build with no `--watch` does not free the compiler at its end
+(`cli::run`): the system frees the memory of the process, and the drop
+took a sixth of the instructions of a large build.
+
 ### The size of the file
 
 The file is about 20 MB: two copies of the program, one for x86_64 and

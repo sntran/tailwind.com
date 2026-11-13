@@ -1,7 +1,7 @@
 //! The order of the properties for the sort of the utilities:
 //! `property-order.ts` of Tailwind CSS.
 
-use std::collections::HashMap;
+use crate::hash::HashMap;
 use std::sync::OnceLock;
 
 /// The properties, in the order of the output.
@@ -400,7 +400,7 @@ pub fn property_index(property: &str) -> Option<usize> {
     static INDEX: OnceLock<HashMap<&str, usize>> = OnceLock::new();
     INDEX
         .get_or_init(|| {
-            let mut map = HashMap::new();
+            let mut map = HashMap::default();
             for (i, p) in GLOBAL_PROPERTY_ORDER.iter().enumerate() {
                 map.entry(*p).or_insert(i);
             }

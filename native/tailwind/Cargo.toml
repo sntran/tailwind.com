@@ -45,7 +45,7 @@ path = "src/main.rs"
 required-features = ["cli"]
 
 [features]
-default = ["cli"]
+default = ["cli", "mimalloc"]
 # The command line program: the scanner of Tailwind CSS, and Lightning CSS
 # for --minify and --optimize.
 cli = ["dep:tailwindcss-oxide", "dep:lightningcss", "dep:serde_json", "dep:parcel_sourcemap", "js"]
@@ -58,9 +58,23 @@ js = ["dep:serde_json", "dep:cc"]
 # c_src/watch.c are linked into the program. scripts/build.sh compiles the
 # C files of the feature `js` with cosmocc, and build.rs compiles nothing.
 ape = ["cli"]
+# mimalloc as the allocator of the program `tailwind` (src/main.rs), not
+# for wasm32-wasip1. A build spends about a third of its time in malloc and
+# free: with mimalloc, a large build takes about 30% less time. The builds
+# with cosmocc (scripts/cosmo.sh) do not use this feature.
+mimalloc = ["dep:mimalloc"]
+# The file tailwind.com with mimalloc as its allocator
+# (src/cosmo_allocator.rs): scripts/build.sh compiles mimalloc with cosmocc.
+# The native NIF objects (scripts/nif.sh) have the feature `ape` only:
+# they use the allocator of beam.com.
+ape-mimalloc = ["ape"]
 
 [dependencies]
 indexmap = "2"
+# The hash of the maps of the compiler (src/hash.rs): faster than the
+# SipHash of std for the short keys of the compiler. The scanner of
+# Tailwind CSS uses the same crate.
+rustc-hash = "2.1"
 # The scanner of Tailwind CSS, from the same release as the compiler: a
 # copy in native/scanner (scripts/scanner.sh).
 tailwindcss-oxide = { workspace = true, optional = true }
@@ -73,6 +87,15 @@ parcel_sourcemap = { version = "=2.1.1", optional = true }
 # `preserve_order`: the sequence of the conditions of `exports` in a
 # package.json has a meaning.
 serde_json = { version = "1", optional = true, features = ["preserve_order"] }
+
+# The allocator of the program `tailwind` (src/main.rs), with the feature
+# `mimalloc`. The library does not set an allocator: a program that uses
+# the crate keeps its own.
+# `v2`: mimalloc 2. It is as fast as mimalloc 3 for a build, and the peak
+# memory of a large build is 91 MB, not 117 MB (75 MB with the allocator
+# of glibc).
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+mimalloc = { version = "0.1", default-features = false, features = ["v2"], optional = true }
 
 [build-dependencies]
 cc = { version = "1", optional = true }

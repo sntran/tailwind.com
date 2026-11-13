@@ -31,6 +31,32 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 
 ### Changed
 
+- A build with no `--watch` does not free the compiler at its end: the
+  system frees the memory of the process. A build of a large project
+  (1000 files, about 5600 classes) takes 28% less time. A watch, and a run
+  of `run_with` (the NIF), free the compiler as before.
+- The program `tailwind` of `cargo build` uses mimalloc 2 as its
+  allocator (the feature `mimalloc`, a default feature): a build spends
+  about a third of its time in `malloc` and `free`. A large build takes
+  about 25% less time, and its peak memory is 91 MB, not 75 MB. The
+  library does not set an allocator, and `wasm32-wasip1` does not use
+  mimalloc.
+- The file `tailwind.com` uses mimalloc 2 too (the feature
+  `ape-mimalloc`): `scripts/build.sh` compiles it with cosmocc, from the C
+  source of the crate `libmimalloc-sys` of `Cargo.lock`. With the change
+  above, a large build takes 124 ms, not 232 ms, and the peak memory does
+  not change. The file is 370 KB larger. The native NIF objects keep the
+  allocator of `beam.com`.
+- The maps of the compiler use FxHash (the crate `rustc-hash`, which the
+  scanner uses too), not the SipHash of `std` (`src/hash.rs`). A large
+  build has 7% fewer instructions.
+- A build with no `--watch` takes the compiled nodes of each candidate
+  out of the cache of the compiler, with no copy
+  (`DesignSystem::set_keep_compiled`). A watch keeps the cache for its
+  next build, as before. The sort of the rules sorts their indexes, not
+  the rules. A large build has 7% fewer instructions. With the changes
+  above, a large build of the program of `cargo build` takes 83 ms, not
+  189 ms.
 - The scanner of Tailwind CSS is a copy in the repository
   (`native/scanner`), not a dependency on the git repository of Tailwind
   CSS: three crates with no change in their code, and manifests of ours

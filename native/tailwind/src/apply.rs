@@ -21,8 +21,9 @@ use crate::to_css::to_css;
 use crate::utils::js::is_js_whitespace;
 use crate::utils::segment::segment;
 use crate::{Error, Features, Result, FEATURES_AT_APPLY};
-use indexmap::{IndexMap, IndexSet};
-use std::collections::{HashMap, HashSet, VecDeque};
+use crate::hash::{IndexMap, IndexSet};
+use crate::hash::{HashMap, HashSet};
+use std::collections::VecDeque;
 
 /// The path of a node: the index at each level, from the root.
 type Path = Vec<usize>;
@@ -80,8 +81,8 @@ fn substitute(
         tree,
         design_system,
         collected: &collected,
-        seen: HashSet::new(),
-        wip: HashSet::new(),
+        seen: HashSet::default(),
+        wip: HashSet::default(),
         sorted: Vec::new(),
     };
     for parent in &collected.parents {
@@ -550,7 +551,7 @@ fn array_index(key: &str) -> Option<u32> {
 /// the place of each node in the cache of the compiler.
 fn apply(child: &AtRule, design_system: &DesignSystem, mut origins: Option<&mut Vec<Origin>>) -> Result<Option<Vec<AstNode>>> {
     let parts = split_with_separators(&child.params);
-    let mut candidates: IndexSet<&str> = IndexSet::new();
+    let mut candidates: IndexSet<&str> = IndexSet::default();
     let mut normal_idents: Vec<&str> = Vec::new();
     let mut dashed_idents: Vec<&str> = Vec::new();
 

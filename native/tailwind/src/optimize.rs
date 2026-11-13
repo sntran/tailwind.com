@@ -16,8 +16,8 @@ use crate::utils::segment::segment;
 use crate::utils::variables::extract_used_variables;
 use crate::value_parser::{self, ValueAstNode};
 use crate::walk::{walk, WalkAction};
-use indexmap::{IndexMap, IndexSet};
-use std::collections::{HashMap, HashSet};
+use crate::hash::{IndexMap, IndexSet};
+use crate::hash::{HashMap, HashSet};
 use std::rc::Rc;
 
 /// At-rules that can go to the top of the tree.
@@ -475,7 +475,7 @@ impl Optimizer<'_> {
         // Keep the last declaration of each group of equal declarations.
         // The key is one text, as upstream.
         let key = |decl: &Declaration| format!("{}:{}:{}", decl.property, decl.value.as_deref().unwrap_or("undefined"), decl.important);
-        let mut last: HashMap<String, Id> = HashMap::new();
+        let mut last: HashMap<String, Id> = HashMap::default();
         let mut declarations = 0;
         for id in &children {
             if let Item::Node(AstNode::Declaration(decl)) = &self.arena.entries[*id].item {
@@ -556,7 +556,7 @@ impl Optimizer<'_> {
                         &decl.property,
                         &self.design_system.theme,
                         &self.variable_dependencies,
-                        &mut HashSet::new(),
+                        &mut HashSet::default(),
                     )
                 };
                 if used {
@@ -734,11 +734,11 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
         design_system,
         polyfills,
         at_roots,
-        seen_at_properties: HashSet::new(),
-        css_theme_variables: IndexMap::new(),
-        color_mix_declarations: IndexMap::new(),
+        seen_at_properties: HashSet::default(),
+        css_theme_variables: IndexMap::default(),
+        color_mix_declarations: IndexMap::default(),
         keyframes: Vec::new(),
-        used_keyframe_names: HashSet::new(),
+        used_keyframe_names: HashSet::default(),
         first_theme_rule: if switches::REFERENCE_IMPORT_THEME.on() || !switches::REFERENCE_IMPORT_THEME_IS_NORMAL.on() {
             None
         } else {
@@ -746,7 +746,7 @@ pub fn optimize_ast(ast: &[AstNode], design_system: &DesignSystem, polyfills: cr
         },
         property_fallbacks_root: Vec::new(),
         property_fallbacks_universal: Vec::new(),
-        variable_dependencies: IndexMap::new(),
+        variable_dependencies: IndexMap::default(),
         removal: Removal::now(),
     };
 
@@ -1008,7 +1008,7 @@ fn color_mix_fallback(value: &str, theme: &Theme) -> Option<String> {
 
             let mut resolved: Option<ValueAstNode> = None;
             let mut inlined_color;
-            let mut seen_variables: HashSet<String> = HashSet::new();
+            let mut seen_variables: HashSet<String> = HashSet::default();
             loop {
                 let var_node = resolved.as_ref().unwrap_or(node);
                 let ValueAstNode::Function(var) = var_node else { return WalkAction::Continue };
@@ -1758,11 +1758,11 @@ pub fn handle_nesting(ast: Vec<AstNode>) -> Vec<AstNode> {
         selector_stack: Vec::new(),
         at_rule_stack: Vec::new(),
         current: Current::None,
-        seen_declaration_properties: HashSet::new(),
-        dedupe_declarations_in_nodes: HashSet::new(),
+        seen_declaration_properties: HashSet::default(),
+        dedupe_declarations_in_nodes: HashSet::default(),
         result: Vec::new(),
         source_stack: Vec::new(),
-        parse_selector_cache: HashMap::new(),
+        parse_selector_cache: HashMap::default(),
     };
     nesting.visit_all(ast);
 
@@ -1773,7 +1773,7 @@ pub fn handle_nesting(ast: Vec<AstNode>) -> Vec<AstNode> {
     let mut result = nesting.result;
     for path in paths {
         let nodes = nodes_at(&mut result, &path);
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         let mut keep = vec![true; nodes.len()];
         for (i, node) in nodes.iter().enumerate().rev() {
             let AstNode::Declaration(decl) = node else { continue };

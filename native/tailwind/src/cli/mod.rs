@@ -811,6 +811,11 @@ pub fn run(mut argv: Vec<String>) -> i32 {
 
     let mut previous = Previous::default();
     let first = read_input(&options, &stdin_text).and_then(|input| create_build(&options, &input)).and_then(|mut build| {
+        // One build only: the build takes the compiled nodes out of the
+        // cache of the compiler, with no copy.
+        if options.watch.is_none() {
+            build.compiler.set_keep_compiled(false);
+        }
         build_once(&mut build, &options, &mut previous)?;
         Ok(build)
     });
@@ -827,6 +832,12 @@ pub fn run(mut argv: Vec<String>) -> i32 {
 
     if options.watch.is_some() {
         return watch(build, &options, &mut previous, &style, &stdin_text);
+    }
+    // The process ends now, and the system frees its memory: a drop of
+    // the compiler only costs time (about a sixth of a large build). In
+    // a run of `run_with`, the caller continues, so the build drops.
+    if !context::embedded() {
+        std::mem::forget(build);
     }
     0
 }

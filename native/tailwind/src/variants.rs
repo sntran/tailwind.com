@@ -13,10 +13,10 @@ use crate::utils::segment::segment;
 use crate::value_parser::{self, ValueAstNode};
 use crate::walk::{walk, WalkAction};
 use crate::{Error, Features, FEATURES_NONE, FEATURES_VARIANTS};
-use indexmap::IndexMap;
+use crate::hash::IndexMap;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use crate::hash::HashMap;
 use std::rc::Rc;
 
 /// The test of a variant name: `/^@?[a-z0-9][a-zA-Z0-9_-]*(?<![_-])$/`.

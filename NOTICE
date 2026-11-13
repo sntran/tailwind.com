@@ -79,6 +79,12 @@ Cosmopolitan Libc 4.0.2 (the C runtime of the APE file)
   of other projects under the licenses that its source names.
   https://github.com/jart/cosmopolitan
 
+mimalloc 2.3.2 (the allocator of the file, and of the program of
+"cargo build", from the crate libmimalloc-sys 0.1.49)
+  Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen.
+  MIT License (licenses/mimalloc.txt).
+  https://github.com/microsoft/mimalloc
+
 The Rust standard library and musl (in the Rust library of the file)
   Copyright The Rust Project Developers; Copyright 2005-2020 Rich Felker
   and the contributors of musl.

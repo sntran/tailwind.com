@@ -1,7 +1,7 @@
 //! The parser of the command line: `utils/args.ts` of `@tailwindcss/cli`,
 //! which uses the package `mri`.
 
-use std::collections::HashMap;
+use crate::hash::HashMap;
 
 /// The value of an option.
 #[derive(Debug, Clone, PartialEq)]

@@ -38,24 +38,25 @@ cosmo_check() {
     fi
 }
 
-# rust_staticlib CPU PACKAGE LIB A: the library LIB of the crate PACKAGE,
-# with the feature `ape`, as the staticlib A for CPU (the std of
+# rust_staticlib CPU PACKAGE LIB A [FEATURES]: the library LIB of the
+# crate PACKAGE, with FEATURES (default: `ape`) and no default feature (the crate `mimalloc`
+# compiles its C with the C compiler of the system), as the staticlib A for CPU (the std of
 # *-unknown-linux-musl), in CARGO_TARGET_DIR (default: target). The calls of SYMS get the names of cosmo_rust.c.
 #
 # On aarch64, Cosmopolitan reserves the registers x18 and x28. The std of
 # Rust for Linux uses them. So the aarch64 library and its std build with
 # these registers reserved: a nightly Rust with rust-src, and -Zbuild-std.
 rust_staticlib() {
-    cpu=$1 package=$2 lib=$3 a=$4
+    cpu=$1 package=$2 lib=$3 a=$4 features=${5:-ape}
     target=$cpu-unknown-linux-musl
     dir=${CARGO_TARGET_DIR:-$root/target}
     if [ "$cpu" = aarch64 ]; then
         RUSTFLAGS="-C target-feature=+reserve-x18,+reserve-x28" \
-            cargo "+$nightly" rustc -q -p "$package" --lib --release --features ape --crate-type staticlib \
+            cargo "+$nightly" rustc -q -p "$package" --lib --release --no-default-features --features "$features" --crate-type staticlib \
             --target "$target" -Zbuild-std=std,panic_unwind --target-dir "$dir/reserved"
         cp "$dir/reserved/$target/release/lib$lib.a" "$a"
     else
-        cargo rustc -q -p "$package" --lib --release --features ape --crate-type staticlib --target "$target" \
+        cargo rustc -q -p "$package" --lib --release --no-default-features --features "$features" --crate-type staticlib --target "$target" \
             --target-dir "$dir"
         cp "$dir/$target/release/lib$lib.a" "$a"
     fi
@@ -88,6 +89,30 @@ package_store() {
     "$root/tools/twpatch/target/release/twpatch" pack "$packages" "$1" $versions
     # shellcheck disable=SC2086
     store_count=$(echo $versions | wc -w | tr -d ' ')
+}
+
+# mimalloc_object CPU O: mimalloc 2 for CPU, compiled with cosmocc, as the
+# object O (the feature `ape-mimalloc`, src/cosmo_allocator.rs). The C
+# source is the one of the crate libmimalloc-sys of Cargo.lock.
+mimalloc_object() {
+    cpu=$1 o=$2
+    manifest=$(cargo metadata -q --format-version 1 --manifest-path "$root/Cargo.toml" |
+        grep -o '"manifest_path":"[^"]*/libmimalloc-sys-[^"]*"' | head -n 1 | sed 's/^"manifest_path":"//; s/"$//')
+    [ -n "$manifest" ] || { log "Cargo.lock has no crate libmimalloc-sys"; exit 1; }
+    mi=$(dirname "$manifest")/c_src/mimalloc/v2
+    # MI_USE_BUILTIN_THREAD_POINTER=0: the id of a thread is the address of
+    # a thread-local variable. The thread pointer of the CPU (%fs:0 on
+    # x86_64, tpidr_el0 on aarch64) is not the thread data of Cosmopolitan,
+    # which has its own on each system (x28 on aarch64).
+    # MI_PRIM_HAS_PROCESS_ATTACH=1: no constructor and no destructor of
+    # the process. mimalloc starts at its first allocation. At the exit of
+    # the process, its destructor deleted the pthread key of its threads
+    # while the threads of the scanner still freed memory, and Cosmopolitan
+    # stopped on an assertion in pthread_getspecific(). The system frees
+    # the memory of the process.
+    sh "$C/bin/$cpu-unknown-cosmo-cc" -O2 -DNDEBUG -D_GNU_SOURCE -DMI_USE_BUILTIN_THREAD_POINTER=0 \
+        -DMI_PRIM_HAS_PROCESS_ATTACH=1 \
+        -I"$mi/include" -c -o "$o" "$mi/src/static.c"
 }
 
 # c_objects CPU DIR [WATCH_FLAGS]: the C files of the program for CPU, in
