@@ -1382,7 +1382,7 @@ dependencies = [
 
 [[package]]
 name = "tailwind"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cc",
  "flate2",
@@ -1399,7 +1399,7 @@ dependencies = [
 
 [[package]]
 name = "tailwind-classification-macros"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1408,7 +1408,7 @@ dependencies = [
 
 [[package]]
 name = "tailwind-ignore"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bstr",
  "crossbeam-channel",
@@ -1425,7 +1425,7 @@ dependencies = [
 
 [[package]]
 name = "tailwind-scanner"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bexpand",
  "bstr",
@@ -1449,7 +1449,7 @@ dependencies = [
 
 [[package]]
 name = "tailwind_nif"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "rustler",
  "tailwind",

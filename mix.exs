@@ -11,7 +11,7 @@ defmodule TailwindCom.MixProject do
   #
   # The application has the name tailwind, so a Phoenix project can use
   # this project in place of the Hex package tailwind.
-  @version "0.2.0"
+  @version "0.3.0"
 
   # The code uses Erlang/OTP 29 and Elixir 1.20: the versions of BEAM.com.
   if String.to_integer(System.otp_release()) < 29 do
