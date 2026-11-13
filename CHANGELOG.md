@@ -35,6 +35,12 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   system frees the memory of the process. A build of a large project
   (1000 files, about 5600 classes) takes 28% less time. A watch, and a run
   of `run_with` (the NIF), free the compiler as before.
+- The program `tailwind` of `cargo build` uses mimalloc 2 as its
+  allocator (the feature `mimalloc`, a default feature): a build spends
+  about a third of its time in `malloc` and `free`. A large build takes
+  about 25% less time, and its peak memory is 91 MB, not 75 MB. The
+  library does not set an allocator, and `wasm32-wasip1` does not use
+  mimalloc.
 - The scanner of Tailwind CSS is a copy in the repository
   (`native/scanner`), not a dependency on the git repository of Tailwind
   CSS: three crates with no change in their code, and manifests of ours

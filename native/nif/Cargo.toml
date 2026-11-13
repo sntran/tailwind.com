@@ -21,4 +21,5 @@ ape = ["tailwind/ape"]
 
 [dependencies]
 rustler = "0.39"
-tailwind = { path = "../tailwind" }
+# The allocator of the VM, not mimalloc (the feature of the program).
+tailwind = { path = "../tailwind", default-features = false, features = ["cli"] }
