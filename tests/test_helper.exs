@@ -24,7 +24,7 @@ end
 
 # TAILWIND_NIF: the path of the NIF (target/release/libtailwind_nif, with
 # no extension). The tests then run the program as a NIF, and the tests
-# with the tag `:file` (the tests of the file only) do not run.
+# with the tag `:port` (the tests of the file only) do not run.
 nif = System.get_env("TAILWIND_NIF")
 
 if nif do
@@ -46,7 +46,7 @@ nif_has_packages = fn ->
   )
 end
 
-exclude = if nif, do: [:file], else: [:nif]
+exclude = if nif, do: [:port], else: [:nif]
 
 cond do
   nif ->
