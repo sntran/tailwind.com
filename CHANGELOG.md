@@ -57,6 +57,9 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   the rules. A large build has 7% fewer instructions. With the changes
   above, a large build of the program of `cargo build` takes 83 ms, not
   189 ms.
+- The optimizer keeps the `color-mix(…)` fallback of each value for its
+  run: in a large project, many declarations have the same value. A large
+  build has 4% fewer instructions.
 - The scanner of Tailwind CSS is a copy in the repository
   (`native/scanner`), not a dependency on the git repository of Tailwind
   CSS: three crates with no change in their code, and manifests of ours
