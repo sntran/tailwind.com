@@ -21,11 +21,10 @@
 # watch.c has inotify only (TW_WATCH_INOTIFY_ONLY): on the other systems,
 # a watch polls the files.
 #
-# The loader of beam.com puts no section of size 0 into memory. A static
-# of Rust with a type of size 0 has such a section, so each section of
-# size 0 that the code names gets one byte (scripts/zero_sections.py).
+# The object has one section for each kind (native/nif/sections.ld), and
+# no local name that no relocation uses: 14 MB, not 22 MB.
 #
-# The script needs python3. Environment: COSMOCC, COSMOCC_VERSION and RUST_NIGHTLY, as for
+# Environment: COSMOCC, COSMOCC_VERSION and RUST_NIGHTLY, as for
 # scripts/build.sh.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -52,18 +51,9 @@ for cpu in x86_64 aarch64; do
     log "Building the C files for $cpu"
     c_objects "$cpu" "$d" -DTW_WATCH_INOTIFY_ONLY
     # shellcheck disable=SC2086
-    sh "$root/scripts/rust_link.sh" "$C" "$cpu" tailwind_nif_nif_init "$d/nif.o" $objects "$d/libtailwind_nif.a"
-    printf '\0' > "$d/byte"
-    args=
-    for section in $(python3 "$root/scripts/zero_sections.py" "$d/nif.o"); do
-        args="$args --update-section $section=$d/byte"
-    done
-    # shellcheck disable=SC2086
-    [ -z "$args" ] || sh "$C/bin/$cpu-unknown-cosmo-objcopy" $args "$d/nif.o"
-    if [ -n "$(python3 "$root/scripts/zero_sections.py" "$d/nif.o")" ]; then
-        log "libtailwind_nif.$cpu.o still has sections of size 0 that the code names"
-        exit 1
-    fi
+    RUST_LINK_SCRIPT=$root/native/nif/sections.ld \
+        sh "$root/scripts/rust_link.sh" "$C" "$cpu" tailwind_nif_nif_init "$d/nif.o" $objects "$d/libtailwind_nif.a"
+    sh "$C/bin/$cpu-unknown-cosmo-objcopy" --strip-unneeded "$d/nif.o"
     # The object must have its entry, and no other global name.
     globals=$(sh "$C/bin/$cpu-unknown-cosmo-nm" -g --defined-only "$d/nif.o" | awk '{print $3}')
     if [ "$globals" != tailwind_nif_nif_init ]; then

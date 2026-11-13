@@ -36,12 +36,15 @@ config :tailwind, nif: false
 `beam.com` is one static file with no `dlopen()`. It loads a native NIF
 object in place of a library: for `erlang:load_nif("PATH", 0)`, it loads
 `PATH.x86_64.o` or `PATH.aarch64.o` (the CPU of the computer) into the
-running program (`docs/NIFS.md` of BEAM.com). So BEAM.com needs no Rust
-and no compiler for the NIF:
+running program (`docs/NIFS.md` of BEAM.com). The NIF then runs in the
+VM, as a NIF that `beam.com` links, but it is not a part of the file
+`beam.com`: only a project with the objects has it. Nothing goes to the
+disk, and no program starts. BEAM.com needs no Rust and no compiler for
+the NIF:
 
 1. Each release of tailwind.com has the two objects,
-   `libtailwind_nif.x86_64.o` and `libtailwind_nif.aarch64.o`, with
-   their SHA-256 in `SHA256SUMS`. Use the objects of the release of the
+   `libtailwind_nif.x86_64.o` and `libtailwind_nif.aarch64.o` (14 MB
+   each, 4.1 MB deflated in a zip), with their SHA-256 in `SHA256SUMS`. Use the objects of the release of the
    Erlang and Elixir modules: the functions of the NIF change with the
    module.
 2. Put them at `priv/native/libtailwind_nif.x86_64.o` and `.aarch64.o` of
@@ -78,8 +81,13 @@ place of `main()`, and with two differences:
   `priv/tailwindcss` of the application can have them (as for another
   VM, below). This is not tested in `beam.com` yet.
 
+An object has one section for each kind (`native/nif/sections.ld`), not
+one for each function: about 36,000 sections took 8 MB for their headers,
+names and symbols. LTO already removed the code that the crate does not
+use, so the loader has no more to remove.
+
 `make nif` (`scripts/nif.sh`) builds the objects in `build/nif`, with the
-cosmocc and the Rust of `make`, and python3. The job `nif-beam` of CI
+cosmocc and the Rust of `make`. The job `nif-beam` of CI
 loads them in the `beam.com` of the release `edge` of BEAM.com, on
 x86_64 and aarch64, with `tests/nif_object.erl`:
 
