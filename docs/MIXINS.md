@@ -269,7 +269,9 @@ valid stays.
 ```
 
 The step uses the method of Roman Komarov ("Possible Future CSS:
-Tree-Counting Functions and Random Values", kizu.dev). The index is
+Tree-Counting Functions and Random Values", kizu.dev), which the
+CSS-Tricks article "How to Wait for the sibling-count() and
+sibling-index() Functions" calls "flint and steel". The index is
 `lo + 32 * hi`:
 
 - `lo` comes from 32 rules `:nth-child(32n + r)`, one for each `r` from 1
