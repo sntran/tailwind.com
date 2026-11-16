@@ -1,4 +1,4 @@
-# CSS functions, mixins and conditions
+# CSS functions, mixins, conditions and tree counting
 
 [CSS Custom Functions and Mixins Module Level 1](https://drafts.csswg.org/css-mixins-1/)
 adds `@function` and `@mixin` to CSS. A function gives a value. A
@@ -6,7 +6,8 @@ mixin gives declarations and rules for a style rule. Two more drafts add
 conditions: `if()` ([CSS Values 5](https://drafts.csswg.org/css-values-5/#if-notation))
 for a value, and `@when` and `@else`
 ([CSS Conditional Rules 5](https://drafts.csswg.org/css-conditional-5/))
-for rules. See [Conditions](#conditions).
+for rules. See [Conditions](#conditions). CSS Values 5 also adds
+`sibling-index()` and `sibling-count()`: see [Tree counting](#tree-counting).
 
 ```css
 @function --gap(--n) {
@@ -47,8 +48,9 @@ for rules. See [Conditions](#conditions).
   | `@mixin`, `@apply --name` | None yet | Lowered |
   | `if()` | Chrome and Edge 137 | Lowered |
   | `@when`, `@else` | None yet | Lowered |
+  | `sibling-index()`, `sibling-count()` | Chrome and Edge 138 | Lowered |
 
-  The table is `FUNCTIONS`, `MIXINS`, `IF` and `WHEN` in
+  The table is `FUNCTIONS`, `MIXINS`, `IF`, `WHEN` and `SIBLING` in
   `css_mixins.rs`. When a new release of Tailwind CSS raises its
   targets, the decision follows.
 
@@ -254,6 +256,49 @@ together, with the same declarations. An `@else` with no `@when`
 before it is not valid, and goes. A chain with a condition that is not
 valid stays.
 
+## Tree counting
+
+`sibling-index()` is the position of an element among its siblings, from
+1, and `sibling-count()` is the number of siblings with the element:
+
+```css
+.list > li {
+  animation-delay: calc(sibling-index() * 50ms);
+  width: calc(100% / sibling-count());
+}
+```
+
+The step uses the method of Roman Komarov ("Possible Future CSS:
+Tree-Counting Functions and Random Values", kizu.dev), which the
+CSS-Tricks article "How to Wait for the sibling-count() and
+sibling-index() Functions" calls "flint and steel". The index is
+`lo + 32 * hi`:
+
+- `lo` comes from 32 rules `:nth-child(32n + r)`, one for each `r` from 1
+  to 32.
+- `hi` comes from 32 rules `:nth-child(n + 32k + 1)`, one for each `k`
+  from 0 to 31. The later rule applies.
+
+So 64 rules give the index of each of 1,024 siblings, where one rule for
+each position needs 1,024 rules. `sibling-count()` adds 64 rules with
+`:nth-last-child()`: the count is the index from the start plus the
+index from the end, less one. The rules only set the custom properties
+`--sibling-lo`, `--sibling-hi`, `--sibling-last-lo` and
+`--sibling-last-hi`, and each function becomes a `calc()` of them.
+
+- The rules for the style rules at the top of the stylesheet go to its
+  end, with one list of selectors (`:is(.list > li, .grid > *)`, or
+  the selector itself when there is one). A
+  nested style rule gets its rules after it, in its parent.
+- A pseudo-element (`li::before`) gets the value of its element: the
+  rules are for the element, and a custom property is inherited.
+- The size, with `--minify`: about 2.7 KB for `sibling-index()` (0.5 KB
+  with gzip), and 6 KB when there is also `sibling-count()` (0.9 KB with
+  gzip). A nested rule adds the same again.
+- Chromium has the two functions. On lists of 1 to 300 elements, with a
+  pseudo-element, nested rules, a `@media` rule and a `@function`, the
+  lowered CSS gives the same computed values as the native functions.
+
 ## Limits
 
 - **Conditions together.** Each conditional rule of a function gives one
@@ -273,6 +318,8 @@ valid stays.
   of another stylesheet stays as it is.
 - **`style()` in a mixin.** A `style()` test of a parameter of a mixin is
   not known: the `if()` stays.
+- **More than 1,024 siblings.** After 1,024 siblings, the index and the
+  count are wrong.
 - **The drafts.** `if()` follows the Editor's Draft of CSS Values 5, and
   `@when` the Editor's Draft of CSS Conditional Rules 5 (2026-11-10).
 

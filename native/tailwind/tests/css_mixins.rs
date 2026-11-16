@@ -98,3 +98,17 @@ fn the_compiler_keeps_the_conditions_and_the_optimizer_lowers_them() {
     );
     assert_eq!(optimized.warnings, None);
 }
+
+#[test]
+fn the_optimizer_lowers_the_tree_counting_functions() {
+    let input = ".list > li {\n  animation-delay: calc(sibling-index() * 50ms);\n}\n";
+    let optimized = optimize(input, "input.css", true, None).unwrap();
+    assert!(
+        optimized.code.starts_with(".list>li{animation-delay:calc(calc(var(--sibling-lo) + 32 * var(--sibling-hi)) * 50ms)}"),
+        "{}",
+        optimized.code
+    );
+    assert!(optimized.code.contains(".list>li:nth-child(32n+1){--sibling-lo:1}"), "{}", optimized.code);
+    assert!(optimized.code.contains(".list>li:nth-child(n+993){--sibling-hi:31}"), "{}", optimized.code);
+    assert_eq!(optimized.warnings, None);
+}

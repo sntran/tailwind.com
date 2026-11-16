@@ -1,8 +1,9 @@
 //! The lowering of CSS functions, mixins and conditions for the optimizer
 //! (`docs/MIXINS.md`): `@function` and the calls `--name(…)`, `@mixin` and
 //! `@apply --name(…)`, from CSS Custom Functions and Mixins Module Level 1
-//! (the Editor's Draft of 2026-11-04), `if()` from CSS Values 5, and
-//! `@when` and `@else` from CSS Conditional Rules 5.
+//! (the Editor's Draft of 2026-11-04), `if()`, `sibling-index()` and
+//! `sibling-count()` from CSS Values 5, and `@when` and `@else` from CSS
+//! Conditional Rules 5.
 //!
 //! Tailwind CSS keeps these rules in its output, and Lightning CSS does not
 //! know them. This step is a part of Lightning CSS in this program: it runs
@@ -65,6 +66,11 @@ const IF: Support =
 /// `@when` and `@else`: no browser yet.
 const WHEN: Support = NO_BROWSER;
 
+/// `sibling-index()` and `sibling-count()`: Chrome and Edge 138 (the data
+/// of MDN).
+const SIBLING: Support =
+    Support { android: Some(138 << 16), chrome: Some(138 << 16), edge: Some(138 << 16), opera: Some(122 << 16), ..NO_BROWSER };
+
 /// True when a target browser does not have the rule.
 fn needs_lowering(targets: &Browsers, support: &Support) -> bool {
     let pairs = [
@@ -100,7 +106,8 @@ pub fn lower(input: &str, file: &str, targets: &Browsers, with_map: bool) -> Opt
     let mixins = input.contains("@mixin") && needs_lowering(targets, &MIXINS);
     let ifs = input.contains("if(") && needs_lowering(targets, &IF);
     let whens = input.contains("@when") && needs_lowering(targets, &WHEN);
-    if !functions && !mixins && !ifs && !whens {
+    let siblings = (input.contains("sibling-index(") || input.contains("sibling-count(")) && needs_lowering(targets, &SIBLING);
+    if !functions && !mixins && !ifs && !whens && !siblings {
         return None;
     }
     let from = with_map.then_some(file).filter(|file| !file.is_empty());
@@ -112,7 +119,7 @@ pub fn lower(input: &str, file: &str, targets: &Browsers, with_map: bool) -> Opt
         ast = lowering.lower_when(ast);
     }
     lowering.collect(&mut ast, functions, mixins, false);
-    if lowering.functions.is_empty() && lowering.mixins.is_empty() && !ifs && !whens {
+    if lowering.functions.is_empty() && lowering.mixins.is_empty() && !ifs && !whens && !siblings {
         return None;
     }
     if !lowering.mixins.is_empty() {
@@ -120,6 +127,10 @@ pub fn lower(input: &str, file: &str, targets: &Browsers, with_map: bool) -> Opt
     }
     if !lowering.functions.is_empty() || ifs {
         lowering.lower_calls(&mut ast, false, false);
+    }
+    // Last: a function, a mixin or an `if()` can give these functions.
+    if siblings {
+        lower_siblings(&mut ast);
     }
     ast.append(&mut lowering.properties);
 
@@ -867,6 +878,236 @@ impl Lowering {
     }
 }
 
+// The tree-counting functions.
+
+/// `sibling-index()` is `lo + SPLIT * hi`. `lo` comes from `SPLIT` rules
+/// `:nth-child(SPLIT n + r)`, and `hi` from `SPLIT` rules
+/// `:nth-child(n + SPLIT k + 1)`, where the later rule applies. So
+/// `2 * SPLIT` rules give the index of each of `SPLIT * SPLIT` siblings
+/// (the method of the article "Possible Future CSS: Tree-Counting Functions
+/// and Random Values" of Roman Komarov).
+const SPLIT: usize = 32;
+
+const INDEX: &str = "calc(var(--sibling-lo) + 32 * var(--sibling-hi))";
+
+/// The index from the start, and the index from the end, less one.
+const COUNT: &str = "calc(var(--sibling-lo) + 32 * var(--sibling-hi) + var(--sibling-last-lo) + 32 * var(--sibling-last-hi) - 1)";
+
+/// The functions that a value uses.
+#[derive(Default, Clone, Copy)]
+struct TreeCounting {
+    index: bool,
+    count: bool,
+}
+
+impl TreeCounting {
+    fn any(self) -> bool {
+        self.index || self.count
+    }
+    fn add(&mut self, other: TreeCounting) {
+        self.index |= other.index;
+        self.count |= other.count;
+    }
+}
+
+/// Replace `sibling-index()` and `sibling-count()` in a value.
+fn replace_tree_counting(value: &str) -> Option<(String, TreeCounting)> {
+    let mut out = String::with_capacity(value.len());
+    let mut uses = TreeCounting::default();
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < value.len() {
+        let byte = bytes[index];
+        if byte == b'"' || byte == b'\'' {
+            let end = string_end(value, index);
+            out.push_str(&value[index..end]);
+            index = end;
+            continue;
+        }
+        let c = value[index..].chars().next().unwrap_or(' ');
+        if !is_ident_char(c) {
+            out.push(c);
+            index += c.len_utf8();
+            continue;
+        }
+        let end = ident_end(value, index);
+        let name = &value[index..end];
+        let call = (bytes.get(end) == Some(&b'('))
+            .then(|| matching_paren(value, end))
+            .flatten()
+            .filter(|close| value[end + 1..*close].trim().is_empty());
+        match call {
+            Some(close) if name.eq_ignore_ascii_case("sibling-index") => {
+                out.push_str(INDEX);
+                uses.index = true;
+                index = close + 1;
+            }
+            Some(close) if name.eq_ignore_ascii_case("sibling-count") => {
+                out.push_str(COUNT);
+                uses.count = true;
+                index = close + 1;
+            }
+            _ => {
+                out.push_str(name);
+                index = end;
+            }
+        }
+    }
+    uses.any().then_some((out, uses))
+}
+
+/// Replace the functions in the declarations of a style rule, also in its
+/// nested conditional rules, but not in its nested style rules.
+fn replace_in_rule(nodes: &mut [AstNode]) -> TreeCounting {
+    let mut uses = TreeCounting::default();
+    for node in nodes {
+        match node {
+            AstNode::Declaration(declaration) => {
+                if let Some((text, found)) = declaration.value.as_deref().and_then(replace_tree_counting) {
+                    declaration.value = Some(text);
+                    uses.add(found);
+                }
+            }
+            AstNode::AtRule(rule) => uses.add(replace_in_rule(&mut rule.nodes)),
+            _ => {}
+        }
+    }
+    uses
+}
+
+/// The selector of the elements of a rule: each selector with no
+/// pseudo-element, as a pseudo-element gets the value of its element. In
+/// a nested rule, a selector that starts with a combinator gets `&`.
+fn element_selector(selector: &str, nested: bool) -> String {
+    let parts: Vec<String> = segment(selector, b',')
+        .into_iter()
+        .map(|part| {
+            let part = part.trim();
+            let end = pseudo_element_start(part).unwrap_or(part.len());
+            let element = part[..end].trim();
+            match element {
+                "" if nested => "&".to_string(),
+                "" => "*".to_string(),
+                _ if nested && element.starts_with(['>', '+', '~']) => format!("& {element}"),
+                _ => element.to_string(),
+            }
+        })
+        .collect();
+    parts.join(", ")
+}
+
+/// The start of the first pseudo-element of a selector, not in brackets:
+/// `::name`, or the old forms `:before`, `:after`, `:first-line` and
+/// `:first-letter`.
+fn pseudo_element_start(selector: &str) -> Option<usize> {
+    let bytes = selector.as_bytes();
+    let mut depth = 0usize;
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => index += 1,
+            b'"' | b'\'' => {
+                index = string_end(selector, index);
+                continue;
+            }
+            b'(' | b'[' => depth += 1,
+            b')' | b']' => depth = depth.saturating_sub(1),
+            b':' if depth == 0 => {
+                if bytes.get(index + 1) == Some(&b':') {
+                    return Some(index);
+                }
+                let name = &selector[index + 1..ident_end(selector, index + 1)];
+                if ["before", "after", "first-line", "first-letter"].iter().any(|old| name.eq_ignore_ascii_case(old)) {
+                    return Some(index);
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    None
+}
+
+/// The rules that give the custom properties of the functions to the
+/// elements of `selector`.
+fn sibling_rules(selector: &str, uses: TreeCounting, loc: &Loc) -> Vec<AstNode> {
+    // One selector takes the pseudo-class: `.list > li:nth-child(…)`.
+    let selector = if segment(selector, b',').len() > 1 { format!(":is({selector})") } else { selector.to_string() };
+    let rule = |pseudo: String, property: &str, value: usize| {
+        AstNode::Rule(crate::ast::StyleRule {
+            selector: format!("{selector}{pseudo}"),
+            nodes: vec![AstNode::Declaration(Declaration {
+                property: property.to_string(),
+                value: Some(value.to_string()),
+                important: false,
+                loc: loc.clone(),
+            })],
+            loc: loc.clone(),
+        })
+    };
+    let mut out = Vec::new();
+    let mut sets = vec![("nth-child", "--sibling-lo", "--sibling-hi")];
+    if uses.count {
+        sets.push(("nth-last-child", "--sibling-last-lo", "--sibling-last-hi"));
+    }
+    for (pseudo, lo, hi) in sets {
+        for r in 1..=SPLIT {
+            out.push(rule(format!(":{pseudo}({SPLIT}n + {r})"), lo, r));
+        }
+        for k in 0..SPLIT {
+            out.push(rule(format!(":{pseudo}(n + {})", SPLIT * k + 1), hi, k));
+        }
+    }
+    out
+}
+
+/// Lower `sibling-index()` and `sibling-count()` in each style rule. The
+/// rules for the style rules at the top go to the end of the stylesheet,
+/// with one selector list. The rules for a nested style rule go after it,
+/// in its parent.
+fn lower_siblings(ast: &mut Vec<AstNode>) {
+    let mut selectors: Vec<String> = Vec::new();
+    let mut uses = TreeCounting::default();
+    let mut loc = Loc::default();
+    walk_siblings(ast, false, &mut selectors, &mut uses, &mut loc);
+    if uses.any() {
+        ast.extend(sibling_rules(&selectors.join(", "), uses, &loc));
+    }
+}
+
+fn walk_siblings(nodes: &mut Vec<AstNode>, nested: bool, selectors: &mut Vec<String>, top: &mut TreeCounting, loc: &mut Loc) {
+    let mut index = 0;
+    while index < nodes.len() {
+        let mut added = Vec::new();
+        match &mut nodes[index] {
+            AstNode::Rule(rule) => {
+                let uses = replace_in_rule(&mut rule.nodes);
+                walk_siblings(&mut rule.nodes, true, selectors, top, loc);
+                if uses.any() {
+                    let element = element_selector(&rule.selector, nested);
+                    if nested {
+                        added = sibling_rules(&element, uses, &rule.loc);
+                    } else {
+                        if !selectors.contains(&element) {
+                            selectors.push(element);
+                        }
+                        top.add(uses);
+                        if !loc.is_some() {
+                            *loc = rule.loc.clone();
+                        }
+                    }
+                }
+            }
+            AstNode::AtRule(rule) => walk_siblings(&mut rule.nodes, nested, selectors, top, loc),
+            _ => {}
+        }
+        index += 1;
+        let count = added.len();
+        nodes.splice(index..index, added);
+        index += count;
+    }
+}
+
 // The conditions.
 
 /// Conditional rules from the outside in: (`@media`, `(…)`).
@@ -1400,6 +1641,7 @@ mod tests {
         assert!(needs_lowering(&targets(), &MIXINS));
         assert!(needs_lowering(&targets(), &IF));
         assert!(needs_lowering(&targets(), &WHEN));
+        assert!(needs_lowering(&targets(), &SIBLING));
         let new = Browsers { chrome: Some(140 << 16), ..Browsers::default() };
         assert!(!needs_lowering(&new, &FUNCTIONS));
         assert!(needs_lowering(&new, &MIXINS));
@@ -1592,6 +1834,31 @@ mod tests {
             parse_condition("not (media(a) or supports(b: c))", false),
             Some(Condition::Not(Box::new(Condition::Or(vec![Condition::Media("a".into()), Condition::Supports("b: c".into())]))))
         );
+    }
+
+    #[test]
+    fn sibling_index_and_count() {
+        let out = run(".list > li { animation-delay: calc(sibling-index() * 50ms); }");
+        assert!(out.starts_with(".list > li {\n  animation-delay: calc(calc(var(--sibling-lo) + 32 * var(--sibling-hi)) * 50ms);\n}\n"), "{out}");
+        assert!(out.contains(".list > li:nth-child(32n + 1) {\n  --sibling-lo: 1;\n}\n"), "{out}");
+        assert!(out.contains(".list > li:nth-child(n + 993) {\n  --sibling-hi: 31;\n}\n"), "{out}");
+        assert_eq!(out.matches("--sibling-").count(), 2 + 64);
+        assert!(!out.contains("nth-last-child"));
+
+        let out = run(".a::before, .b:after { width: calc(100% / sibling-count()); }\n.c { z-index: sibling-index(); }");
+        assert!(out.contains(":is(.a, .b, .c):nth-last-child(n + 33) {\n  --sibling-last-hi: 1;\n}\n"), "{out}");
+        assert_eq!(out.matches(":is(").count(), 128);
+    }
+
+    #[test]
+    fn sibling_index_in_a_nested_rule() {
+        let out = run(".list {\n  > li { z-index: sibling-index(); }\n  color: red;\n}");
+        assert!(out.starts_with(".list {\n  > li {\n    z-index: calc(var(--sibling-lo) + 32 * var(--sibling-hi));\n  }\n  & > li:nth-child(32n + 1) {\n    --sibling-lo: 1;\n  }\n"), "{out}");
+        assert!(out.trim_end().ends_with("color: red;\n}"), "{out}");
+        assert_eq!(element_selector("&::marker, .x ::before, :hover", true), "&, .x, :hover");
+        assert_eq!(element_selector("::selection", false), "*");
+        assert_eq!(element_selector("a[title='::x']:hover::after", false), "a[title='::x']:hover");
+        assert!(replace_tree_counting("--sibling-index-x(1) sibling-index(2) 'sibling-index()'").is_none());
     }
 
     #[test]
