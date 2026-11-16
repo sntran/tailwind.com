@@ -234,7 +234,7 @@ impl MathLowering {
                 };
                 let [a, b, c] = values else { return None };
                 if is_fixed(values) {
-                    return Some(fixed_progress(values, clamped)?);
+                    return fixed_progress(values, clamped);
                 }
                 // `no-clamp` is newer than `progress()` (Chromium 153 does not
                 // have it): the test has it too.
