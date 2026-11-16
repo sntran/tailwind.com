@@ -1,14 +1,20 @@
-//! The lowering of the math functions of CSS Values 4 that the targets of
-//! the optimizer do not have (`docs/MIXINS.md`, "Math functions"): the
-//! stepped value functions `round()`, `mod()` and `rem()`, `pow()`, and the
-//! sign-related functions `abs()` and `sign()`.
+//! The lowering of the math functions of CSS Values 4 and 5 that the
+//! targets of the optimizer do not have (`docs/MIXINS.md`, "Math
+//! functions"): the stepped value functions `round()`, `mod()` and `rem()`,
+//! `pow()`, `sqrt()` and `hypot()`, the sign-related functions `abs()` and
+//! `sign()`, and `progress()`.
 //!
 //! Lightning CSS computes a call with fixed values (`round(10.4px, 1px)`).
 //! This step lowers the other calls, for example with `var()`:
 //!
 //! - `pow(A, n)`, with a whole number `n`: `A` times itself. `abs(A)`:
 //!   `max(A, -1 * (A))`. `sign(A)`: `sin(atan2(A, A * 0))`, which is 1, -1
-//!   or 0. These are exact.
+//!   or 0. `sqrt(x)`: `tan(acos((1 - x) / (1 + x)) / 2)`. `pow(A, n + 0.5)`
+//!   is `A` times itself and `sqrt(A)`. These are exact.
+//! - `hypot(A, B)`: `max / cos(atan2(min, max))`, with the maximum and the
+//!   minimum of `|A|` and `|B|`.
+//! - `progress(A, B, C)`: `clamp(0, (A - B) / (C - B), 1)`, with the
+//!   quotient of `tan(atan2())`. With fixed values, the step computes it.
 //! - `round()`, `mod()` and `rem()`: a custom property with the type
 //!   `<integer>` on the element gets the quotient `A / B`, and the browser
 //!   rounds it. The value is then a `calc()` with that property. The
@@ -28,22 +34,25 @@ use super::css_mixins::{ident_end, is_ident_char, matching_paren, string_end};
 pub struct Kinds {
     /// `round()`, `mod()` and `rem()`.
     pub stepped: bool,
-    /// `pow()`.
+    /// `pow()`, `sqrt()` and `hypot()`.
     pub pow: bool,
     /// `abs()` and `sign()`.
     pub sign: bool,
+    /// `progress()`.
+    pub progress: bool,
 }
 
 impl Kinds {
     pub fn any(self) -> bool {
-        self.stepped || self.pow || self.sign
+        self.stepped || self.pow || self.sign || self.progress
     }
 }
 
 /// True when the text can have a function of `kinds`.
 pub fn uses(input: &str, kinds: Kinds) -> bool {
     (kinds.stepped && (input.contains("round(") || input.contains("mod(") || input.contains("rem(")))
-        || (kinds.pow && input.contains("pow("))
+        || (kinds.pow && (input.contains("pow(") || input.contains("sqrt(") || input.contains("hypot(")))
+        || (kinds.progress && input.contains("progress("))
         || (kinds.sign && (input.contains("abs(") || input.contains("sign(")))
 }
 
@@ -188,14 +197,57 @@ impl MathLowering {
         }
         match (name, list.as_slice()) {
             ("pow", [base, exponent]) if self.kinds.pow && !is_fixed(&list) => {
-                let n: i32 = exponent.parse().ok().filter(|n: &i32| n.abs() <= 8)?;
+                // A whole number or a half, from -8 to 8: `A` times itself,
+                // and `sqrt(A)` for the half.
+                let exponent: f64 = exponent.parse().ok().filter(|e: &f64| e.abs() <= 8.0 && (e * 2.0).fract() == 0.0)?;
+                let halves = (exponent * 2.0) as i32;
                 add(natives, "order: pow(2, 2)");
-                let product = vec![format!("({base})"); n.unsigned_abs() as usize].join(" * ");
-                Some(match n {
+                let mut factors = vec![format!("({base})"); (halves.unsigned_abs() / 2) as usize];
+                if halves % 2 != 0 {
+                    factors.push(sqrt(base));
+                }
+                let product = factors.join(" * ");
+                Some(match halves {
                     0 => "1".to_string(),
-                    _ if n > 0 => format!("calc({product})"),
+                    _ if halves > 0 => format!("calc({product})"),
                     _ => format!("calc(1 / ({product}))"),
                 })
+            }
+            ("sqrt", [a]) if self.kinds.pow && !is_fixed(&list) => {
+                add(natives, "order: sqrt(1)");
+                Some(sqrt(a))
+            }
+            ("hypot", [first, rest @ ..]) if self.kinds.pow && !is_fixed(&list) => {
+                add(natives, "order: hypot(1)");
+                let mut out = abs(first);
+                for next in rest {
+                    let (a, b) = (out, abs(next));
+                    let (max, min) = (format!("max({a}, {b})"), format!("min({a}, {b})"));
+                    out = format!("calc({max} / cos(atan2({min}, {max})))");
+                }
+                Some(out)
+            }
+            ("progress", _) if self.kinds.progress => {
+                let (clamped, values) = match list.first() {
+                    Some(first) if first.eq_ignore_ascii_case("no-clamp") => (false, &list[1..]),
+                    _ => (true, &list[..]),
+                };
+                let [a, b, c] = values else { return None };
+                if is_fixed(values) {
+                    return fixed_progress(values, clamped);
+                }
+                // `no-clamp` is newer than `progress()` (Chromium 153 does not
+                // have it): the test has it too.
+                add(natives, if clamped { "order: progress(1, 0, 2)" } else { "order: progress(no-clamp, 1, 0, 2)" });
+                // With a start and an end that are plain numbers, a division
+                // is exact. Else the quotient of two dimensions is
+                // `tan(atan2())`.
+                let q = match (number_and_unit(b), number_and_unit(c)) {
+                    (Some((start, "")), Some((end, ""))) if start == end && clamped => return Some("0".to_string()),
+                    (Some((start, "")), Some((end, ""))) if start != end => format!("(({a}) - ({b})) / ({})", format_number(end - start)),
+                    _ => format!("tan(atan2(({a}) - ({b}), ({c}) - ({b})))"),
+                };
+                Some(if clamped { format!("clamp(0, {q}, 1)") } else { format!("calc({q})") })
             }
             ("abs", [a]) if self.kinds.sign && !is_fixed(&list) => {
                 add(natives, "order: abs(1)");
@@ -277,8 +329,54 @@ fn declaration_node(property: &str, value: &str, important: bool, loc: &Loc) -> 
     AstNode::Declaration(Declaration { property: property.to_string(), value: Some(value.to_string()), important, loc: loc.clone() })
 }
 
-/// The tests of the stepped value functions.
-const STEPPED_TESTS: [&str; 3] = ["order: round(1, 1)", "order: mod(1, 1)", "order: rem(1, 1)"];
+/// The tests of the functions with a lowering that is not exact in each
+/// browser: the stepped value functions round a quotient in floating
+/// point, and `atan2()` of two units (rem and px) is 0 in Firefox (bug
+/// 1802744 of Mozilla).
+const STEPPED_TESTS: [&str; 6] = [
+    "order: round(1, 1)",
+    "order: mod(1, 1)",
+    "order: rem(1, 1)",
+    "order: hypot(1)",
+    "order: progress(1, 0, 2)",
+    "order: progress(no-clamp, 1, 0, 2)",
+];
+
+/// `|A|`.
+fn abs(a: &str) -> String {
+    format!("max({a}, -1 * ({a}))")
+}
+
+/// `sqrt(x)` of a number: the tangent of half the angle with the cosine
+/// `(1 - x) / (1 + x)`.
+fn sqrt(x: &str) -> String {
+    format!("tan(acos((1 - ({x})) / (1 + ({x}))) / 2)")
+}
+
+/// `progress()` of three numbers with the same unit, as a number.
+fn fixed_progress(values: &[&str], clamped: bool) -> Option<String> {
+    let [a, b, c] = values else { return None };
+    let (a, b, c) = (number_and_unit(a)?.0, number_and_unit(b)?.0, number_and_unit(c)?.0);
+    let value = if b == c {
+        // The same start and end: 0, or an infinity in the direction of A.
+        match (clamped, a.partial_cmp(&b)?) {
+            (true, _) | (false, std::cmp::Ordering::Equal) => return Some("0".to_string()),
+            (false, std::cmp::Ordering::Less) => return Some("calc(-infinity)".to_string()),
+            (false, std::cmp::Ordering::Greater) => return Some("calc(infinity)".to_string()),
+        }
+    } else {
+        (a - b) / (c - b)
+    };
+    let value = if clamped { value.clamp(0.0, 1.0) } else { value };
+    Some(format_number(value))
+}
+
+/// A number as CSS writes it: no exponent, and no zeros at the end.
+fn format_number(value: f64) -> String {
+    let text = format!("{value:.6}");
+    let text = text.trim_end_matches('0').trim_end_matches('.');
+    if text == "-0" { "0".to_string() } else { text.to_string() }
+}
 
 fn add(natives: &mut Vec<&'static str>, test: &'static str) {
     if !natives.contains(&test) {
@@ -329,7 +427,7 @@ mod tests {
     use super::*;
 
     fn all() -> Kinds {
-        Kinds { stepped: true, pow: true, sign: true }
+        Kinds { stepped: true, pow: true, sign: true, progress: true }
     }
 
     fn value(text: &str) -> (String, Vec<(String, String)>, Vec<&'static str>) {
@@ -353,9 +451,38 @@ mod tests {
     fn pow_abs_and_sign() {
         assert_eq!(value("pow(var(--x), 3)").0, "calc((var(--x)) * (var(--x)) * (var(--x)))");
         assert_eq!(value("pow(var(--x), -2)").0, "calc(1 / ((var(--x)) * (var(--x))))");
-        assert_eq!(value("pow(var(--x), 0.5)").0, "pow(var(--x), 0.5)");
+        assert_eq!(value("pow(var(--x), 0.5)").0, "calc(tan(acos((1 - (var(--x))) / (1 + (var(--x)))) / 2))");
         assert_eq!(value("abs(var(--x))").0, "max(var(--x), -1 * (var(--x)))");
         assert_eq!(value("sign(var(--x))").0, "sin(atan2(var(--x), calc((var(--x)) * 0)))");
+    }
+
+    #[test]
+    fn sqrt_hypot_and_half_powers() {
+        assert_eq!(value("sqrt(var(--x))").0, "tan(acos((1 - (var(--x))) / (1 + (var(--x)))) / 2)");
+        assert_eq!(value("sqrt(4)").0, "sqrt(4)");
+        assert_eq!(value("pow(var(--x), 1.5)").0, "calc((var(--x)) * tan(acos((1 - (var(--x))) / (1 + (var(--x)))) / 2))");
+        assert_eq!(value("pow(var(--x), -0.5)").0, "calc(1 / (tan(acos((1 - (var(--x))) / (1 + (var(--x)))) / 2)))");
+        assert_eq!(value("pow(var(--x), 0.25)").0, "pow(var(--x), 0.25)");
+        let (text, _, natives) = value("hypot(var(--a), 4px)");
+        assert_eq!(
+            text,
+            "calc(max(max(var(--a), -1 * (var(--a))), max(4px, -1 * (4px))) / cos(atan2(min(max(var(--a), -1 * (var(--a))), max(4px, -1 * (4px))), max(max(var(--a), -1 * (var(--a))), max(4px, -1 * (4px))))))"
+        );
+        assert_eq!(natives, vec!["order: hypot(1)"]);
+        assert_eq!(value("hypot(var(--a))").0, "max(var(--a), -1 * (var(--a)))");
+    }
+
+    #[test]
+    fn progress() {
+        assert_eq!(value("progress(var(--x), 0px, 100px)").0, "clamp(0, tan(atan2((var(--x)) - (0px), (100px) - (0px))), 1)");
+        let (text, _, natives) = value("progress(no-clamp, var(--x), 2, 10)");
+        assert_eq!(text, "calc(((var(--x)) - (2)) / (8))");
+        assert_eq!(natives, vec!["order: progress(no-clamp, 1, 0, 2)"]);
+        assert_eq!(value("progress(25px, 0px, 100px)").0, "0.25");
+        assert_eq!(value("progress(150px, 0px, 100px)").0, "1");
+        assert_eq!(value("progress(no-clamp, 150px, 0px, 100px)").0, "1.5");
+        assert_eq!(value("progress(5px, 3px, 3px)").0, "0");
+        assert_eq!(value("progress(no-clamp, 5px, 3px, 3px)").0, "calc(infinity)");
     }
 
     #[test]

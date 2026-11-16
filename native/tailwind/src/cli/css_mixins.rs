@@ -97,6 +97,10 @@ const EXPONENTIAL: Support = math(120);
 /// `abs()` and `sign()`: Chrome 138.
 const SIGN: Support = math(138);
 
+/// `progress()`: Chrome and Edge 138 (the data of MDN).
+const PROGRESS: Support =
+    Support { android: Some(138 << 16), chrome: Some(138 << 16), edge: Some(138 << 16), opera: Some(122 << 16), ..NO_BROWSER };
+
 /// True when a target browser does not have the rule.
 fn needs_lowering(targets: &Browsers, support: &Support) -> bool {
     let pairs = [
@@ -137,6 +141,7 @@ pub fn lower(input: &str, file: &str, targets: &Browsers, with_map: bool) -> Opt
         stepped: needs_lowering(targets, &STEPPED),
         pow: needs_lowering(targets, &EXPONENTIAL),
         sign: needs_lowering(targets, &SIGN),
+        progress: needs_lowering(targets, &PROGRESS),
     };
     let math = kinds.any() && super::css_math::uses(input, kinds);
     if !functions && !mixins && !ifs && !whens && !siblings && !math {
@@ -1683,6 +1688,7 @@ mod tests {
         assert!(needs_lowering(&targets(), &STEPPED));
         assert!(needs_lowering(&targets(), &EXPONENTIAL));
         assert!(needs_lowering(&targets(), &SIGN));
+        assert!(needs_lowering(&targets(), &PROGRESS));
         let new = Browsers { chrome: Some(140 << 16), ..Browsers::default() };
         assert!(!needs_lowering(&new, &FUNCTIONS));
         assert!(needs_lowering(&new, &MIXINS));
