@@ -83,3 +83,18 @@ fn the_compiler_keeps_contents_with_no_block() {
     let optimized = optimize(&output, "input.css", true, None).unwrap();
     assert!(optimized.code.ends_with("*/\n.a{color:red;top:0}"), "{}", optimized.code);
 }
+
+#[test]
+fn the_compiler_keeps_the_conditions_and_the_optimizer_lowers_them() {
+    let css = "@function --ink(--mode: light) {\n  result: if(style(--mode: dark): white; else: black);\n}\n.a {\n  color: --ink(dark);\n  padding: if(media(width >= 40rem): 2rem; else: 1rem);\n}\n@when media(hover: hover) {\n  .b {\n    color: red;\n  }\n} @else {\n  .b {\n    color: blue;\n  }\n}\n";
+    let mut compiler = tailwind::compile(css, tailwind::CompileOptions::default()).unwrap();
+    let output = compiler.build(&[]);
+    assert!(output.contains("padding: if(media(width >= 40rem): 2rem; else: 1rem);"), "{output}");
+    assert!(output.contains("@when media(hover: hover)") && output.contains("@else {"), "{output}");
+    let optimized = optimize(&output, "input.css", true, None).unwrap();
+    assert_eq!(
+        optimized.code,
+        ".a{color:#fff;padding:1rem}@media (min-width:40rem){.a{padding:2rem}}@media (hover:hover){.b{color:red}}@media not all and (hover:hover){.b{color:#00f}}"
+    );
+    assert_eq!(optimized.warnings, None);
+}

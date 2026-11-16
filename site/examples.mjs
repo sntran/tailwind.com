@@ -121,6 +121,48 @@ export const examples = [
 `,
   },
   {
+    // The optimizer lowers if(), @when and @else (docs/MIXINS.md).
+    name: 'CSS conditions: if() and @when',
+    mode: 'one',
+    a: '4.3.5',
+    minify: true,
+    markup: `<div class="p-6">
+  <nav class="nav">
+    <a href="#">One</a>
+    <a href="#">Two</a>
+    <a href="#">Three</a>
+  </nav>
+  <p class="note">Clear --minify: the output keeps if() and @when. Make the preview narrower than 40rem: the list and the colors change.</p>
+</div>
+`,
+    css: `@import "tailwindcss";
+
+@function --tone(--mode: light) {
+  result: if(style(--mode: dark): var(--color-slate-900); else: var(--color-sky-100));
+}
+
+.nav {
+  gap: if(media(width >= 40rem): 2rem; else: 0.5rem);
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  background: --tone();
+}
+
+@when media(width >= 40rem) {
+  .nav { display: flex; }
+} @else supports(display: grid) {
+  .nav { display: grid; background: --tone(dark); color: white; }
+} @else {
+  .nav { display: block; }
+}
+
+.note {
+  margin-top: 1rem;
+  color: if(media(width >= 40rem): var(--color-slate-600); else: var(--color-rose-600));
+}
+`,
+  },
+  {
     name: 'The typography plugin',
     mode: 'two',
     a: '4.3.5',

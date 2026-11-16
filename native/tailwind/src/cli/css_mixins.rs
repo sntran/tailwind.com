@@ -1,7 +1,8 @@
-//! The lowering of CSS functions and mixins for the optimizer
+//! The lowering of CSS functions, mixins and conditions for the optimizer
 //! (`docs/MIXINS.md`): `@function` and the calls `--name(…)`, `@mixin` and
 //! `@apply --name(…)`, from CSS Custom Functions and Mixins Module Level 1
-//! (the Editor's Draft of 2026-11-04).
+//! (the Editor's Draft of 2026-11-04), `if()` from CSS Values 5, and
+//! `@when` and `@else` from CSS Conditional Rules 5.
 //!
 //! Tailwind CSS keeps these rules in its output, and Lightning CSS does not
 //! know them. This step is a part of Lightning CSS in this program: it runs
@@ -10,8 +11,7 @@
 //! of Tailwind CSS (`optimize_css::TARGETS`). When Lightning CSS has its own
 //! lowering, this step goes.
 //!
-//! The step changes nothing in a stylesheet with no `@function` and no
-//! `@mixin`.
+//! The step changes nothing in a stylesheet with none of these rules.
 
 use crate::ast::{AstNode, AtRule, Declaration, Loc};
 use crate::css_parser::parse_with_source;
@@ -58,6 +58,13 @@ const FUNCTIONS: Support =
 /// `@mixin` and `@apply`: no browser yet.
 const MIXINS: Support = NO_BROWSER;
 
+/// `if()`: Chrome and Edge 137 (the data of MDN).
+const IF: Support =
+    Support { android: Some(137 << 16), chrome: Some(137 << 16), edge: Some(137 << 16), opera: Some(121 << 16), ..NO_BROWSER };
+
+/// `@when` and `@else`: no browser yet.
+const WHEN: Support = NO_BROWSER;
+
 /// True when a target browser does not have the rule.
 fn needs_lowering(targets: &Browsers, support: &Support) -> bool {
     let pairs = [
@@ -85,27 +92,33 @@ pub struct Lowered {
     pub map: Option<String>,
 }
 
-/// Lower the functions and the mixins of `input` for the browsers
-/// `targets`. `file` is the name of the input for the source map. `None`:
-/// there is nothing to lower, and the input does not change.
+/// Lower the functions, the mixins and the conditions of `input` for the
+/// browsers `targets`. `file` is the name of the input for the source map.
+/// `None`: there is nothing to lower, and the input does not change.
 pub fn lower(input: &str, file: &str, targets: &Browsers, with_map: bool) -> Option<Lowered> {
     let functions = input.contains("@function") && needs_lowering(targets, &FUNCTIONS);
     let mixins = input.contains("@mixin") && needs_lowering(targets, &MIXINS);
-    if !functions && !mixins {
+    let ifs = input.contains("if(") && needs_lowering(targets, &IF);
+    let whens = input.contains("@when") && needs_lowering(targets, &WHEN);
+    if !functions && !mixins && !ifs && !whens {
         return None;
     }
     let from = with_map.then_some(file).filter(|file| !file.is_empty());
     let mut ast = parse_with_source(input, from).ok()?;
 
-    let mut lowering = Lowering::default();
+    let mut lowering = Lowering { ifs, ..Lowering::default() };
+    // `@when` first: the body of a function or a mixin can have it.
+    if whens {
+        ast = lowering.lower_when(ast);
+    }
     lowering.collect(&mut ast, functions, mixins, false);
-    if lowering.functions.is_empty() && lowering.mixins.is_empty() {
+    if lowering.functions.is_empty() && lowering.mixins.is_empty() && !ifs && !whens {
         return None;
     }
     if !lowering.mixins.is_empty() {
         ast = lowering.expand(ast, false);
     }
-    if !lowering.functions.is_empty() {
+    if !lowering.functions.is_empty() || ifs {
         lowering.lower_calls(&mut ast, false, false);
     }
     ast.append(&mut lowering.properties);
@@ -244,6 +257,8 @@ struct Lowering {
     /// The names of the functions and mixins of the current stack.
     stack: Vec<String>,
     next_id: usize,
+    /// Lower `if()`.
+    ifs: bool,
 }
 
 impl Lowering {
@@ -446,11 +461,15 @@ impl Lowering {
             match &mut nodes[index] {
                 AstNode::Declaration(declaration) if in_style => {
                     if let Some(value) = &declaration.value {
-                        if value.contains("--") && value.contains('(') {
+                        let calls = !self.functions.is_empty() && value.contains("--") && value.contains('(');
+                        if calls || (self.ifs && value.contains("if(")) {
                             let variants = self.scan(value, &Env::Root, true);
                             if variants.len() > 1 || variants[0].text.as_deref() != Some(value.as_str()) {
-                                let text = |variant: &Variant| {
-                                    variant.text.clone().unwrap_or_else(|| invalid_at_computed_value_time(&declaration.property).to_string())
+                                // An empty value (an `if()` with no true
+                                // condition) is not valid.
+                                let text = |variant: &Variant| match &variant.text {
+                                    Some(text) if !text.trim().is_empty() => text.trim().to_string(),
+                                    _ => invalid_at_computed_value_time(&declaration.property).to_string(),
                                 };
                                 let mut variants = variants.into_iter();
                                 let first = variants.next().map(|variant| text(&variant));
@@ -560,6 +579,154 @@ impl Lowering {
         out
     }
 
+    // The conditions.
+
+    /// The variants of `if(inner)`: the value of the first branch with a
+    /// true condition. A branch with a condition that only the browser
+    /// knows is a variant with that condition, after the branches below
+    /// it, so it applies before them. With no true branch, the value is
+    /// empty. When a condition cannot be lowered, the `if()` stays.
+    fn if_function(&mut self, name: &str, inner: &str, env: &Env) -> Vec<Variant> {
+        let keep = |this: &mut Self| -> Vec<Variant> {
+            this.scan(inner, env, false)
+                .into_iter()
+                .map(|variant| Variant { text: variant.text.map(|text| format!("{name}({text})")), conditions: variant.conditions })
+                .collect()
+        };
+        let mut branches: Vec<(Vec<Vec<(String, String)>>, &str)> = Vec::new();
+        let mut last: Option<&str> = None;
+        for branch in segment(inner, b';') {
+            if branch.trim().is_empty() {
+                continue;
+            }
+            let Some(condition) = segment(branch, b':').first().copied().filter(|first| first.len() < branch.len()) else {
+                return keep(self);
+            };
+            let value = branch[condition.len() + 1..].trim();
+            let Some(condition) = parse_condition(condition.trim(), true) else { return keep(self) };
+            let Some(condition) = self.resolve_style(condition, env) else { return keep(self) };
+            let Some(disjuncts) = disjuncts(&condition) else { return keep(self) };
+            match disjuncts.as_slice() {
+                [] => continue,
+                [only] if only.is_empty() => {
+                    last = Some(value);
+                    break;
+                }
+                _ => branches.push((disjuncts, value)),
+            }
+        }
+        let mut out = match last {
+            Some(value) => self.scan(value, env, true),
+            None => vec![plain("")],
+        };
+        for (disjuncts, value) in branches.into_iter().rev() {
+            let variants = self.scan(value, env, true);
+            for conditions in disjuncts {
+                for variant in &variants {
+                    let mut with = conditions.clone();
+                    with.extend(variant.conditions.iter().cloned());
+                    out.push(Variant { conditions: with, text: variant.text.clone() });
+                }
+            }
+        }
+        out
+    }
+
+    /// The `style()` tests of a condition with their value: a test of a
+    /// parameter or a local variable of a function. `None`: a test of
+    /// another property, which only the browser knows.
+    fn resolve_style(&mut self, condition: Condition, env: &Env) -> Option<Condition> {
+        Some(match condition {
+            Condition::Style(test) => {
+                let Env::Function(frame) = env else { return None };
+                let (name, value) = match segment(&test, b':').first() {
+                    Some(first) if first.len() < test.len() => (first.trim().to_string(), Some(test[first.len() + 1..].trim().to_string())),
+                    _ => (test.trim().to_string(), None),
+                };
+                if !name.starts_with("--") || !(frame.params.contains_key(&name) || frame.locals.contains_key(&name)) {
+                    return None;
+                }
+                let actual = match self.lookup(env, &name) {
+                    Binding::Value(variants) if variants.len() == 1 => variants[0].text.clone(),
+                    Binding::Invalid => None,
+                    _ => return None,
+                };
+                Condition::Bool(match (actual, value) {
+                    (Some(actual), Some(value)) => actual.trim() == value,
+                    (actual, None) => actual.is_some(),
+                    (None, Some(_)) => false,
+                })
+            }
+            Condition::Not(inner) => Condition::Not(Box::new(self.resolve_style(*inner, env)?)),
+            Condition::And(list) => Condition::And(list.into_iter().map(|c| self.resolve_style(c, env)).collect::<Option<_>>()?),
+            Condition::Or(list) => Condition::Or(list.into_iter().map(|c| self.resolve_style(c, env)).collect::<Option<_>>()?),
+            other => other,
+        })
+    }
+
+    /// Replace each chain of `@when` and `@else` with `@media` and
+    /// `@supports` rules. A rule of the chain applies when its condition is
+    /// true and the conditions before it are false. An `@else` with no
+    /// `@when` before it is not valid, and goes.
+    fn lower_when(&mut self, nodes: Vec<AstNode>) -> Vec<AstNode> {
+        let mut out = Vec::with_capacity(nodes.len());
+        let mut nodes = nodes.into_iter().peekable();
+        while let Some(node) = nodes.next() {
+            let mut node = match node {
+                AstNode::AtRule(rule) if rule.name.eq_ignore_ascii_case("@when") => {
+                    let mut chain = vec![rule];
+                    while let Some(AstNode::AtRule(next)) = nodes.peek() {
+                        if !next.name.eq_ignore_ascii_case("@else") {
+                            break;
+                        }
+                        let Some(AstNode::AtRule(next)) = nodes.next() else { break };
+                        chain.push(next);
+                    }
+                    out.extend(self.lower_chain(chain));
+                    continue;
+                }
+                AstNode::AtRule(rule) if rule.name.eq_ignore_ascii_case("@else") => continue,
+                other => other,
+            };
+            if let Some(children) = node.children_mut() {
+                *children = self.lower_when(std::mem::take(children));
+            }
+            out.push(node);
+        }
+        out
+    }
+
+    fn lower_chain(&mut self, chain: Vec<AtRule>) -> Vec<AstNode> {
+        let mut conditions = Vec::with_capacity(chain.len());
+        for (index, rule) in chain.iter().enumerate() {
+            let condition = if index > 0 && rule.params.trim().is_empty() {
+                Some(Condition::Bool(true))
+            } else {
+                parse_condition(rule.params.trim(), false)
+            };
+            match condition {
+                Some(condition) => conditions.push(condition),
+                // A condition that is not valid: the chain stays.
+                None => return chain.into_iter().map(AstNode::AtRule).collect(),
+            }
+        }
+        let mut out = Vec::new();
+        for (index, rule) in chain.into_iter().enumerate() {
+            let mut all: Vec<Condition> = conditions[..index].iter().map(|before| Condition::Not(Box::new(before.clone()))).collect();
+            all.push(conditions[index].clone());
+            let Some(disjuncts) = disjuncts(&Condition::And(all)) else { continue };
+            let nodes = self.lower_when(rule.nodes);
+            for wrappers in disjuncts {
+                let mut wrapped = nodes.clone();
+                for (name, params) in wrappers.into_iter().rev() {
+                    wrapped = vec![AstNode::AtRule(AtRule { name, params, nodes: wrapped, loc: rule.loc.clone() })];
+                }
+                out.extend(wrapped);
+            }
+        }
+        out
+    }
+
     // The text of values.
 
     /// The value of the name of a `var()` in a scope.
@@ -632,6 +799,8 @@ impl Lowering {
                         Some(self.var(inner, env, calls))
                     } else if calls && name.starts_with("--") && self.functions.contains_key(name) {
                         Some(self.call(name, inner, env))
+                    } else if calls && self.ifs && name.eq_ignore_ascii_case("if") {
+                        Some(self.if_function(name, inner, env))
                     } else {
                         None
                     };
@@ -696,6 +865,258 @@ impl Lowering {
             },
         }
     }
+}
+
+// The conditions.
+
+/// A condition of `if()` or `@when`.
+#[derive(Debug, Clone, PartialEq)]
+enum Condition {
+    /// `media(…)`: the text in the parentheses.
+    Media(String),
+    /// `supports(…)`.
+    Supports(String),
+    /// `style(…)`.
+    Style(String),
+    /// `else`, or a `style()` test with a known value.
+    Bool(bool),
+    Not(Box<Condition>),
+    And(Vec<Condition>),
+    Or(Vec<Condition>),
+}
+
+/// Parse a condition: `media()`, `supports()` and, for `if()`, `style()`
+/// and `else`, with `not`, `and`, `or` and parentheses. `None`: not valid.
+fn parse_condition(text: &str, in_if: bool) -> Option<Condition> {
+    let (condition, rest) = parse_expression(text, in_if)?;
+    rest.trim().is_empty().then_some(condition)
+}
+
+fn parse_expression(text: &str, in_if: bool) -> Option<(Condition, &str)> {
+    let (first, mut rest) = parse_term(text, in_if)?;
+    let mut list = vec![first];
+    let mut operator: Option<&str> = None;
+    loop {
+        let trimmed = rest.trim_start();
+        let word = ["and", "or"].into_iter().find(|word| {
+            trimmed.len() > word.len()
+                && trimmed[..word.len()].eq_ignore_ascii_case(word)
+                && trimmed[word.len()..].starts_with(|c: char| c.is_whitespace() || c == '(')
+        });
+        let Some(word) = word else { break };
+        // `a and b or c` is not valid: one operator for each level.
+        if operator.is_some_and(|operator| operator != word) {
+            return None;
+        }
+        operator = Some(word);
+        let (next, after) = parse_term(&trimmed[word.len()..], in_if)?;
+        list.push(next);
+        rest = after;
+    }
+    let condition = match operator {
+        None => list.pop()?,
+        Some("and") => Condition::And(list),
+        Some(_) => Condition::Or(list),
+    };
+    Some((condition, rest))
+}
+
+fn parse_term(text: &str, in_if: bool) -> Option<(Condition, &str)> {
+    let text = text.trim_start();
+    if text.len() > 3 && text[..3].eq_ignore_ascii_case("not") && text[3..].starts_with(|c: char| c.is_whitespace() || c == '(') {
+        let (inner, rest) = parse_term(&text[3..], in_if)?;
+        return Some((Condition::Not(Box::new(inner)), rest));
+    }
+    if text.starts_with('(') {
+        let close = matching_paren(text, 0)?;
+        let (inner, rest) = parse_expression(&text[1..close], in_if)?;
+        if !rest.trim().is_empty() {
+            return None;
+        }
+        return Some((inner, &text[close + 1..]));
+    }
+    let end = ident_end(text, 0);
+    let name = text[..end].to_ascii_lowercase();
+    if in_if && name == "else" {
+        return Some((Condition::Bool(true), &text[end..]));
+    }
+    if !text[end..].starts_with('(') {
+        return None;
+    }
+    let close = matching_paren(text, end)?;
+    let inner = text[end + 1..close].trim().to_string();
+    let condition = match name.as_str() {
+        "media" => Condition::Media(inner),
+        "supports" => Condition::Supports(inner),
+        "style" if in_if => Condition::Style(inner),
+        _ => return None,
+    };
+    Some((condition, &text[close + 1..]))
+}
+
+/// Remove the known values: `Bool` only at the top, or not at all.
+fn simplify(condition: &Condition) -> Condition {
+    match condition {
+        Condition::Not(inner) => match simplify(inner) {
+            Condition::Bool(value) => Condition::Bool(!value),
+            other => Condition::Not(Box::new(other)),
+        },
+        Condition::And(list) => {
+            let mut out = Vec::new();
+            for item in list.iter().map(simplify) {
+                match item {
+                    Condition::Bool(false) => return Condition::Bool(false),
+                    Condition::Bool(true) => {}
+                    other => out.push(other),
+                }
+            }
+            match out.len() {
+                0 => Condition::Bool(true),
+                1 => out.pop().unwrap_or(Condition::Bool(true)),
+                _ => Condition::And(out),
+            }
+        }
+        Condition::Or(list) => {
+            let mut out = Vec::new();
+            for item in list.iter().map(simplify) {
+                match item {
+                    Condition::Bool(true) => return Condition::Bool(true),
+                    Condition::Bool(false) => {}
+                    other => out.push(other),
+                }
+            }
+            match out.len() {
+                0 => Condition::Bool(false),
+                1 => out.pop().unwrap_or(Condition::Bool(false)),
+                _ => Condition::Or(out),
+            }
+        }
+        other => other.clone(),
+    }
+}
+
+/// True when each test of the condition is of one kind: `media()` (with
+/// `media`) or `supports()`.
+fn is_only(condition: &Condition, media: bool) -> bool {
+    match condition {
+        Condition::Media(_) => media,
+        Condition::Supports(_) => !media,
+        Condition::Not(inner) => is_only(inner, media),
+        Condition::And(list) | Condition::Or(list) => list.iter().all(|item| is_only(item, media)),
+        Condition::Style(_) | Condition::Bool(_) => false,
+    }
+}
+
+/// The text of a condition of one kind, in parentheses: a media condition
+/// or a supports condition.
+fn condition_text(condition: &Condition) -> String {
+    match condition {
+        Condition::Media(text) | Condition::Supports(text) => format!("({text})"),
+        Condition::Not(inner) => format!("(not {})", condition_text(inner)),
+        Condition::And(list) => format!("({})", list.iter().map(condition_text).collect::<Vec<_>>().join(" and ")),
+        Condition::Or(list) => format!("({})", list.iter().map(condition_text).collect::<Vec<_>>().join(" or ")),
+        Condition::Style(_) | Condition::Bool(_) => String::new(),
+    }
+}
+
+/// The most conditional rules for one condition.
+const MAX_DISJUNCTS: usize = 64;
+
+/// The condition as rules: a list of alternatives, each one a list of
+/// conditional rules from the outside in. An empty list: never true. One
+/// empty alternative: always true. `None`: a `style()` test that only the
+/// browser knows, or too many rules.
+fn disjuncts(condition: &Condition) -> Option<Vec<Vec<(String, String)>>> {
+    let condition = simplify(condition);
+    match &condition {
+        Condition::Bool(true) => return Some(vec![Vec::new()]),
+        Condition::Bool(false) => return Some(Vec::new()),
+        _ => {}
+    }
+    if is_only(&condition, true) {
+        return Some(vec![vec![("@media".to_string(), strip_outer(condition_text(&condition)))]]);
+    }
+    if is_only(&condition, false) {
+        return Some(vec![vec![("@supports".to_string(), condition_text(&condition))]]);
+    }
+    // Media and supports together: one alternative for each term of the
+    // disjunctive normal form.
+    let terms = normal_form(&condition, false)?;
+    let mut out = Vec::new();
+    for term in terms {
+        let media: Vec<String> = term.iter().filter(|(m, _)| m.is_media()).map(|(m, n)| literal(m, *n)).collect();
+        let supports: Vec<String> = term.iter().filter(|(m, _)| !m.is_media()).map(|(m, n)| literal(m, *n)).collect();
+        let mut rules = Vec::new();
+        if !media.is_empty() {
+            rules.push(("@media".to_string(), media.join(" and ")));
+        }
+        if !supports.is_empty() {
+            rules.push(("@supports".to_string(), supports.join(" and ")));
+        }
+        out.push(rules);
+    }
+    Some(out)
+}
+
+/// `((a) and (b))` as the params of `@media`: `(a) and (b)`.
+fn strip_outer(text: String) -> String {
+    match text.strip_prefix('(').and_then(|inner| inner.strip_suffix(')')) {
+        Some(inner) if matching_paren(&text, 0) == Some(text.len() - 1) && inner.starts_with('(') => inner.to_string(),
+        _ => text,
+    }
+}
+
+impl Condition {
+    fn is_media(&self) -> bool {
+        matches!(self, Condition::Media(_))
+    }
+}
+
+fn literal(test: &Condition, negated: bool) -> String {
+    let text = condition_text(test);
+    if negated {
+        format!("(not {text})")
+    } else {
+        text
+    }
+}
+
+/// The disjunctive normal form: each term is a list of tests, each test
+/// with true when it is negated.
+#[allow(clippy::type_complexity)]
+fn normal_form(condition: &Condition, negated: bool) -> Option<Vec<Vec<(Condition, bool)>>> {
+    let terms = match (condition, negated) {
+        (Condition::Media(_) | Condition::Supports(_), _) => vec![vec![(condition.clone(), negated)]],
+        (Condition::Not(inner), _) => return normal_form(inner, !negated),
+        (Condition::And(list), false) | (Condition::Or(list), true) => {
+            let mut terms = vec![Vec::new()];
+            for item in list {
+                let item_terms = normal_form(item, negated)?;
+                let mut next = Vec::new();
+                for term in &terms {
+                    for item_term in &item_terms {
+                        let mut joined = term.clone();
+                        joined.extend(item_term.iter().cloned());
+                        next.push(joined);
+                    }
+                }
+                if next.len() > MAX_DISJUNCTS {
+                    return None;
+                }
+                terms = next;
+            }
+            terms
+        }
+        (Condition::Or(list), false) | (Condition::And(list), true) => {
+            let mut terms = Vec::new();
+            for item in list {
+                terms.extend(normal_form(item, negated)?);
+            }
+            terms
+        }
+        (Condition::Style(_) | Condition::Bool(_), _) => return None,
+    };
+    (terms.len() <= MAX_DISJUNCTS).then_some(terms)
 }
 
 // The syntax.
@@ -969,9 +1390,11 @@ mod tests {
     }
 
     #[test]
-    fn the_targets_of_tailwind_need_both() {
+    fn the_targets_of_tailwind_need_each_rule() {
         assert!(needs_lowering(&targets(), &FUNCTIONS));
         assert!(needs_lowering(&targets(), &MIXINS));
+        assert!(needs_lowering(&targets(), &IF));
+        assert!(needs_lowering(&targets(), &WHEN));
         let new = Browsers { chrome: Some(140 << 16), ..Browsers::default() };
         assert!(!needs_lowering(&new, &FUNCTIONS));
         assert!(needs_lowering(&new, &MIXINS));
@@ -1083,6 +1506,87 @@ mod tests {
         // (`EAFD`): the body of the mixin.
         let mappings = map.split("\"mappings\":\"").nth(1).unwrap();
         assert!(mappings.starts_with("AAGA,GAAG;EAFD"), "{mappings}");
+    }
+
+    #[test]
+    fn if_gives_the_first_true_branch() {
+        assert_eq!(
+            run(".a { width: if(media(width >= 40rem): 10px; else: 20px); }"),
+            ".a {\n  width: 20px;\n  @media (width >= 40rem) {\n    width: 10px;\n  }\n}\n"
+        );
+        // The first branch comes last, so it applies when the two
+        // conditions are true.
+        assert_eq!(
+            run(".a { top: if(media(hover): 1px; supports(display: grid): 2px; else: 3px); }"),
+            ".a {\n  top: 3px;\n  @supports (display: grid) {\n    top: 2px;\n  }\n  @media (hover) {\n    top: 1px;\n  }\n}\n"
+        );
+    }
+
+    #[test]
+    fn if_with_no_true_branch_is_empty() {
+        assert_eq!(
+            run(".a { display: if(supports(display: grid): grid); margin: 1px if(media(hover): 2px); }"),
+            ".a {\n  display: unset;\n  @supports (display: grid) {\n    display: grid;\n  }\n  margin: 1px;\n  @media (hover) {\n    margin: 1px 2px;\n  }\n}\n"
+        );
+    }
+
+    #[test]
+    fn if_with_not_and_or() {
+        assert_eq!(
+            run(".a { color: if(not media(hover) and media(width > 1px): red; else: blue); }"),
+            ".a {\n  color: blue;\n  @media (not (hover)) and (width > 1px) {\n    color: red;\n  }\n}\n"
+        );
+        assert_eq!(
+            run(".a { color: if(media(hover) and supports(color: red): red; else: blue); }"),
+            ".a {\n  color: blue;\n  @media (hover) {\n    @supports (color: red) {\n      color: red;\n    }\n  }\n}\n"
+        );
+        // `or` of two kinds: one rule for each.
+        assert_eq!(
+            run(".a { color: if(media(hover) or supports(color: red): red; else: blue); }"),
+            ".a {\n  color: blue;\n  @media (hover) {\n    color: red;\n  }\n  @supports (color: red) {\n    color: red;\n  }\n}\n"
+        );
+    }
+
+    #[test]
+    fn if_with_style_in_a_function() {
+        let css = "@function --ink(--mode) { result: if(style(--mode: dark): black; else: white); }\n.a { color: --ink(dark); background: --ink(light); }";
+        assert_eq!(run(css), ".a {\n  color: black;\n  background: white;\n}\n");
+        // A test of another property: only the browser knows it.
+        let css = ".a { color: if(style(--mode: dark): black; else: white); }";
+        assert_eq!(run(css), ".a {\n  color: if(style(--mode: dark): black; else: white);\n}\n");
+    }
+
+    #[test]
+    fn when_and_else() {
+        let css = "@when media(width >= 40rem) { .a { color: red; } } @else supports(display: grid) { .a { color: blue; } } @else { .a { color: green; } }";
+        assert_eq!(
+            run(css),
+            "@media (width >= 40rem) {\n  .a {\n    color: red;\n  }\n}\n@media (not (width >= 40rem)) {\n  @supports (display: grid) {\n    .a {\n      color: blue;\n    }\n  }\n}\n@media (not (width >= 40rem)) {\n  @supports (not (display: grid)) {\n    .a {\n      color: green;\n    }\n  }\n}\n"
+        );
+        // Media only: one rule with `not` and `and`.
+        let css = ".a { @when media(hover) { color: red; } @else media(width > 1px) { color: blue; } }";
+        assert_eq!(
+            run(css),
+            ".a {\n  @media (hover) {\n    color: red;\n  }\n  @media (not (hover)) and (width > 1px) {\n    color: blue;\n  }\n}\n"
+        );
+    }
+
+    #[test]
+    fn a_lone_else_goes_and_a_bad_condition_stays() {
+        assert_eq!(run("@else { .a { color: red; } }\n@when media(hover) { .b { top: 0; } }"), "@media (hover) {\n  .b {\n    top: 0;\n  }\n}\n");
+        let css = "@when frobnicate(1) {\n  .a {\n    top: 0;\n  }\n}\n";
+        assert_eq!(run(css), css);
+    }
+
+    #[test]
+    fn the_parser_of_conditions() {
+        assert_eq!(parse_condition("media(a) and media(b) or media(c)", false), None);
+        assert_eq!(parse_condition("else", false), None);
+        assert_eq!(parse_condition("else", true), Some(Condition::Bool(true)));
+        assert_eq!(
+            parse_condition("not (media(a) or supports(b: c))", false),
+            Some(Condition::Not(Box::new(Condition::Or(vec![Condition::Media("a".into()), Condition::Supports("b: c".into())]))))
+        );
     }
 
     #[test]

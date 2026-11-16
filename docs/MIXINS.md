@@ -1,8 +1,12 @@
-# CSS functions and mixins
+# CSS functions, mixins and conditions
 
 [CSS Custom Functions and Mixins Module Level 1](https://drafts.csswg.org/css-mixins-1/)
 adds `@function` and `@mixin` to CSS. A function gives a value. A
-mixin gives declarations and rules for a style rule:
+mixin gives declarations and rules for a style rule. Two more drafts add
+conditions: `if()` ([CSS Values 5](https://drafts.csswg.org/css-values-5/#if-notation))
+for a value, and `@when` and `@else`
+([CSS Conditional Rules 5](https://drafts.csswg.org/css-conditional-5/))
+for rules. See [Conditions](#conditions).
 
 ```css
 @function --gap(--n) {
@@ -35,17 +39,20 @@ mixin gives declarations and rules for a style rule:
 - **The browsers decide**, as for each other lowering of Lightning CSS.
   The step lowers a rule when a target browser of the optimizer does not
   have it. The targets are those of Tailwind CSS (Chrome 111, Safari
-  16.4, Firefox 128), so the step lowers the two rules for each project:
+  16.4, Firefox 128), so the step lowers each rule for each project:
 
   | Rule | The first browsers | With the targets of Tailwind CSS |
   |---|---|---|
   | `@function` | Chrome and Edge 139 | Lowered |
   | `@mixin`, `@apply --name` | None yet | Lowered |
+  | `if()` | Chrome and Edge 137 | Lowered |
+  | `@when`, `@else` | None yet | Lowered |
 
-  The table is `FUNCTIONS` and `MIXINS` in `css_mixins.rs`. When a new
-  release of Tailwind CSS raises its targets, the decision follows.
+  The table is `FUNCTIONS`, `MIXINS`, `IF` and `WHEN` in
+  `css_mixins.rs`. When a new release of Tailwind CSS raises its
+  targets, the decision follows.
 
-A stylesheet with no `@function` and no `@mixin` does not change. With no
+A stylesheet with none of these rules does not change. With no
 `--minify` and no `--optimize`, the output is the output of Tailwind CSS,
 with the rules in it.
 
@@ -186,6 +193,67 @@ before.
   too many arguments remove the `@apply`. `@layer` in the body of a mixin
   is not valid, and is removed.
 
+## Conditions
+
+### `if()`
+
+`if()` gives the value of the first branch with a true condition:
+
+```css
+.card {
+  padding: if(media(width >= 40rem): 2rem; else: 1rem);
+  display: if(supports(display: grid): grid; else: block);
+}
+```
+
+The lowering:
+
+```css
+.card { padding: 1rem; }
+@media (min-width: 40rem) { .card { padding: 2rem; } }
+.card { display: block; }
+@supports (display: grid) { .card { display: grid; } }
+```
+
+- Each branch with a `media()` or `supports()` condition becomes a
+  nested rule after the declaration. The first branch comes last, so it
+  applies when two conditions are true, as in `if()`.
+- `else`, or no true branch, gives the declaration itself. With no true
+  branch, the value of `if()` is empty: the declaration becomes `unset`
+  (`initial` for a custom property), as in the browser, where a false
+  `if()` does not go back to an earlier declaration.
+- `not`, `and`, `or` and parentheses work. Media tests only, or supports
+  tests only, give one rule. The two kinds together give one rule for
+  each alternative.
+- `style()` is known only in a function, for a parameter or a local
+  variable: `if(style(--mode: dark): black; else: white)` in the body of
+  `@function --ink(--mode)` gives `black` for `--ink(dark)`. A `style()`
+  test of another property depends on the element: the `if()` stays.
+
+### `@when` and `@else`
+
+A chain of `@when` and `@else` rules applies the first rule with a true
+condition:
+
+```css
+@when media(width >= 40rem) {
+  .nav { display: flex; }
+} @else supports(display: grid) {
+  .nav { display: grid; }
+} @else {
+  .nav { display: block; }
+}
+```
+
+Each rule of the chain becomes a `@media` or `@supports` rule with its
+condition and with `not` of each condition before it. Media tests only
+give one `@media` rule (`@media (not (width >= 40rem)) and (hover)`).
+With the two kinds, a rule can become more than one rule (a condition
+`not (a and b)` is `not a`, or `not b`). The rules then can apply
+together, with the same declarations. An `@else` with no `@when`
+before it is not valid, and goes. A chain with a condition that is not
+valid stays.
+
 ## Limits
 
 - **Conditions together.** Each conditional rule of a function gives one
@@ -203,6 +271,10 @@ before.
   there.
 - **Other stylesheets.** The step sees one output. A mixin or a function
   of another stylesheet stays as it is.
+- **`style()` in a mixin.** A `style()` test of a parameter of a mixin is
+  not known: the `if()` stays.
+- **The drafts.** `if()` follows the Editor's Draft of CSS Values 5, and
+  `@when` the Editor's Draft of CSS Conditional Rules 5 (2026-11-10).
 
 ## Two faults of Tailwind CSS
 
