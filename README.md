@@ -113,6 +113,11 @@ download, and a small build takes a third of the time. A builder (for
 example the builder of BEAM.com) builds the NIF and puts it in `priv`,
 and the project does not change. See [`docs/NIF.md`](docs/NIF.md).
 
+CSS functions and mixins (`@function`, `@mixin`, `@apply --name`) need
+the optimizer: add `--optimize` to the arguments of the profile, so the
+watcher in development lowers them too. See
+[`docs/MIXINS.md`](docs/MIXINS.md).
+
 ## npm
 
 This repository is also the npm package `tailwind.com`:

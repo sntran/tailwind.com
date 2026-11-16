@@ -64,6 +64,93 @@ The lowering of the example:
 .panel { margin: 0; }
 ```
 
+## With Tailwind CSS
+
+The two forms of `@apply` work together. The compiler tells them apart
+by the name:
+
+- `@apply flex gap-4 md:grid` (no dashed name): the utilities of Tailwind
+  CSS, with their variants. Tailwind CSS compiles it.
+- `@apply --button` (a dashed name): a CSS mixin. The optimizer lowers it.
+
+One `@apply` cannot have the two. But the body of a mixin can have the
+`@apply` of Tailwind CSS. So a mixin can use the utilities and the
+variants:
+
+```css
+@mixin --button(--color: var(--color-sky-600), --text: white) {
+  @apply inline-flex items-center gap-2 rounded-lg px-4 py-2 font-medium md:px-6;
+  @apply bg-(--color) text-(--text) hover:bg-(--color)/90;
+  @apply focus-visible:outline-2 focus-visible:outline-(--color);
+  @contents;
+}
+
+.btn {
+  @apply --button;
+}
+
+.btn-danger {
+  @apply --button(var(--color-red-600)) {
+    text-transform: uppercase;
+  }
+}
+```
+
+- The utilities with a custom property, `bg-(--color)`, give
+  `var(--color)`. The parameter of the mixin then replaces it. So the
+  arguments of the mixin go into the utilities, also with a variant and
+  an opacity: `.btn-danger:hover` gets
+  `color-mix(in oklab, var(--color-red-600) 90%, transparent)`.
+- Each variant works: Tailwind CSS gives nested rules (`&:hover`,
+  `@media`, `:is(& > *)`) in the body of the mixin, and the lowering
+  keeps them.
+- A parameter hides a custom property with the same name in the body,
+  also in the utilities. A parameter `--spacing` changes each spacing
+  utility of the mixin. Give the parameters names that are not the
+  names of theme variables, or use this on purpose.
+- With no optimizer, the output has the mixin after Tailwind CSS: the
+  utilities are declarations in the body of the mixin.
+
+Tailwind CSS tells you to use `@apply` only a little: a component of
+your templates (for example a function component of Phoenix,
+`<.button>`) keeps the utilities in the markup, and you can change them
+there. A mixin is for the CSS that has no template: the content of a CMS
+or of Markdown, the markup of a library, or a rule that must have
+arguments. A mixin is better than an `@apply` of utilities in a class for
+these reasons:
+
+- It has parameters, default values and a block (`@contents`).
+- It is standard CSS. When the browsers have mixins, the same CSS works
+  with no lowering.
+- A class with `@apply` is a utility class. A mixin is not a class, so a
+  rule applies it where it must, also to an element that has no class
+  (`.prose a`).
+
+## In a Phoenix project
+
+The lowering runs only with `--minify` or `--optimize`.
+`mix assets.deploy` gives `--minify`, so a release has the lowered CSS.
+The watcher of the endpoint in development gives neither. Then the
+output keeps `@mixin`, and the browser does not apply it. Add
+`--optimize` to the arguments of the profile: the optimizer runs, and
+the output is not minified.
+
+```elixir
+config :tailwind,
+  version: "4.3.5",
+  my_app: [
+    args: ~w(
+      --input=assets/css/app.css
+      --output=priv/static/assets/css/app.css
+      --optimize
+    ),
+    cd: Path.expand("..", __DIR__)
+  ]
+```
+
+With `--minify` from `mix assets.deploy` too, the output is minified, as
+before.
+
 ## The functions
 
 - Each call of a known function gets its `result`, with the arguments and

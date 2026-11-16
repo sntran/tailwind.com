@@ -14,6 +14,8 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   mixins (`@function`, `@mixin` and `@apply --name`) for the browsers of
   Tailwind CSS, before Lightning CSS, which does not know them yet. The
   output with no optimizer does not change. See `docs/MIXINS.md`.
+  A Phoenix project adds `--optimize` to the arguments of its profile,
+  so the watcher in development lowers them too.
 
 ### Fixed
 
