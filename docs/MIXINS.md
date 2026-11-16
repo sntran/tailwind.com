@@ -54,8 +54,8 @@ The lowering of the example:
 ```css
 .panel {
   background: red;
-  padding: 2rem;
   gap: 8px;
+  padding: 2rem;
 }
 @media (min-width: 40rem) {
   .panel { gap: 16px; }
