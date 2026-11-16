@@ -276,6 +276,49 @@ fn split_with_separators(params: &str) -> Vec<&str> {
     parts
 }
 
+/// The words of the params of `@apply`: the parts between the spaces that
+/// are not in parentheses, brackets, braces or strings. An empty part is
+/// not a word.
+fn top_level_words(params: &str) -> Vec<&str> {
+    let mut words = Vec::new();
+    let mut depth = 0usize;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    let mut start = 0;
+    for (index, c) in params.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if c == '\\' {
+            escaped = true;
+            continue;
+        }
+        if let Some(q) = quote {
+            if c == q {
+                quote = None;
+            }
+            continue;
+        }
+        match c {
+            '"' | '\'' => quote = Some(c),
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            _ if depth == 0 && is_js_whitespace(c) => {
+                if start < index {
+                    words.push(&params[start..index]);
+                }
+                start = index + c.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    if start < params.len() {
+        words.push(&params[start..]);
+    }
+    words
+}
+
 /// `params.replace(/-\*$/, '')`: the root of the utility of an `@utility`.
 fn utility_root(params: &str) -> &str {
     params.strip_suffix("-*").unwrap_or(params)
@@ -578,14 +621,23 @@ fn apply(child: &AtRule, design_system: &DesignSystem, mut origins: Option<&mut 
     }
 
     if !dashed_idents.is_empty() && crate::switches::APPLY_CSS_MIXINS.on() {
+        // A fix of this program (docs/COMPATIBILITY.md, "Fixes"): upstream
+        // splits the params at each space, also in the arguments of a
+        // mixin. Thus `@apply --m(a, b)` was a mixin `--m(a,` and a
+        // utility `b)`, and an error. Here the words are the parts at the
+        // spaces that are not in brackets, braces, parentheses or strings.
+        // Where upstream gives no error, the result is the same.
+        let words = top_level_words(&child.params);
+        let mixins: Vec<&str> = words.iter().copied().filter(|word| word.starts_with("--")).collect();
+
         // Only dashed identifiers: this is a CSS mixin, and it stays.
         // https://drafts.csswg.org/css-mixins-1/#apply-rule
-        if normal_idents.is_empty() {
+        if mixins.len() == words.len() {
             return Ok(None);
         }
 
         // Mixins and utilities together are not valid.
-        let list = dashed_idents.join(" ");
+        let list = mixins.join(" ");
         return Err(Error::new(format!(
             "You cannot use `@apply` with both mixins and utilities. Please move `@apply {list}` into a separate rule."
         )));
@@ -809,6 +861,20 @@ mod tests {
             run(".a { @apply --mixin one; }").unwrap_err().message,
             "You cannot use `@apply` with both mixins and utilities. Please move `@apply --mixin` into a separate rule."
         );
+    }
+
+    #[test]
+    fn the_arguments_of_a_mixin_can_have_spaces() {
+        // Upstream gives the error "both mixins and utilities" for these.
+        for params in ["--m(a, b)", "--m({ a, b }, c)", "--m( a ) --n(\"x y\")"] {
+            let css = format!(".a {{ @apply {params}; }}");
+            assert_eq!(run(&css).unwrap().0, format!(".a {{\n  @apply {params};\n}}\n"), "{params}");
+        }
+        assert_eq!(
+            run(".a { @apply one --m(a, b); }").unwrap_err().message,
+            "You cannot use `@apply` with both mixins and utilities. Please move `@apply --m(a, b)` into a separate rule."
+        );
+        assert_eq!(top_level_words("  one\t[a b]  (c d) 'e f' "), vec!["one", "[a b]", "(c d)", "'e f'"]);
     }
 
     #[test]

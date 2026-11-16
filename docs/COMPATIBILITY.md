@@ -132,6 +132,23 @@ real standalone program.
 - **The help text** has the same options, in another layout.
 - **Text that is not valid Unicode** cannot be an input. JavaScript
   strings can hold a lone surrogate.
+- **CSS functions and mixins with the optimizer**: with `--minify` or
+  `--optimize`, `@function`, `@mixin` and `@apply --name` are lowered
+  for the targets of the optimizer ([`MIXINS.md`](MIXINS.md)). The
+  official program keeps them in the optimized output, as its Lightning
+  CSS does not know them. With no optimizer, the output is the same.
+
+## Fixes
+
+A fault of Tailwind CSS that this program corrects. Each fix gives the
+same result as upstream where upstream gives no error. When a release of
+Tailwind CSS fixes the fault, the port of that release replaces the fix
+(`docs/SYNC.md`), and the fix has no more effect. The script engine runs
+the official compiler, so it has the fault.
+
+| Fault | Fix | Since | Issue |
+|---|---|---|---|
+| `@apply --m(a, b)`: the params of `@apply` are split at each space, also in the arguments of a mixin, and the result is the error "You cannot use `@apply` with both mixins and utilities". | The words are split only at the spaces that are not in parentheses, brackets, braces or strings (`top_level_words` of `native/tailwind/src/apply.rs`). On with `APPLY_CSS_MIXINS` (4.3.1 and later). | Unreleased | Not filed yet |
 
 ## JavaScript modules
 

@@ -330,6 +330,7 @@ runs it in the browser, with a small WASI host in JavaScript
 | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/TESTING.md`](docs/TESTING.md) | Build `tailwind.com`, and the tests. |
 | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) | The time, the memory and the size, against the official programs. |
 | [`docs/SITE.md`](docs/SITE.md) | The site on GitHub Pages: `tailwind.wasm` in the browser, with each version. |
+| [`docs/MIXINS.md`](docs/MIXINS.md) | CSS functions and mixins (`@function`, `@mixin`): the optimizer lowers them for the browsers of Tailwind CSS. |
 | [`docs/NIF.md`](docs/NIF.md) | The program as a NIF in the Erlang VM, for a builder such as the builder of BEAM.com. |
 | [`docs/SYNC.md`](docs/SYNC.md) | Move to a new version of Tailwind CSS. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What comes next. |
