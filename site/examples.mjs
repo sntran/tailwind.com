@@ -163,6 +163,37 @@ export const examples = [
 `,
   },
   {
+    // The optimizer lowers sibling-index() and sibling-count()
+    // (docs/MIXINS.md).
+    name: 'Tree counting: sibling-index()',
+    mode: 'one',
+    a: '4.3.5',
+    minify: true,
+    markup: `<div class="p-6">
+  <ul class="bars">
+    <li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li>
+  </ul>
+  <p class="mt-4 text-slate-600">Each bar gets its height and its color from its place in the list, and its width from the number of bars. Add or remove a li: the bars change. Clear --minify: the output keeps sibling-index(), which only Chrome 138 and later know.</p>
+</div>
+`,
+    css: `@import "tailwindcss";
+
+.bars {
+  display: flex;
+  align-items: end;
+  gap: 0.25rem;
+  height: 10rem;
+
+  > li {
+    width: calc(100% / sibling-count());
+    height: calc(sibling-index() / sibling-count() * 100%);
+    border-radius: var(--radius-md);
+    background: oklch(0.7 0.15 calc(sibling-index() * 40));
+  }
+}
+`,
+  },
+  {
     name: 'The typography plugin',
     mode: 'two',
     a: '4.3.5',

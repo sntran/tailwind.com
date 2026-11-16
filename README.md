@@ -113,8 +113,9 @@ download, and a small build takes a third of the time. A builder (for
 example the builder of BEAM.com) builds the NIF and puts it in `priv`,
 and the project does not change. See [`docs/NIF.md`](docs/NIF.md).
 
-CSS functions, mixins and conditions (`@function`, `@mixin`,
-`@apply --name`, `if()`, `@when`) need the optimizer: add `--optimize` to the arguments of the profile, so the
+CSS functions, mixins, conditions and tree counting (`@function`,
+`@mixin`, `@apply --name`, `if()`, `@when`, `sibling-index()`) need the
+optimizer: add `--optimize` to the arguments of the profile, so the
 watcher in development lowers them too. See
 [`docs/MIXINS.md`](docs/MIXINS.md).
 
@@ -335,7 +336,7 @@ runs it in the browser, with a small WASI host in JavaScript
 | [`docs/BUILDING.md`](docs/BUILDING.md), [`docs/TESTING.md`](docs/TESTING.md) | Build `tailwind.com`, and the tests. |
 | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) | The time, the memory and the size, against the official programs. |
 | [`docs/SITE.md`](docs/SITE.md) | The site on GitHub Pages: `tailwind.wasm` in the browser, with each version. |
-| [`docs/MIXINS.md`](docs/MIXINS.md) | CSS functions, mixins and conditions (`@function`, `@mixin`, `if()`, `@when`): the optimizer lowers them for the browsers of Tailwind CSS. |
+| [`docs/MIXINS.md`](docs/MIXINS.md) | CSS functions, mixins, conditions and tree counting (`@function`, `@mixin`, `if()`, `@when`, `sibling-index()`): the optimizer lowers them for the browsers of Tailwind CSS. |
 | [`docs/NIF.md`](docs/NIF.md) | The program as a NIF in the Erlang VM, for a builder such as the builder of BEAM.com. |
 | [`docs/SYNC.md`](docs/SYNC.md) | Move to a new version of Tailwind CSS. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What comes next. |

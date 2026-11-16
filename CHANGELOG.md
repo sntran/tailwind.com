@@ -19,6 +19,9 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 - The optimizer also lowers the conditions `if()` (with `media()`,
   `supports()`, and `style()` of a parameter in a function), and the
   rules `@when` and `@else`, to `@media` and `@supports` rules.
+- The optimizer also lowers `sibling-index()` and `sibling-count()`, with
+  64 rules `:nth-child()` (and 64 rules `:nth-last-child()`) for up to
+  1,024 siblings.
 
 ### Fixed
 
