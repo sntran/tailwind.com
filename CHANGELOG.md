@@ -21,6 +21,9 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   Before, as in Tailwind CSS, it was the error "You cannot use `@apply`
   with both mixins and utilities". This is a fix of this program: see
   "Fixes" in `docs/COMPATIBILITY.md`.
+- `@contents;` stays in the body of a mixin. Before, as in Tailwind CSS,
+  the last pass of the compiler removed it, as an at-rule with no body.
+  This is also a fix of this program.
 
 ## 0.3.0 - 2026-11-13
 

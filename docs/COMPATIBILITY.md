@@ -140,8 +140,8 @@ real standalone program.
 
 ## Fixes
 
-A fault of Tailwind CSS that this program corrects. Each fix gives the
-same result as upstream where upstream gives no error. When a release of
+A fault of Tailwind CSS that this program corrects. Each fix changes
+only the stylesheets with the fault. When a release of
 Tailwind CSS fixes the fault, the port of that release replaces the fix
 (`docs/SYNC.md`), and the fix has no more effect. The script engine runs
 the official compiler, so it has the fault.
@@ -149,6 +149,7 @@ the official compiler, so it has the fault.
 | Fault | Fix | Since | Issue |
 |---|---|---|---|
 | `@apply --m(a, b)`: the params of `@apply` are split at each space, also in the arguments of a mixin, and the result is the error "You cannot use `@apply` with both mixins and utilities". | The words are split only at the spaces that are not in parentheses, brackets, braces or strings (`top_level_words` of `native/tailwind/src/apply.rs`). On with `APPLY_CSS_MIXINS` (4.3.1 and later). | Unreleased | Not filed yet |
+| `@contents;` in the body of a mixin: the last pass of the compiler (`optimizeAst`) removes an at-rule with no body when it is not in its list (`@layer`, `@charset`, `@custom-media`, `@namespace`, `@import`, `@apply`). So the place of the block of `@apply` goes, and a mixin with only `@contents;` goes too. | `@contents` is in the list (`native/tailwind/src/optimize.rs`). On with `APPLY_CSS_MIXINS`. | Unreleased | Not filed yet |
 
 ## JavaScript modules
 

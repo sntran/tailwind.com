@@ -59,8 +59,27 @@ fn the_source_map_goes_through_the_lowering() {
 
 #[test]
 fn a_stylesheet_with_no_function_and_no_mixin_does_not_change() {
-    // `@apply --name` with no `@mixin`: the rule stays for the browser.
+    // `@apply --name` with no `@mixin`: the step does not run, and the
+    // rule stays for the browser. The split of the rule is from Lightning
+    // CSS, as in the official program.
     let input = ".a {\n  @apply --other;\n  color: red;\n}\n";
     let optimized = optimize(input, "input.css", true, None).unwrap();
-    assert_eq!(optimized.code, ".a{@apply --other;color:red}");
+    assert_eq!(optimized.code, ".a{@apply --other;}.a{color:red}");
+}
+
+#[test]
+fn the_compiler_keeps_contents_with_no_block() {
+    // A fix of this program: upstream removes `@contents;`, and then the
+    // mixin `--wrap`, which has no other node.
+    let css = "@mixin --m {\n  color: red;\n  @contents;\n}\n@mixin --wrap {\n  @contents;\n}\n.a {\n  @apply --m {\n    top: 0;\n  }\n}\n";
+    let mut compiler = tailwind::compile(css, tailwind::CompileOptions::default()).unwrap();
+    let output = compiler.build(&[]);
+    // `toCss` of upstream prints an at-rule with no params and no body
+    // with a space: `@contents ;`.
+    assert!(
+        output.ends_with("@mixin --m {\n  color: red;\n  @contents ;\n}\n@mixin --wrap {\n  @contents ;\n}\n.a {\n  @apply --m {\n    top: 0;\n  }\n}\n"),
+        "{output}"
+    );
+    let optimized = optimize(&output, "input.css", true, None).unwrap();
+    assert!(optimized.code.ends_with("*/\n.a{color:red;top:0}"), "{}", optimized.code);
 }

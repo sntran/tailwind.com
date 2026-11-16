@@ -396,6 +396,10 @@ impl Optimizer<'_> {
                     || matches!(rule.name.as_str(), "@layer" | "@charset" | "@custom-media" | "@namespace")
                     || (rule.name == "@import" && switches::EMPTY_IMPORT_STAYS.on())
                     || (rule.name == "@apply" && switches::APPLY_CSS_MIXINS.on())
+                    // A fix of this program (docs/COMPATIBILITY.md,
+                    // "Fixes"): upstream removes `@contents;` from the body
+                    // of a mixin, as an at-rule with no body.
+                    || (rule.name == "@contents" && switches::APPLY_CSS_MIXINS.on())
                     || !switches::EMPTY_RULES_REMOVED.on()
                 {
                     self.arena.attach(parent, copy);

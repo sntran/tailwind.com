@@ -117,7 +117,14 @@ The lowering of the example:
 - **Other stylesheets.** The step sees one output. A mixin or a function
   of another stylesheet stays as it is.
 
-## `@apply` with spaces in the arguments
+## Two faults of Tailwind CSS
+
+These two faults stop a mixin before the optimizer sees it. This
+program corrects them ("Fixes" in [`COMPATIBILITY.md`](COMPATIBILITY.md)).
+When Tailwind CSS fixes them, the port of that version replaces these
+fixes.
+
+### `@apply` with spaces in the arguments
 
 Tailwind CSS splits the params of `@apply` at each space, also in the
 arguments of a mixin. So `@apply --card(red, 2rem)` is the mixin
@@ -125,6 +132,14 @@ arguments of a mixin. So `@apply --card(red, 2rem)` is the mixin
 `@apply` with both mixins and utilities". This program splits only at
 the spaces that are not in parentheses, brackets, braces or strings
 (`top_level_words` of `native/tailwind/src/apply.rs`). Where upstream
-gives no error, the result is the same. When Tailwind CSS fixes it, the
-port of that version replaces this fix. See "Fixes" in
-[`COMPATIBILITY.md`](COMPATIBILITY.md).
+gives no error, the result is the same.
+
+### `@contents;` with no block
+
+The last pass of Tailwind CSS removes an at-rule with no body, except
+the at-rules of a list. `@apply` is in the list, but `@contents` is not.
+So `@contents;` goes from the body of a mixin, and the block of
+`@apply` has no place. A mixin with only `@contents;` goes too. This
+program adds `@contents` to the list (`native/tailwind/src/optimize.rs`).
+The printer of Tailwind CSS gives `@contents ;`, with a space, which is
+valid CSS.
