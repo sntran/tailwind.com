@@ -70,6 +70,57 @@ export const examples = [
 `,
   },
   {
+    // The optimizer lowers CSS functions and mixins (docs/MIXINS.md). With
+    // no --minify, the output keeps them, and a browser does not know them.
+    name: 'CSS functions and mixins',
+    mode: 'one',
+    a: '4.3.5',
+    minify: true,
+    markup: `<div class="grid gap-4 p-6">
+  <article class="card">
+    <h2 class="font-bold">A mixin</h2>
+    <p>Clear --minify: the output keeps @mixin and @apply, and the browser does not know them yet.</p>
+  </article>
+  <article class="card-warm">
+    <h2 class="font-bold">Arguments and a block</h2>
+    <p>The gap and the padding come from a function. Make the preview wider than 40rem: they become two times larger.</p>
+  </article>
+</div>
+`,
+    css: `@import "tailwindcss";
+
+@function --space(--n) {
+  --step: 0.5rem;
+  @media (width >= 40rem) {
+    --step: 1rem;
+  }
+  result: calc(var(--n) * var(--step));
+}
+
+@mixin --card(--bg: white, --fg: var(--color-slate-700)) {
+  @apply rounded-xl shadow-lg ring-1 ring-slate-900/5;
+  display: grid;
+  gap: --space(1);
+  padding: --space(3);
+  background: var(--bg);
+  & > p {
+    color: var(--fg);
+  }
+  @contents;
+}
+
+.card {
+  @apply --card;
+}
+
+.card-warm {
+  @apply --card(var(--color-amber-100), var(--color-amber-900)) {
+    border: 1px solid var(--color-amber-300);
+  }
+}
+`,
+  },
+  {
     name: 'The typography plugin',
     mode: 'two',
     a: '4.3.5',

@@ -6,6 +6,27 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
+## Unreleased
+
+### Added
+
+- The optimizer (`--minify` and `--optimize`) lowers CSS functions and
+  mixins (`@function`, `@mixin` and `@apply --name`) for the browsers of
+  Tailwind CSS, before Lightning CSS, which does not know them yet. The
+  output with no optimizer does not change. See `docs/MIXINS.md`.
+  A Phoenix project adds `--optimize` to the arguments of its profile,
+  so the watcher in development lowers them too.
+
+### Fixed
+
+- `@apply --m(a, b)`, a mixin with a space in its arguments, is a mixin.
+  Before, as in Tailwind CSS, it was the error "You cannot use `@apply`
+  with both mixins and utilities". This is a fix of this program: see
+  "Fixes" in `docs/COMPATIBILITY.md`.
+- `@contents;` stays in the body of a mixin. Before, as in Tailwind CSS,
+  the last pass of the compiler removed it, as an at-rule with no body.
+  This is also a fix of this program.
+
 ## 0.3.0 - 2026-11-13
 
 The program in the Erlang VM, as a NIF (with native NIF objects for

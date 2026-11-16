@@ -86,6 +86,12 @@ plugin layer of the version before as a patch file
 code. Then add the version before to the job `switches` of
 `.github/workflows/fuzz.yml`.
 
+This program corrects some faults of Tailwind CSS ("Fixes" in
+[`COMPATIBILITY.md`](COMPATIBILITY.md)). When the new release fixes one
+of them, port its code in place of the fix of this program, with no
+switch: the older versions also get the result of the fixed release, as
+for a fault that stops the compiler. Then remove the row from the table.
+
 When `packages/@tailwindcss-standalone/src/index.ts` changes (the row
 of `PORT.md`): it has the list of the plugins in the standalone program
 and the rule for their names. Make the same change in `EMBEDDED` and

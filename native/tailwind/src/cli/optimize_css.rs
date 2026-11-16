@@ -12,6 +12,21 @@ use std::sync::{Arc, RwLock};
 
 use super::remapping;
 
+/// The browsers of the optimizer: the targets of `optimize.ts` of
+/// `@tailwindcss/node`. They also decide the lowering of the functions and
+/// the mixins (`css_mixins.rs`).
+pub const TARGETS: Browsers = Browsers {
+    android: None,
+    chrome: Some(111 << 16),
+    edge: None,
+    firefox: Some(128 << 16),
+    ie: None,
+    ios_saf: Some((16 << 16) | (4 << 8)),
+    opera: None,
+    safari: Some((16 << 16) | (4 << 8)),
+    samsung: None,
+};
+
 /// A warning of Lightning CSS, as its Node.js package gives it: the
 /// message, the line (from 1) and the column (from 1, in UTF-16 code
 /// units).
@@ -37,13 +52,7 @@ fn pass(code: &str, file: &str, minify: bool, map: Option<&str>, warnings: Optio
     };
 
     let targets = Targets {
-        browsers: Some(Browsers {
-            safari: Some((16 << 16) | (4 << 8)),
-            ios_saf: Some((16 << 16) | (4 << 8)),
-            firefox: Some(128 << 16),
-            chrome: Some(111 << 16),
-            ..Browsers::default()
-        }),
+        browsers: Some(TARGETS),
         include: Features::Nesting | Features::MediaQueries,
         exclude: Features::LogicalProperties | Features::DirSelector | Features::LightDark,
     };
@@ -84,6 +93,15 @@ fn pass(code: &str, file: &str, minify: bool, map: Option<&str>, warnings: Optio
         _ => None,
     };
     Ok((out.code, map))
+}
+
+/// The map from the result of `a` to the sources of `b`: `a` maps to the
+/// input of `b`.
+fn compose(a: &str, b: &str) -> Result<String, String> {
+    let mut a = SourceMap::from_json("/", a).map_err(|e| e.to_string())?;
+    let mut b = SourceMap::from_json("/", b).map_err(|e| e.to_string())?;
+    a.extends(&mut b).map_err(|e| e.to_string())?;
+    a.to_json(None).map_err(|e| e.to_string())
 }
 
 /// The result of the optimizer.
@@ -163,6 +181,20 @@ fn format_warnings(input: &str, warnings: &[Warning]) -> Option<String> {
 /// Optimize the CSS. `file` is the name of the input, for messages. `map`
 /// is the source map of the input as JSON text.
 pub fn optimize(input: &str, file: &str, minify: bool, map: Option<&str>) -> Result<Optimized, String> {
+    // The functions and the mixins first: Lightning CSS does not know them.
+    let lowered = super::css_mixins::lower(input, file, &TARGETS, map.is_some());
+    let composed;
+    let (input, map) = match &lowered {
+        Some(lowered) => {
+            composed = match (lowered.map.as_deref(), map) {
+                (Some(ours), Some(given)) => Some(compose(ours, given)?),
+                _ => None,
+            };
+            (lowered.code.as_str(), composed.as_deref())
+        }
+        None => (input, map),
+    };
+
     // Two passes: the second one merges the rules that the first one made
     // adjacent when it removed the nesting.
     // The warnings are the warnings of the first pass, as upstream.

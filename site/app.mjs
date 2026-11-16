@@ -249,9 +249,10 @@ function updateControls() {
   controls.versionALabel.textContent = m === 'two' ? 'First version' : 'Version'
 }
 
-function open({ markup, css, mode: m = 'one', a, b, program: p }) {
+function open({ markup, css, mode: m = 'one', a, b, program: p, minify = false }) {
   controls.markup.value = markup
   controls.css.value = css
+  controls.minify.checked = minify
   setMode(m)
   if (p && data.programs.some((x) => x.wasm === p)) controls.program.value = p
   if (a) controls.versionA.value = a
