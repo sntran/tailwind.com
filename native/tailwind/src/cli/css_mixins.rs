@@ -3,7 +3,7 @@
 //! `@apply --name(…)`, from CSS Custom Functions and Mixins Module Level 1
 //! (the Editor's Draft of 2026-11-04), `if()`, `sibling-index()` and
 //! `sibling-count()` from CSS Values 5, and `@when` and `@else` from CSS
-//! Conditional Rules 5.
+//! Conditional Rules 5. The math functions are in `css_math.rs`.
 //!
 //! Tailwind CSS keeps these rules in its output, and Lightning CSS does not
 //! know them. This step is a part of Lightning CSS in this program: it runs
@@ -24,6 +24,7 @@ use lightningcss::targets::Browsers;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use super::css_math::{Kinds, MathLowering};
 use super::source_maps::serialize_source_map;
 
 /// The first version of each browser with a rule, in the encoding of
@@ -71,6 +72,31 @@ const WHEN: Support = NO_BROWSER;
 const SIBLING: Support =
     Support { android: Some(138 << 16), chrome: Some(138 << 16), edge: Some(138 << 16), opera: Some(122 << 16), ..NO_BROWSER };
 
+/// Safari and iOS 15.4, Firefox 118, and Chrome from `chrome`, with Opera
+/// 16 versions less (the data of MDN).
+const fn math(chrome: u32) -> Support {
+    Support {
+        android: Some(chrome << 16),
+        chrome: Some(chrome << 16),
+        edge: Some(chrome << 16),
+        firefox: Some(118 << 16),
+        ie: None,
+        ios_saf: Some((15 << 16) | (4 << 8)),
+        opera: Some((chrome - 16) << 16),
+        safari: Some((15 << 16) | (4 << 8)),
+        samsung: None,
+    }
+}
+
+/// `round()`, `mod()` and `rem()`: Chrome 125.
+const STEPPED: Support = math(125);
+
+/// `pow()`, `sqrt()`, `hypot()`, `log()` and `exp()`: Chrome 120.
+const EXPONENTIAL: Support = math(120);
+
+/// `abs()` and `sign()`: Chrome 138.
+const SIGN: Support = math(138);
+
 /// True when a target browser does not have the rule.
 fn needs_lowering(targets: &Browsers, support: &Support) -> bool {
     let pairs = [
@@ -107,7 +133,13 @@ pub fn lower(input: &str, file: &str, targets: &Browsers, with_map: bool) -> Opt
     let ifs = input.contains("if(") && needs_lowering(targets, &IF);
     let whens = input.contains("@when") && needs_lowering(targets, &WHEN);
     let siblings = (input.contains("sibling-index(") || input.contains("sibling-count(")) && needs_lowering(targets, &SIBLING);
-    if !functions && !mixins && !ifs && !whens && !siblings {
+    let kinds = Kinds {
+        stepped: needs_lowering(targets, &STEPPED),
+        pow: needs_lowering(targets, &EXPONENTIAL),
+        sign: needs_lowering(targets, &SIGN),
+    };
+    let math = kinds.any() && super::css_math::uses(input, kinds);
+    if !functions && !mixins && !ifs && !whens && !siblings && !math {
         return None;
     }
     let from = with_map.then_some(file).filter(|file| !file.is_empty());
@@ -119,7 +151,7 @@ pub fn lower(input: &str, file: &str, targets: &Browsers, with_map: bool) -> Opt
         ast = lowering.lower_when(ast);
     }
     lowering.collect(&mut ast, functions, mixins, false);
-    if lowering.functions.is_empty() && lowering.mixins.is_empty() && !ifs && !whens && !siblings {
+    if lowering.functions.is_empty() && lowering.mixins.is_empty() && !ifs && !whens && !siblings && !math {
         return None;
     }
     if !lowering.mixins.is_empty() {
@@ -131,6 +163,12 @@ pub fn lower(input: &str, file: &str, targets: &Browsers, with_map: bool) -> Opt
     // Last: a function, a mixin or an `if()` can give these functions.
     if siblings {
         lower_siblings(&mut ast);
+    }
+    // After all: each step before can give a math function.
+    if math {
+        let mut math = MathLowering::new(kinds);
+        math.lower(&mut ast, false, false);
+        lowering.properties.append(&mut math.properties);
     }
     ast.append(&mut lowering.properties);
 
@@ -1574,16 +1612,16 @@ fn split_args(text: &str) -> Vec<&str> {
         .collect()
 }
 
-fn is_ident_char(c: char) -> bool {
+pub(super) fn is_ident_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '-' || c == '_' || !c.is_ascii()
 }
 
-fn ident_end(text: &str, start: usize) -> usize {
+pub(super) fn ident_end(text: &str, start: usize) -> usize {
     text[start..].char_indices().find(|(_, c)| !is_ident_char(*c)).map_or(text.len(), |(offset, _)| start + offset)
 }
 
 /// The end of the string that starts at `start`, after its last quote.
-fn string_end(text: &str, start: usize) -> usize {
+pub(super) fn string_end(text: &str, start: usize) -> usize {
     let bytes = text.as_bytes();
     let quote = bytes[start];
     let mut index = start + 1;
@@ -1598,7 +1636,7 @@ fn string_end(text: &str, start: usize) -> usize {
 }
 
 /// The index of the `)` for the `(` at `open`.
-fn matching_paren(text: &str, open: usize) -> Option<usize> {
+pub(super) fn matching_paren(text: &str, open: usize) -> Option<usize> {
     let bytes = text.as_bytes();
     let mut depth = 0usize;
     let mut index = open;
@@ -1642,6 +1680,9 @@ mod tests {
         assert!(needs_lowering(&targets(), &IF));
         assert!(needs_lowering(&targets(), &WHEN));
         assert!(needs_lowering(&targets(), &SIBLING));
+        assert!(needs_lowering(&targets(), &STEPPED));
+        assert!(needs_lowering(&targets(), &EXPONENTIAL));
+        assert!(needs_lowering(&targets(), &SIGN));
         let new = Browsers { chrome: Some(140 << 16), ..Browsers::default() };
         assert!(!needs_lowering(&new, &FUNCTIONS));
         assert!(needs_lowering(&new, &MIXINS));

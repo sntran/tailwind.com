@@ -22,6 +22,10 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 - The optimizer also lowers `sibling-index()` and `sibling-count()`, with
   64 rules `:nth-child()` (and 64 rules `:nth-last-child()`) for up to
   1,024 siblings.
+- The optimizer also lowers `round()`, `mod()`, `rem()`, `pow()`, `abs()`
+  and `sign()` with `var()`, for Chrome 111 to 137: Lightning CSS only
+  computes them with fixed values. A rule `@supports` keeps the native
+  functions for the browsers that have them.
 
 ### Fixed
 
