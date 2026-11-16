@@ -5,6 +5,7 @@
 
 pub mod args;
 pub mod context;
+pub mod css_math;
 pub mod css_mixins;
 pub mod engine;
 pub mod events;

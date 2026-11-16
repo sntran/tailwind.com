@@ -1,4 +1,4 @@
-# CSS functions, mixins, conditions and tree counting
+# CSS functions, mixins, conditions, tree counting and math
 
 [CSS Custom Functions and Mixins Module Level 1](https://drafts.csswg.org/css-mixins-1/)
 adds `@function` and `@mixin` to CSS. A function gives a value. A
@@ -8,6 +8,8 @@ for a value, and `@when` and `@else`
 ([CSS Conditional Rules 5](https://drafts.csswg.org/css-conditional-5/))
 for rules. See [Conditions](#conditions). CSS Values 5 also adds
 `sibling-index()` and `sibling-count()`: see [Tree counting](#tree-counting).
+The math functions of CSS Values 4 that old browsers do not have are in
+[Math functions](#math-functions).
 
 ```css
 @function --gap(--n) {
@@ -49,9 +51,12 @@ for rules. See [Conditions](#conditions). CSS Values 5 also adds
   | `if()` | Chrome and Edge 137 | Lowered |
   | `@when`, `@else` | None yet | Lowered |
   | `sibling-index()`, `sibling-count()` | Chrome and Edge 138 | Lowered |
+  | `round()`, `mod()`, `rem()` | Chrome 125, Safari 15.4, Firefox 118 | Lowered, for Chrome 111 to 124 |
+  | `pow()` | Chrome 120, Safari 15.4, Firefox 118 | Lowered, for Chrome 111 to 119 |
+  | `abs()`, `sign()` | Chrome 138, Safari 15.4, Firefox 118 | Lowered, for Chrome 111 to 137 |
 
-  The table is `FUNCTIONS`, `MIXINS`, `IF`, `WHEN` and `SIBLING` in
-  `css_mixins.rs`. When a new release of Tailwind CSS raises its
+  The table is `FUNCTIONS`, `MIXINS`, `IF`, `WHEN`, `SIBLING`,
+  `STEPPED`, `EXPONENTIAL` and `SIGN` in `css_mixins.rs`. When a new release of Tailwind CSS raises its
   targets, the decision follows.
 
 A stylesheet with none of these rules does not change. With no
@@ -298,6 +303,61 @@ index from the end, less one. The rules only set the custom properties
 - Chromium has the two functions. On lists of 1 to 300 elements, with a
   pseudo-element, nested rules, a `@media` rule and a `@function`, the
   lowered CSS gives the same computed values as the native functions.
+
+## Math functions
+
+Lightning CSS computes a math function with fixed values:
+`round(10.4px, 1px)` is `10px`. A value with `var()`, or with two units,
+is known only in the browser. Chrome 111, a target of Tailwind CSS, does
+not have these functions, so `native/tailwind/src/cli/css_math.rs`
+lowers them:
+
+| Function | Lowering | Exact |
+|---|---|---|
+| `pow(A, n)`, with a whole number `n` from -8 to 8 | `A` times itself `n` times | Yes |
+| `abs(A)` | `max(A, -1 * (A))` | Yes |
+| `sign(A)` | `sin(atan2(A, A * 0))`: 1, -1 or 0 | Yes |
+| `round()`, `mod()`, `rem()` | A helper property with the quotient | In floating point |
+
+For `round(down, A, B)`, `mod(A, B)` and the others, the step adds a
+custom property to the declaration, `--math-1`, registered as an
+`<integer>`. The browser rounds its value, so it is the whole quotient
+`A / B`:
+
+```css
+.a { width: round(var(--w), 10px); }
+
+/* lowered */
+.a {
+  --math-1: calc(tan(atan2(var(--w), 10px)) + 0.000001);
+  width: calc(var(--math-1) * (10px));
+}
+@supports (order: round(1, 1)) {
+  .a { width: round(var(--w), 10px); }
+}
+@property --math-1 { syntax: "<integer>"; inherits: true; initial-value: 0; }
+```
+
+- The quotient of two dimensions is `tan(atan2(A, B))`: old browsers
+  cannot divide a length by a length. The quotient of a number by a
+  plain number is `A / B`.
+- A registered `<integer>` rounds a half away from zero, and `round()`
+  rounds a half up. So the step uses `floor(q + 0.5)` for `nearest`, and
+  the rounding of `q ± 0.5`, with a small number (0.000001) so that a
+  whole quotient in floating point (1.9999999) is still whole.
+- The `@supports` rule gives the native functions to each browser that
+  has them. Only an old browser uses the helper property.
+- In a custom property (`--size: round(var(--a), 5px)`), the helper
+  property is inherited, so a descendant that uses `var(--size)` gets the
+  value.
+- In Chromium, on 81 elements with 12 declarations and a custom property,
+  the lowered values are the same as the native values, with and without
+  the `@supports` rules (972 values). With `B = 0.1`, the native
+  function itself has an error of floating point: `round(up, -10, 0.1)`
+  is `-9.9` there, and `-10` in the lowering.
+- `sqrt()`, `hypot()`, `log()`, `exp()` and `pow()` with another
+  exponent have no exact lowering, and they stay. In `@keyframes`, a
+  helper property and a nested rule are not valid: the value stays.
 
 ## Limits
 

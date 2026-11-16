@@ -112,3 +112,14 @@ fn the_optimizer_lowers_the_tree_counting_functions() {
     assert!(optimized.code.contains(".list>li:nth-child(n+993){--sibling-hi:31}"), "{}", optimized.code);
     assert_eq!(optimized.warnings, None);
 }
+
+#[test]
+fn the_optimizer_lowers_the_math_functions() {
+    let input = ".a {\n  width: round(var(--w), 10px);\n  opacity: pow(var(--o), 2);\n  margin: round(10.4px, 1px);\n}\n";
+    let optimized = optimize(input, "input.css", true, None).unwrap();
+    assert_eq!(
+        optimized.code,
+        ".a{--math-1:calc(tan(atan2(var(--w), 10px)) + .000001);width:calc(var(--math-1) * (10px))}@supports (order:round(1, 1)){.a{width:round(var(--w), 10px)}}.a{opacity:calc((var(--o)) * (var(--o)));margin:10px}@property --math-1{syntax:\"<integer>\";inherits:true;initial-value:0}"
+    );
+    assert_eq!(optimized.warnings, None);
+}
