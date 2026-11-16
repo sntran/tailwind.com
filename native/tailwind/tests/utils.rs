@@ -504,6 +504,20 @@ mod decode_arbitrary_value_tests {
         assert_eq!(add_whitespace_around_math_operators("calc(1  +  2)"), "calc(1 + 2)");
     }
 
+    /// A fix of this program (docs/COMPATIBILITY.md, "Fixes"): a quoted
+    /// string stays as it is. Upstream gives `'(min(1, 2))'`.
+    #[test]
+    fn a_quoted_string_stays_as_it_is() {
+        assert_eq!(add_whitespace_around_math_operators("'(min(1,2))'"), "'(min(1,2))'");
+        assert_eq!(add_whitespace_around_math_operators("'(calc(1px+2px))'"), "'(calc(1px+2px))'");
+        assert_eq!(add_whitespace_around_math_operators("\"calc(1+2)\""), "\"calc(1+2)\"");
+        // The math function around the string is formatted as before.
+        assert_eq!(add_whitespace_around_math_operators("calc(1px+2px) 'max(1,2)'"), "calc(1px + 2px) 'max(1,2)'");
+        assert_eq!(add_whitespace_around_math_operators("'it\\'s min(1,2)' calc(1+2)"), "'it\\'s min(1,2)' calc(1 + 2)");
+        // An open string goes to the end.
+        assert_eq!(add_whitespace_around_math_operators("'min(1,2)"), "'min(1,2)");
+    }
+
     #[test]
     fn has_math_fn_finds_a_call_of_a_math_function() {
         assert!(has_math_fn("calc(1+2)"));
