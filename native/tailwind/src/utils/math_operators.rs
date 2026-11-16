@@ -30,6 +30,29 @@ fn byte_from_end(text: &str, offset: usize) -> Option<u8> {
     bytes.len().checked_sub(offset).map(|i| bytes[i])
 }
 
+/// A fix of this program (docs/COMPATIBILITY.md, "Fixes"): a quoted string
+/// goes to the result as it is. Upstream formats a math function in a
+/// string: `content-['(min(1,2))']` gave `'(min(1, 2))'`. `start` is the
+/// index of the quote; the result is the index after the string.
+fn copy_string(input: &str, start: usize, result: &mut String) -> usize {
+    let bytes = input.as_bytes();
+    let quote = bytes[start];
+    let mut i = start + 1;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' => i += 2,
+            b if b == quote => {
+                i += 1;
+                break;
+            }
+            _ => i += 1,
+        }
+    }
+    let end = i.min(bytes.len());
+    result.push_str(&input[start..end]);
+    end
+}
+
 #[inline]
 fn is_digit(b: Option<u8>) -> bool {
     matches!(b, Some(b'0'..=b'9'))
@@ -69,6 +92,11 @@ fn add_whitespace_around_each_operator(input: &str) -> String {
             let width = input[i..].chars().next().map_or(1, char::len_utf8);
             result.push_str(&input[i..i + width]);
             i += width;
+            continue;
+        }
+
+        if c == b'\'' || c == b'"' {
+            i = copy_string(input, i, &mut result);
             continue;
         }
 
@@ -181,6 +209,13 @@ pub fn add_whitespace_around_math_operators(input: &str) -> Cow<'_, str> {
             let width = input[i..].chars().next().map_or(1, char::len_utf8);
             result.push_str(&input[i..i + width]);
             i += width;
+            continue;
+        }
+
+        if c == b'\'' || c == b'"' {
+            last_value_pos = value_pos;
+            value_pos = None;
+            i = copy_string(input, i, &mut result);
             continue;
         }
 

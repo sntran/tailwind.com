@@ -40,6 +40,10 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 - `@contents;` stays in the body of a mixin. Before, as in Tailwind CSS,
   the last pass of the compiler removed it, as an at-rule with no body.
   This is also a fix of this program.
+- A quoted string in an arbitrary value keeps its text:
+  `content-['(min(1,2))']` gives `'(min(1,2))'`. Before, as in Tailwind
+  CSS, the spaces around math operators went into the string too
+  (`'(min(1, 2))'`). This is also a fix of this program.
 
 ## 0.3.0 - 2026-11-13
 
