@@ -16,6 +16,9 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   output with no optimizer does not change. See `docs/MIXINS.md`.
   A Phoenix project adds `--optimize` to the arguments of its profile,
   so the watcher in development lowers them too.
+- The optimizer also lowers the conditions `if()` (with `media()`,
+  `supports()`, and `style()` of a parameter in a function), and the
+  rules `@when` and `@else`, to `@media` and `@supports` rules.
 
 ### Fixed
 
