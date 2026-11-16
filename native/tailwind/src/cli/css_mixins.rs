@@ -593,7 +593,7 @@ impl Lowering {
                 .map(|variant| Variant { text: variant.text.map(|text| format!("{name}({text})")), conditions: variant.conditions })
                 .collect()
         };
-        let mut branches: Vec<(Vec<Vec<(String, String)>>, &str)> = Vec::new();
+        let mut branches: Vec<(Vec<Wrappers>, &str)> = Vec::new();
         let mut last: Option<&str> = None;
         for branch in segment(inner, b';') {
             if branch.trim().is_empty() {
@@ -869,6 +869,9 @@ impl Lowering {
 
 // The conditions.
 
+/// Conditional rules from the outside in: (`@media`, `(…)`).
+type Wrappers = Vec<(String, String)>;
+
 /// A condition of `if()` or `@when`.
 #[derive(Debug, Clone, PartialEq)]
 enum Condition {
@@ -1026,7 +1029,7 @@ const MAX_DISJUNCTS: usize = 64;
 /// conditional rules from the outside in. An empty list: never true. One
 /// empty alternative: always true. `None`: a `style()` test that only the
 /// browser knows, or too many rules.
-fn disjuncts(condition: &Condition) -> Option<Vec<Vec<(String, String)>>> {
+fn disjuncts(condition: &Condition) -> Option<Vec<Wrappers>> {
     let condition = simplify(condition);
     match &condition {
         Condition::Bool(true) => return Some(vec![Vec::new()]),
@@ -1081,10 +1084,12 @@ fn literal(test: &Condition, negated: bool) -> String {
     }
 }
 
-/// The disjunctive normal form: each term is a list of tests, each test
-/// with true when it is negated.
-#[allow(clippy::type_complexity)]
-fn normal_form(condition: &Condition, negated: bool) -> Option<Vec<Vec<(Condition, bool)>>> {
+/// A term of the disjunctive normal form: tests, each one with true when
+/// it is negated.
+type Term = Vec<(Condition, bool)>;
+
+/// The disjunctive normal form: the terms.
+fn normal_form(condition: &Condition, negated: bool) -> Option<Vec<Term>> {
     let terms = match (condition, negated) {
         (Condition::Media(_) | Condition::Supports(_), _) => vec![vec![(condition.clone(), negated)]],
         (Condition::Not(inner), _) => return normal_form(inner, !negated),
