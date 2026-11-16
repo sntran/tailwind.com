@@ -123,3 +123,14 @@ fn the_optimizer_lowers_the_math_functions() {
     );
     assert_eq!(optimized.warnings, None);
 }
+
+#[test]
+fn the_optimizer_lowers_sqrt_hypot_and_progress() {
+    let input = ".a {\n  width: calc(sqrt(var(--n)) * 1px);\n  opacity: progress(var(--x), 0, 10);\n  height: calc(progress(25px, 0px, 100px) * 1px);\n}\n";
+    let optimized = optimize(input, "input.css", true, None).unwrap();
+    assert_eq!(
+        optimized.code,
+        ".a{width:calc(tan(acos((1 - (var(--n))) / (1 + (var(--n)))) / 2) * 1px);opacity:clamp(0, ((var(--x)) - (0)) / (10), 1)}@supports (order:progress(1, 0, 2)){.a{opacity:progress(var(--x), 0, 10)}}.a{height:.25px}"
+    );
+    assert_eq!(optimized.warnings, None);
+}

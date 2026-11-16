@@ -26,6 +26,10 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   and `sign()` with `var()`, for Chrome 111 to 137: Lightning CSS only
   computes them with fixed values. A rule `@supports` keeps the native
   functions for the browsers that have them.
+- The optimizer also lowers `sqrt()`, `hypot()`, `pow()` with a half
+  exponent, and `progress()`, with the functions of trigonometry that
+  Chrome 111 has. `progress()` with fixed values is a number at build
+  time.
 
 ### Fixed
 

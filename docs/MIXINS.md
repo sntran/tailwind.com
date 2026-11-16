@@ -52,11 +52,12 @@ The math functions of CSS Values 4 that old browsers do not have are in
   | `@when`, `@else` | None yet | Lowered |
   | `sibling-index()`, `sibling-count()` | Chrome and Edge 138 | Lowered |
   | `round()`, `mod()`, `rem()` | Chrome 125, Safari 15.4, Firefox 118 | Lowered, for Chrome 111 to 124 |
-  | `pow()` | Chrome 120, Safari 15.4, Firefox 118 | Lowered, for Chrome 111 to 119 |
+  | `pow()`, `sqrt()`, `hypot()` | Chrome 120, Safari 15.4, Firefox 118 | Lowered, for Chrome 111 to 119 |
   | `abs()`, `sign()` | Chrome 138, Safari 15.4, Firefox 118 | Lowered, for Chrome 111 to 137 |
+  | `progress()` | Chrome and Edge 138 | Lowered |
 
   The table is `FUNCTIONS`, `MIXINS`, `IF`, `WHEN`, `SIBLING`,
-  `STEPPED`, `EXPONENTIAL` and `SIGN` in `css_mixins.rs`. When a new release of Tailwind CSS raises its
+  `STEPPED`, `EXPONENTIAL`, `SIGN` and `PROGRESS` in `css_mixins.rs`. When a new release of Tailwind CSS raises its
   targets, the decision follows.
 
 A stylesheet with none of these rules does not change. With no
@@ -314,9 +315,12 @@ lowers them:
 
 | Function | Lowering | Exact |
 |---|---|---|
-| `pow(A, n)`, with a whole number `n` from -8 to 8 | `A` times itself `n` times | Yes |
+| `pow(A, n)`, with a whole number or a half `n` from -8 to 8 | `A` times itself `n` times, and `sqrt(A)` for the half | Yes |
+| `sqrt(x)` | `tan(acos((1 - x) / (1 + x)) / 2)` | Yes |
 | `abs(A)` | `max(A, -1 * (A))` | Yes |
 | `sign(A)` | `sin(atan2(A, A * 0))`: 1, -1 or 0 | Yes |
+| `hypot(A, B, …)` | `max / cos(atan2(min, max))`, with the maximum and the minimum of `\|A\|` and `\|B\|`, for each next argument | In floating point |
+| `progress(A, B, C)` | `clamp(0, (A - B) / (C - B), 1)`; with `no-clamp`, no `clamp()` | In floating point |
 | `round()`, `mod()`, `rem()` | A helper property with the quotient | In floating point |
 
 For `round(down, A, B)`, `mod(A, B)` and the others, the step adds a
@@ -355,9 +359,29 @@ custom property to the declaration, `--math-1`, registered as an
   the `@supports` rules (972 values). With `B = 0.1`, the native
   function itself has an error of floating point: `round(up, -10, 0.1)`
   is `-9.9` there, and `-10` in the lowering.
-- `sqrt()`, `hypot()`, `log()`, `exp()` and `pow()` with another
-  exponent have no exact lowering, and they stay. In `@keyframes`, a
-  helper property and a nested rule are not valid: the value stays.
+- `sqrt()` uses the identity `tan(θ / 2) = sqrt((1 - cos θ) / (1 + cos θ))`,
+  and `hypot()` the identity `cos(atan2(min, max)) = max / hypot`. Chrome
+  111 has the functions of trigonometry.
+- `progress()` with fixed values is a number at build time:
+  `progress(25px, 0px, 100px)` is `0.25`. With a start and an end that
+  are plain numbers, the quotient is a division. Else it is
+  `tan(atan2())`. When the start and the end are the same, the result is
+  0 (with `no-clamp`, an infinity), as in the spec.
+- `hypot()` and `progress()` also get the `@supports` rule: in Firefox,
+  `atan2()` of two units (rem and px) is 0 (bug 1802744 of Mozilla), so
+  each browser that has the function uses it. The test of `no-clamp` has
+  `no-clamp` in it: Chromium 153 has `progress()`, but not `no-clamp`.
+- In Chromium, on 61 elements with `sqrt()`, `hypot()` (also with rem
+  and px together), `pow()` with a half, and `progress()`, the lowered
+  values are the same as the native values, with and without the
+  `@supports` rules (488 values). For `progress(no-clamp, …)`, which
+  Chromium does not have, the values are the same as the exact values.
+- The division of two lengths (`calc(var(--w) / 1px)`) is not lowered:
+  its usual use has two units, and `atan2()` of two units is 0 in
+  Firefox 128, a target of Tailwind CSS. `log()`, `exp()` and `pow()`
+  with another exponent have no exact lowering, and they stay. In
+  `@keyframes`, a helper property and a nested rule are not valid: the
+  value stays.
 
 ## Limits
 
