@@ -5,11 +5,14 @@
 
 pub mod args;
 pub mod context;
+#[cfg(feature = "optimize")]
 pub mod css_math;
+#[cfg(feature = "optimize")]
 pub mod css_mixins;
 pub mod engine;
 pub mod events;
 pub mod modules;
+#[cfg(feature = "optimize")]
 pub mod optimize_css;
 pub mod remapping;
 pub mod resolve;
@@ -202,6 +205,7 @@ struct Options {
     output: Option<PathBuf>,
     /// The name of the input for the optimizer: the path of the input,
     /// `-` for stdin, or `input.css`.
+    #[cfg_attr(not(feature = "optimize"), allow(dead_code))]
     optimizer_file: String,
     map: MapOption,
     minify: bool,
@@ -451,7 +455,14 @@ fn write(
     // The optimizer and the map run only for new CSS: the watch calls
     // this function at each tick.
     if (optimize || options.map != MapOption::None) && previous.css.as_deref() != Some(css) {
+        // The optimizer changes the map.
+        #[cfg_attr(not(feature = "optimize"), allow(unused_mut))]
         let mut map = (options.map != MapOption::None).then(source_map).transpose()?;
+        #[cfg(not(feature = "optimize"))]
+        if optimize {
+            return Err(Error::new("This build of tailwind.com has no optimizer: --minify and --optimize do not work."));
+        }
+        #[cfg(feature = "optimize")]
         if optimize {
             let optimized = optimize_css::optimize(
                 css,

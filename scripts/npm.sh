@@ -6,7 +6,8 @@
 #
 #   sh scripts/npm.sh TAILWIND_COM TAILWIND_WASM TAG
 #
-# TAILWIND_COM and TAILWIND_WASM: the files of the release. TAG: the tag of
+# TAILWIND_COM and TAILWIND_WASM: the files of the release, with
+# tailwind-small.wasm in the directory of TAILWIND_WASM. TAG: the tag of
 # the GitHub release that has the file, for example v0.4.0.
 set -eu
 [ $# -eq 3 ] || { echo "usage: $0 TAILWIND_COM TAILWIND_WASM TAG" >&2; exit 2; }
@@ -26,6 +27,9 @@ fi
 out=$root/runtime
 mkdir -p "$out"
 cp "$wasm" "$out/tailwind.wasm"
+# The program with no JavaScript engine and no optimizer, for a page
+# (js/page.js): the file next to TAILWIND_WASM.
+cp "$(dirname "$wasm")/tailwind-small.wasm" "$out/tailwind-small.wasm"
 printf '{"version": "%s", "tag": "%s", "tailwindcss": "%s", "sha256": "%s"}\n' \
     "$version" "$tag" "$TAILWINDCSS_VERSION" "$sha" > "$out/release.json"
 echo "$0: wrote $out (package $version, release $tag, Tailwind CSS $TAILWINDCSS_VERSION)"

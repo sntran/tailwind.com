@@ -323,6 +323,8 @@ impl AnyCompiler {
     /// `DesignSystem::set_keep_compiled` of the native engine. For the
     /// script engine, nothing changes.
     pub fn set_keep_compiled(&self, keep: bool) {
+        // With no JavaScript engine, the native engine is the only one.
+        #[cfg_attr(not(tw_js), allow(irrefutable_let_patterns))]
         if let AnyCompiler::Native(compiler) = self {
             compiler.design_system().set_keep_compiled(keep);
         }

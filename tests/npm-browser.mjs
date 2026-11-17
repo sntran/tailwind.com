@@ -4,9 +4,11 @@
 // "browser"). A local server gives the files at the paths of jsDelivr:
 // "/npm/tailwind.com@0.0.0" is the default file, with no redirect.
 //
-// Usage: node tests/npm-browser.mjs [--wasm FILE] [--official FILE]
+// Usage: node tests/npm-browser.mjs [--wasm FILE] [--small FILE] [--official FILE]
 //
 //   --wasm FILE      the module (default build/tailwind.wasm)
+//   --small FILE     the module with no JavaScript engine and no optimizer
+//                    (default: tailwind-small.wasm next to --wasm)
 //   --official FILE  the browser build of Tailwind CSS
 //                    (@tailwindcss/browser, dist/index.global.js): the
 //                    page script must give the same CSS. With no file, no
@@ -26,13 +28,18 @@ import { runWasm } from '../js/node.mjs'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
 
-const opts = { wasm: path.join(root, 'build/tailwind.wasm'), official: null }
+const opts = { wasm: path.join(root, 'build/tailwind.wasm'), small: null, official: null }
 const args = process.argv.slice(2)
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--wasm') opts.wasm = path.resolve(args[++i])
+  else if (args[i] === '--small') opts.small = path.resolve(args[++i])
   else if (args[i] === '--official') opts.official = path.resolve(args[++i])
   else throw new Error(`npm-browser.mjs: unknown argument ${args[i]}`)
 }
+opts.small ??= path.join(path.dirname(opts.wasm), 'tailwind-small.wasm')
+
+// The downloads of each program.
+const downloads = { 'tailwind.wasm': 0, 'tailwind-small.wasm': 0 }
 
 // The URL of tailwind.wasm from the URL of a file of the package.
 const cases = [
@@ -83,7 +90,8 @@ const pages = {
 @plugin "@tailwindcss/typography";
 @theme { --color-brand: #0d9488; }
 </style></head>
-<body><div id="box" class="flex p-4 bg-brand hover:underline"><article class="prose">Text</article></div></body></html>`,
+<body><div id="box" class="flex p-4 bg-brand hover:underline"><article class="prose">Text</article></div>
+<script>window.atParse = { visibility: getComputedStyle(document.documentElement).visibility, display: getComputedStyle(document.getElementById('box')).display }</script></body></html>`,
   // The same page with the browser build of Tailwind CSS (no plugin there).
   '/compare.html': (script) => `<!doctype html><html><head><meta charset="utf-8">
 <script src="${script}"></script>
@@ -122,7 +130,8 @@ const server = http.createServer((request, response) => {
   let body
   let type = types[path.extname(url)]
   if (url === prefix) [body, type] = [fs.readFileSync(path.join(root, 'js/page.js')), types['.js']]
-  else if (url === `${prefix}/runtime/tailwind.wasm`) body = fs.readFileSync(opts.wasm)
+  else if (url === `${prefix}/runtime/tailwind.wasm`) [body, downloads['tailwind.wasm']] = [fs.readFileSync(opts.wasm), downloads['tailwind.wasm'] + 1]
+  else if (url === `${prefix}/runtime/tailwind-small.wasm`) [body, downloads['tailwind-small.wasm']] = [fs.readFileSync(opts.small), downloads['tailwind-small.wasm'] + 1]
   else if (url.startsWith(`${prefix}/js/`)) body = fs.readFileSync(path.join(root, 'js', path.basename(url)))
   else if (url === '/official.js' && opts.official) body = fs.readFileSync(opts.official)
   else if (url === '/compare.html') body = pages[url](new URL(request.url, 'http://localhost').searchParams.get('script'))
@@ -170,6 +179,13 @@ try {
     await tab.exposeFunction('build', (status) => builds.push(status))
     await tab.addInitScript(() => document.addEventListener('tailwind.com:build', (e) => window.build(e.detail.status)))
     await tab.goto(`${base}/page.html`)
+    await settle(tab, () => getComputedStyle(document.getElementById('box')).display === 'flex')
+    // The first visit: the page is hidden until the first CSS.
+    assert.deepEqual(await tab.evaluate(() => window.atParse), { visibility: 'hidden', display: 'block' })
+    assert.equal(await tab.evaluate(() => getComputedStyle(document.documentElement).visibility), 'visible')
+    // The next visit: the CSS of the last build styles the page at once.
+    await tab.reload()
+    assert.deepEqual(await tab.evaluate(() => window.atParse), { visibility: 'visible', display: 'flex' })
     await settle(tab, () => getComputedStyle(document.getElementById('box')).display === 'flex')
     const css = await pageCss(tab)
     for (const rule of ['.bg-brand {', '--color-brand: #0d9488;', '.prose {', '.hover\\:underline:hover {']) assert.ok(css.includes(rule), rule)
@@ -260,6 +276,7 @@ try {
   if (opts.official) {
     await check('the page script gives the CSS of the browser build of Tailwind CSS', async () => {
       const css = []
+      const before = { ...downloads }
       for (const script of [prefix, '/official.js']) {
         const tab = await browser.newPage()
         await tab.goto(`${base}/compare.html?script=${encodeURIComponent(script)}`)
@@ -268,6 +285,9 @@ try {
         await tab.close()
       }
       assert.equal(css[0], css[1])
+      // A page with no @plugin gets only the small program.
+      assert.equal(downloads['tailwind.wasm'], before['tailwind.wasm'])
+      assert.ok(downloads['tailwind-small.wasm'] > before['tailwind-small.wasm'])
     })
   }
 } finally {

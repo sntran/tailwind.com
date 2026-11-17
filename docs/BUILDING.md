@@ -21,8 +21,19 @@ cargo build --release      # target/release/tailwind
 ```
 
 `cargo build --release --no-default-features --features cli` is not a
-build without JavaScript: the feature `cli` has the feature `js`. See
-"The library only" below for the features.
+build without JavaScript: the feature `cli` has the features `program`,
+`optimize` and `js`. See "The library only" below for the features.
+
+The feature `program` alone is the program with no optimizer and no
+JavaScript engine. `--minify` and `--optimize` give an error there, and
+`@plugin` and `@config` too. `make wasm` builds it as
+`build/tailwind-small.wasm`, for a page in the browser (`js/page.js`):
+3.25 MB, or 0.73 MB with brotli, and the full `tailwind.wasm` is 9.5 MB,
+or 1.78 MB with brotli. For the same input, the two give the same CSS.
+
+```sh
+cargo build --release --target wasm32-wasip1 -p tailwind --no-default-features --features program
+```
 
 This is the same program as `tailwind.com`, for one system. Use it for
 development and for the tests.

@@ -25,6 +25,15 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   or a Web Worker, the condition `browser` of `package.json` gives
   `runWasm` with the files in memory. The WASI host of the site is now
   `js/wasi.mjs`.
+- The page does not show with no style. The first build waits for the
+  end of the HTML, and the page stays hidden until its first CSS (at
+  most 3 seconds). The last CSS of each page stays in `localStorage`, so
+  the next load is styled at once. The downloads start at once.
+- `tailwind-small.wasm`: the program with no JavaScript engine and no
+  optimizer (the Cargo feature `program`), 0.73 MB with brotli, and the
+  full program is 1.78 MB. The page script uses it, and gets the full
+  program only for `@plugin` and `@config`. With a network of 20 Mbps,
+  the first visit shows the styled page in about 0.5 s.
 
 ## 0.4.0 - 2026-11-17
 

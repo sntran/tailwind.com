@@ -7,7 +7,7 @@ pub mod ast;
 pub mod at_import;
 pub mod attribute_selector_parser;
 pub mod candidate;
-#[cfg(feature = "cli")]
+#[cfg(feature = "program")]
 pub mod cli;
 pub mod compat;
 pub mod compile;
@@ -43,7 +43,7 @@ pub use version::Version;
 /// The scanner of Tailwind CSS: it finds the candidates in the files of a
 /// project (the crate `tailwind-scanner`, `native/scanner` of the
 /// repository).
-#[cfg(feature = "cli")]
+#[cfg(feature = "program")]
 pub use tailwindcss_oxide as scanner;
 
 /// An error of the compiler. The message is the message of Tailwind CSS.

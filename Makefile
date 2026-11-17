@@ -6,7 +6,9 @@
 #                   (docs/NIF.md)
 #   make wasm       build/tailwind.wasm: the program for WASI. With
 #                   WASI_SDK_PATH (a wasi-sdk), the program has JavaScript
-#                   for @plugin and @config.
+#                   for @plugin and @config. Also
+#                   build/tailwind-small.wasm: the program with no
+#                   JavaScript and no optimizer, for a page (js/page.js).
 #   make test       all the tests
 #   make test-wasm  the WASI program against the record, in Node.js
 #   make tlc        the TLA+ models of specs/, with TLC
@@ -32,6 +34,8 @@ wasm:
 	cargo build --release --target wasm32-wasip1
 	mkdir -p $(BUILD)
 	cp target/wasm32-wasip1/release/tailwind.wasm $(BUILD)/tailwind.wasm
+	CARGO_TARGET_DIR=target/small cargo build --release --target wasm32-wasip1 -p tailwind --no-default-features --features program
+	cp target/small/wasm32-wasip1/release/tailwind.wasm $(BUILD)/tailwind-small.wasm
 
 test: test-rust test-cli tlc test-mix
 

@@ -23,6 +23,7 @@
       "default": "./js/node.mjs"
     },
     "./tailwind.wasm": "./runtime/tailwind.wasm",
+    "./tailwind-small.wasm": "./runtime/tailwind-small.wasm",
     "./package.json": "./package.json"
   },
   "files": [

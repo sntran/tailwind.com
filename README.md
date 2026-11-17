@@ -208,8 +208,16 @@ The input CSS can also be in the page, as for the Play CDN:
   `@tailwindcss/typography`, `@tailwindcss/forms` and
   `@tailwindcss/aspect-ratio`.
 - After each build, the document gets the event `tailwind.com:build`.
-- The program is large: about 2 MB with compression, at the first load.
-  A build takes about 15 ms. Use it for development, prototypes and
+- The program for a page has no JavaScript engine and no optimizer:
+  about 0.75 MB with compression (`tailwind-small.wasm`). A page with
+  `@plugin` or `@config` gets the full program, about 1.8 MB.
+- The first build waits for the end of the HTML, and the page stays
+  hidden until its first CSS (at most 3 seconds), so it does not show
+  with no style. The last CSS of each page stays in `localStorage`: the
+  next load is styled at once, and the build replaces it.
+- In Chromium, with a network of 20 Mbps, the first visit shows the
+  styled page in about 0.5 s, and a reload in about 50 ms. A build after
+  a change takes about 15 ms. Use it for development, prototypes and
   editors, not for a production site.
 
 In a bundler (Vite, webpack, esbuild) and in a Web Worker, the condition

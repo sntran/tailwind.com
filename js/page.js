@@ -36,6 +36,15 @@
 // - A change of a class or of an element builds again. A change of a
 //   <style type="text/tailwindcss"> builds again too.
 // - After each build, the document gets the event "tailwind.com:build".
+// - The first build waits for the end of the HTML, so that it has all the
+//   classes. The downloads start at once.
+// - The program is tailwind-small.wasm: no JavaScript engine and no
+//   optimizer, about a third of the size. A page with @plugin or @config
+//   gets the full tailwind.wasm, which has the JavaScript engine.
+// - The last CSS of each page stays in localStorage. On the next load, it
+//   styles the page at once, and the build replaces it. With no such CSS
+//   and the script in <head>, the page stays hidden until the first CSS
+//   (at most 3 seconds), so it does not show with no style.
 //
 // To build on the disk later, remove the script and the attribute type,
 // and set href to the output of the build.
@@ -63,6 +72,8 @@
   const CSS_FILES = ['.css', '/index.css'];
   const JS_FILES = ['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '/index.js', '/index.cjs', '/index.mjs', '/index.ts'];
   const POLL_MS = 1000;
+  // The longest time that the page stays hidden.
+  const HIDE_MS = 3000;
 
   const script = document.currentScript;
   const source = new URL(script?.src || location.href);
@@ -71,7 +82,49 @@
   const found = source.pathname.match(/^(.*\/tailwind\.com(?:@[^/]*)?)(?:\/|$)/);
   const js = found ? new URL(`${found[1]}/js/`, source) : new URL('./', source);
 
+  // The program for a page: no JavaScript engine and no optimizer, about a
+  // third of the size. The full program only for @plugin and @config.
+  const small = new URL('../runtime/tailwind-small.wasm', js).href;
+  const full = new URL('../runtime/tailwind.wasm', js).href;
+  const head = document.head ?? document.documentElement;
+
+  // Start the downloads now: the module of the API, its import, and the
+  // program. Else each one starts only when the one before it ends.
+  function preload(rel, href, as) {
+    const link = document.createElement('link');
+    link.rel = rel;
+    link.href = href;
+    if (as) link.as = as;
+    link.crossOrigin = 'anonymous';
+    head.append(link);
+  }
+  preload('modulepreload', new URL('wasi.mjs', js).href);
+  preload('preload', small, 'fetch');
+  const loading = import(new URL('browser.mjs', js).href);
+  loading.catch(() => {});
+
+  // The CSS of the last build of this page, at once.
   const output = document.createElement('style');
+  const KEY = `tailwind.com:${location.pathname}`;
+  let cached = null;
+  try {
+    cached = localStorage.getItem(KEY);
+  } catch {}
+  if (cached !== null) output.textContent = cached;
+  head.append(output);
+
+  // With no such CSS, hide the page until the first CSS. A script at the
+  // end of <body> comes after the first paint: then no hide.
+  const hide = document.createElement('style');
+  if (cached === null && !document.body) {
+    hide.textContent = 'html { visibility: hidden !important; }';
+    head.append(hide);
+    setTimeout(show, HIDE_MS);
+  }
+  function show() {
+    hide.remove();
+  }
+
   const classes = new Set();
   // The text of each file that the script got, by URL.
   const texts = new Map();
@@ -86,6 +139,8 @@
   let api = null;
   let queue = Promise.resolve();
   let pending = false;
+  // The first build waits for the end of the HTML.
+  let ready = document.readyState !== 'loading';
 
   // The path of a URL in the project: the path of the URL.
   const pathOf = (url) => decodeURIComponent(new URL(url).pathname);
@@ -224,7 +279,7 @@
   }
 
   async function build() {
-    api ??= await import(new URL('browser.mjs', js).href);
+    api ??= await loading;
     const { css, files } = await project();
     const added = collect();
     place();
@@ -237,6 +292,7 @@
       input: `${css}@source ${quote(`./${CLASSES}`)};\n`,
       files: { ...files, [CLASSES]: [...classes].join('\n') },
       env: { NO_COLOR: '1' },
+      wasm: /@(?:plugin|config)\b/.test(key) ? full : small,
     });
     // The program writes its version and its time to stderr. Show only the
     // other lines: the warnings and the errors.
@@ -246,19 +302,27 @@
       }
     }
     // The CSS of the browser build has no newline at the end.
-    if (result.status === 0) output.textContent = result.stdout.replace(/\n$/, '');
+    if (result.status === 0) {
+      const css = result.stdout.replace(/\n$/, '');
+      output.textContent = css;
+      try {
+        localStorage.setItem(KEY, css);
+      } catch {}
+    }
+    show();
     document.dispatchEvent(new CustomEvent('tailwind.com:build', { detail: { status: result.status } }));
   }
 
   // One build at a time. The changes while a build runs give one more
   // build.
   function schedule() {
-    if (pending) return;
+    if (!ready || pending) return;
     pending = true;
     queue = queue.then(() => {
       pending = false;
       return build().catch((error) => {
         console.error('tailwind.com:', error);
+        show();
         document.dispatchEvent(new CustomEvent('tailwind.com:build', { detail: { status: -1 } }));
       });
     });
@@ -289,6 +353,16 @@
     subtree: true,
   });
 
-  schedule();
+  if (ready) schedule();
+  else {
+    document.addEventListener(
+      'DOMContentLoaded',
+      () => {
+        ready = true;
+        schedule();
+      },
+      { once: true },
+    );
+  }
   setTimeout(poll, POLL_MS);
 })();

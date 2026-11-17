@@ -42,13 +42,20 @@ crate-type = ["rlib", "staticlib"]
 [[bin]]
 name = "tailwind"
 path = "src/main.rs"
-required-features = ["cli"]
+required-features = ["program"]
 
 [features]
 default = ["cli", "mimalloc"]
 # The command line program: the scanner of Tailwind CSS, and Lightning CSS
 # for --minify and --optimize.
-cli = ["dep:tailwindcss-oxide", "dep:lightningcss", "dep:serde_json", "dep:parcel_sourcemap", "js"]
+cli = ["program", "optimize", "js"]
+# The command line program with no optimizer and no JavaScript engine:
+# the build for the browser (js/page.js), where the browser has the
+# JavaScript engine. --minify and --optimize give an error.
+program = ["dep:tailwindcss-oxide", "dep:serde_json"]
+# The optimizer of --minify and --optimize: Lightning CSS, and the
+# lowering of CSS functions and mixins before it.
+optimize = ["dep:lightningcss", "dep:parcel_sourcemap"]
 # `@plugin` and `@config`: the QuickJS engine (c_src/quickjs, c_src/js.c)
 # and the plugin layer of Tailwind CSS (assets/compat.js). build.rs
 # compiles the C files. For wasm32-wasip1 it needs WASI_SDK_PATH: with no

@@ -391,6 +391,11 @@ server with the paths of jsDelivr:
   of a file on the server builds again, and a change of `href` too.
 - `js/page.js` with a path in a `<style type="text/tailwindcss">`: the
   file comes from the URL of the page.
+- The first visit: the page is hidden while the HTML is parsed, and
+  shows with the first CSS. A reload: the CSS of the last build styles
+  the page while the HTML is parsed.
+- A page with no `@plugin` gets only `tailwind-small.wasm`, and its CSS
+  is the same as the CSS of the browser build of Tailwind CSS.
 - With `--official FILE`: on a page with `@theme`, `@utility`, `@apply`
   and variants, the CSS of `js/page.js` is the same, byte for byte, as
   the CSS of the browser build of Tailwind CSS (`@tailwindcss/browser` of
