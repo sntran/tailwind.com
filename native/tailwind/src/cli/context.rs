@@ -1,7 +1,8 @@
 //! What the program reads from its process: the working directory, the
 //! environment, the standard output and error, and the end of the watch.
 //!
-//! The program (`cli::run`) reads them from the process. A caller in
+//! The program (`cli::run`) reads them from the process, with the standard
+//! input of `--sort-classes`. A caller in
 //! another program gives its own with `cli::run_with`: the NIF of
 //! `tailwind_nif` runs the program in the Erlang VM, where the program
 //! cannot change the working directory or the environment of the VM.
@@ -12,7 +13,7 @@
 //! nothing of it.
 
 use std::cell::RefCell;
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -34,10 +35,12 @@ pub struct Context {
     /// The messages have colors, as on a terminal. `NO_COLOR` and
     /// `FORCE_COLOR` of `env` still apply.
     pub terminal: bool,
-    /// The watch stops when this is true. There is no standard input: the
-    /// end of the standard input does not stop the watch, and the input
-    /// `-` is empty.
+    /// The watch stops when this is true. The end of the standard input
+    /// does not stop the watch, and the input `-` is empty.
     pub stop: Arc<AtomicBool>,
+    /// The standard input of `--sort-classes`: the requests, one on each
+    /// line. `None`: an empty input.
+    pub stdin: Option<Box<dyn std::io::BufRead>>,
 }
 
 thread_local! {
@@ -121,6 +124,21 @@ pub fn terminal() -> bool {
 /// True when the caller asks the watch to stop.
 pub fn stopped() -> bool {
     CURRENT.with(|current| current.borrow().as_ref().is_some_and(|context| context.stop.load(Ordering::SeqCst)))
+}
+
+/// Read a line of the standard input into `line`, with its end of line.
+/// The result is the count of bytes: 0 at the end of the input.
+pub fn read_line(line: &mut String) -> std::io::Result<usize> {
+    let read = CURRENT.with(|current| {
+        current.borrow_mut().as_mut().map(|context| match context.stdin.as_mut() {
+            Some(stdin) => stdin.read_line(line),
+            None => Ok(0),
+        })
+    });
+    match read {
+        Some(result) => result,
+        None => std::io::stdin().lock().read_line(line),
+    }
 }
 
 /// Write text to the standard output.

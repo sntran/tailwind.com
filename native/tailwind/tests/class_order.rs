@@ -68,3 +68,60 @@ fn the_sort_of_the_tests_of_tailwind_css() {
         assert_eq!(sort_classes(design_system.get_class_order(&classes)).join(" "), expected, "{input}");
     }
 }
+
+#[derive(Deserialize)]
+struct SortRecords {
+    attributes: Vec<SortRecord<String>>,
+    lists: Vec<SortRecord<Vec<String>>>,
+    templates: Vec<TemplateRecord>,
+}
+
+#[derive(Deserialize)]
+struct SortRecord<T> {
+    options: String,
+    input: T,
+    output: T,
+}
+
+#[derive(Deserialize)]
+struct TemplateRecord {
+    input: Vec<String>,
+    output: Vec<String>,
+}
+
+/// The sort of the official Prettier plugin (`prettier-plugin-tailwindcss`)
+/// against its record (`tests/fixtures/class_sort.json`, from
+/// `tests/upstream/tools/gen-class-sort.mjs`).
+#[test]
+fn the_sort_is_the_sort_of_the_official_prettier_plugin() {
+    use tailwind::sort::{sort_class_attribute, sort_class_list, sort_class_template, SortOptions};
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/class_sort.json");
+    let records: SortRecords = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let loader = load;
+    let design_system = load_design_system(
+        "@import \"tailwindcss\";",
+        CompileOptions { base: "/".into(), load_stylesheet: Some(&loader), ..CompileOptions::default() },
+    )
+    .unwrap();
+
+    assert!(records.attributes.len() >= 400);
+    for record in &records.attributes {
+        let options = match record.options.as_str() {
+            "preserveWhitespace" => SortOptions { collapse_whitespace: None, ..SortOptions::default() },
+            "preserveDuplicates" => SortOptions { remove_duplicates: false, ..SortOptions::default() },
+            _ => SortOptions::default(),
+        };
+        assert_eq!(sort_class_attribute(&design_system, &record.input, options), record.output, "{:?} ({})", record.input, record.options);
+    }
+
+    assert!(records.lists.len() >= 100);
+    for record in &records.lists {
+        let (list, _) = sort_class_list(&design_system, &record.input, record.options != "preserveDuplicates");
+        assert_eq!(list, record.output, "{:?} ({})", record.input, record.options);
+    }
+
+    assert!(records.templates.len() >= 80);
+    for record in &records.templates {
+        assert_eq!(sort_class_template(&design_system, &record.input, true, true), record.output, "{:?}", record.input);
+    }
+}

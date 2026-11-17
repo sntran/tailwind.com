@@ -14,12 +14,16 @@
 //! When the last reference to the resource goes (the process that keeps it
 //! ends), the run stops: a watch ends at its next tick, as the program
 //! does at the end of its standard input.
+//!
+//! `nif_input/2` writes to the standard input of the run, and
+//! `nif_close/1` closes it (`--sort-classes` reads its requests there).
 
-use rustler::{Encoder, LocalPid, OwnedBinary, OwnedEnv, ResourceArc};
-use std::io::Write;
+use rustler::{Binary, Encoder, LocalPid, OwnedBinary, OwnedEnv, ResourceArc};
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use tailwind::cli::context::Context;
 
 mod atoms {
@@ -28,6 +32,8 @@ mod atoms {
         stdout,
         stderr,
         exit,
+        ok,
+        closed,
     }
 }
 
@@ -35,9 +41,37 @@ mod atoms {
 /// stylesheets, and the main thread of a program has 8 MiB.
 const STACK: usize = 16 << 20;
 
-/// A run of the program. Its drop stops the run.
+/// A run of the program. Its drop stops the run, and closes its input.
 struct Run {
     stop: Arc<AtomicBool>,
+    /// The standard input of the run. `None`: closed.
+    input: Mutex<Option<Sender<Vec<u8>>>>,
+}
+
+/// The standard input of a run: the parts that `nif_input/2` sends. Its
+/// end is the close of the sender.
+struct Input {
+    parts: Receiver<Vec<u8>>,
+    part: Vec<u8>,
+    offset: usize,
+}
+
+impl Read for Input {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        while self.offset >= self.part.len() {
+            match self.parts.recv() {
+                Ok(part) => {
+                    self.part = part;
+                    self.offset = 0;
+                }
+                Err(_) => return Ok(0),
+            }
+        }
+        let count = buffer.len().min(self.part.len() - self.offset);
+        buffer[..count].copy_from_slice(&self.part[self.offset..self.offset + count]);
+        self.offset += count;
+        Ok(count)
+    }
 }
 
 #[rustler::resource_impl]
@@ -90,7 +124,8 @@ fn nif_start(
     terminal: bool,
 ) -> rustler::NifResult<ResourceArc<Run>> {
     let stop = Arc::new(AtomicBool::new(false));
-    let run = ResourceArc::new(Run { stop: stop.clone() });
+    let (sender, parts) = channel();
+    let run = ResourceArc::new(Run { stop: stop.clone(), input: Mutex::new(Some(sender)) });
     std::thread::Builder::new()
         .name("tailwind".into())
         .stack_size(STACK)
@@ -108,6 +143,7 @@ fn nif_start(
                 stderr: Box::new(stream(atoms::stderr())),
                 terminal,
                 stop,
+                stdin: Some(Box::new(std::io::BufReader::new(Input { parts, part: Vec::new(), offset: 0 }))),
             };
             // A panic must not stop the VM: it is the status 101, as for a
             // panic of the program.
@@ -121,6 +157,25 @@ fn nif_start(
         })
         .map_err(|error| rustler::Error::Term(Box::new(error.to_string())))?;
     Ok(run)
+}
+
+/// Write `data` to the standard input of a run. The result is `closed`
+/// after `nif_close/1`.
+#[rustler::nif]
+fn nif_input(run: ResourceArc<Run>, data: Binary) -> rustler::Atom {
+    match run.input.lock().ok().and_then(|input| input.as_ref().map(|sender| sender.send(data.as_slice().to_vec()).is_ok())) {
+        Some(true) => atoms::ok(),
+        _ => atoms::closed(),
+    }
+}
+
+/// Close the standard input of a run: the run reads the end of its input.
+#[rustler::nif]
+fn nif_close(run: ResourceArc<Run>) -> rustler::Atom {
+    if let Ok(mut input) = run.input.lock() {
+        input.take();
+    }
+    atoms::ok()
 }
 
 /// The version of the program and of the Tailwind CSS of its compiler.

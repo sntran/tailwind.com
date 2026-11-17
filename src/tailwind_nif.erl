@@ -28,22 +28,23 @@ standard input.
 The module needs Erlang/OTP 29 or later. `docs/NIF.md` has more.
 """.
 
--export([available/0, load/1, run/2, run/4, versions/0]).
+-export([available/0, close/1, input/2, load/1, run/2, run/4, start/2, versions/0]).
 %% The functions of the NIF.
--export([nif_start/6, nif_versions/0]).
+-export([nif_close/1, nif_input/2, nif_start/6, nif_versions/0]).
 
--nifs([nif_start/6, nif_versions/0]).
+-nifs([nif_close/1, nif_input/2, nif_start/6, nif_versions/0]).
 
 %% The key of persistent_term when the default NIF is not there.
 -define(MISSING, {?MODULE, missing}).
 
 -type stream() :: stdout | stderr.
+-opaque handle() :: {reference(), pos_integer()}.
 -type options() :: #{
     cd => file:filename_all(),
     env => [{string() | binary(), string() | binary() | false | nil}] | #{string() | binary() => term()},
     colors => boolean()
 }.
--export_type([options/0, stream/0]).
+-export_type([handle/0, options/0, stream/0]).
 
 -doc """
 True when the NIF is loaded. The first call loads the NIF from the
@@ -124,6 +125,25 @@ a binary. The result is the exit status and the last `Acc`.
 -spec run([string() | binary()], options(), fun((stream(), binary(), Acc) -> Acc), Acc) ->
     {non_neg_integer(), Acc}.
 run(Args, Options, Fun, Acc) when is_list(Args), is_map(Options), is_function(Fun, 3) ->
+    {Run, Id} = start(Args, Options),
+    loop(Run, Id, Fun, Acc).
+
+-doc """
+Start a run of the program, as `run/2` does, and return at once. The
+calling process gets the output as messages:
+
+```erlang
+{tailwind_nif, Id, stdout | stderr, Binary}
+{tailwind_nif, Id, exit, Status}
+```
+
+`Id` is the second element of the handle. The process must keep the
+handle: when the garbage collector frees it, the standard input of the
+run closes, and a watch stops. `input/2` writes to the standard input of
+the run, and `close/1` closes it.
+""".
+-spec start([string() | binary()], options()) -> handle().
+start(Args, Options) when is_list(Args), is_map(Options) ->
     ensure(),
     Cwd =
         case maps:find(cd, Options) of
@@ -136,8 +156,20 @@ run(Args, Options, Fun, Acc) when is_list(Args), is_map(Options), is_function(Fu
     Env = packages([{binary(Name), value(Value)} || {Name, Value} <- env(maps:get(env, Options, []))]),
     Id = erlang:unique_integer([positive]),
     Colors = maps:get(colors, Options, false),
-    Run = nif_start([binary(Arg) || Arg <- Args], binary(Cwd), Env, self(), Id, Colors),
-    loop(Run, Id, Fun, Acc).
+    {nif_start([binary(Arg) || Arg <- Args], binary(Cwd), Env, self(), Id, Colors), Id}.
+
+-doc """
+Write `Data` to the standard input of a run of `start/2`. The result is
+`closed` after `close/1`.
+""".
+-spec input(handle(), iodata()) -> ok | closed.
+input({Run, _Id}, Data) ->
+    nif_input(Run, iolist_to_binary(Data)).
+
+-doc "Close the standard input of a run of `start/2`.".
+-spec close(handle()) -> ok.
+close({Run, _Id}) ->
+    nif_close(Run).
 
 %% `Run` is the resource of the run: while this process keeps it, the run
 %% goes on. When the garbage collector frees it, a watch stops.
@@ -202,4 +234,12 @@ nif_start(_Args, _Cwd, _Env, _Pid, _Id, _Colors) ->
 
 -doc false.
 nif_versions() ->
+    erlang:nif_error(nif_not_loaded).
+
+-doc false.
+nif_input(_Run, _Data) ->
+    erlang:nif_error(nif_not_loaded).
+
+-doc false.
+nif_close(_Run) ->
     erlang:nif_error(nif_not_loaded).
