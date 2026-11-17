@@ -52,7 +52,6 @@ fn context(dir: &Path, env: &[(&str, Option<&str>)], stdout: &Buffer, stderr: &B
         stderr: Box::new(stderr.clone()),
         terminal: false,
         stop,
-        stdin: None,
     }
 }
 

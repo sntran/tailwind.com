@@ -39,14 +39,14 @@ defmodule Tailwind.Formatter do
     * `:preserve_duplicates` - keep a second copy of a class. Default:
       `false`.
 
-  The plugin runs `tailwind.com --sort-classes` one time for each run of
-  `mix format` (`:tailwind_sorter`), as a NIF when the project has one.
-  `docs/FORMATTER.md` has more.
+  The order comes from a normal build of the profile, one time for each
+  run of `mix format` (as a NIF when the project has one): the place of a
+  class is the place of its first rule in the layer `utilities` of the
+  output. A class with no rule (a class of the project, or a class that
+  the build does not see) comes first. `docs/FORMATTER.md` has more.
   """
 
   @behaviour Mix.Tasks.Format
-
-  @sorter Tailwind.Formatter.Sorter
 
   @impl Mix.Tasks.Format
   def features(_opts), do: [sigils: [:H], extensions: [".heex"]]
@@ -62,34 +62,27 @@ defmodule Tailwind.Formatter do
     end
   end
 
-  # The sort: one request for the values of a template.
+  # The sort of the values of a template, with the order of the build.
   defp sort(contents, slots, config) do
     text = fn {start, stop} -> binary_part(contents, start, stop - start) end
+    places = order(profile(config))
+    place = fn class -> Map.get(places, escape(class)) end
 
-    attributes = for {:attribute, range} <- slots, do: text.(range)
-    templates = for {:template, ranges} <- slots, do: Enum.map(ranges, text)
+    options = [
+      remove_duplicates: not Keyword.get(config, :preserve_duplicates, false),
+      collapse: not Keyword.get(config, :preserve_whitespace, false)
+    ]
 
-    request = %{
-      "attributes" => attributes,
-      "templates" => templates,
-      "preserveWhitespace" => Keyword.get(config, :preserve_whitespace, false),
-      "preserveDuplicates" => Keyword.get(config, :preserve_duplicates, false)
-    }
+    replacements =
+      Enum.flat_map(slots, fn
+        {:attribute, range} ->
+          [{range, sort_attribute(text.(range), place, options)}]
 
-    case :tailwind_sorter.sort(sorter(config), request) do
-      %{"attributes" => sorted_attributes, "templates" => sorted_templates} ->
-        attribute_ranges = for {:attribute, range} <- slots, do: range
-        template_ranges = for {:template, ranges} <- slots, range <- ranges, do: range
+        {:template, ranges} ->
+          Enum.zip(ranges, sort_template(Enum.map(ranges, text), place, options))
+      end)
 
-        replacements =
-          Enum.zip(attribute_ranges, sorted_attributes) ++
-            Enum.zip(template_ranges, List.flatten(sorted_templates))
-
-        replace(contents, Enum.sort_by(replacements, fn {{start, _}, _} -> start end))
-
-      %{"error" => message} ->
-        raise ArgumentError, "Tailwind.Formatter: #{message}"
-    end
+    replace(contents, Enum.sort_by(replacements, fn {{start, _}, _} -> start end))
   end
 
   # The text with each range replaced, from the start.
@@ -99,36 +92,367 @@ defmodule Tailwind.Formatter do
         {[value, binary_part(contents, offset, start - offset) | parts], stop}
       end)
 
-    IO.iodata_to_binary(Enum.reverse([binary_part(contents, last, byte_size(contents) - last) | parts]))
+    IO.iodata_to_binary(
+      Enum.reverse([binary_part(contents, last, byte_size(contents) - last) | parts])
+    )
   end
 
-  # The sorter of the run of `mix format`: one process for each file
-  # calls it, so it has a name, and no link to the caller.
-  defp sorter(config) do
-    case Process.whereis(@sorter) do
-      nil -> start_sorter(config)
-      pid -> pid
+  ## The order of the classes
+
+  # The order lives this long: one run of `mix format` builds one time, and
+  # an editor that formats again later gets the new classes.
+  @lifetime_ms 10_000
+
+  @doc false
+  # The place of each class, from a build of the profile: escaped class
+  # (as in a selector) to place. One process builds, and the others wait.
+  def order(profile) do
+    key = {__MODULE__, profile}
+
+    case fresh(key) do
+      {:ok, places} ->
+        places
+
+      :error ->
+        :global.trans({key, self()}, fn ->
+          case fresh(key) do
+            {:ok, places} ->
+              places
+
+            :error ->
+              places = places(build(profile))
+              :persistent_term.put(key, {System.monotonic_time(:millisecond), places})
+              places
+          end
+        end)
     end
   end
 
-  defp start_sorter(config) do
-    profile = profile(config)
+  defp fresh(key) do
+    case :persistent_term.get(key, nil) do
+      {time, places} ->
+        if System.monotonic_time(:millisecond) - time < @lifetime_ms,
+          do: {:ok, places},
+          else: :error
 
-    unless :tailwind.nif() or File.exists?(:tailwind.bin_path()) do
-      raise ArgumentError,
-            "Tailwind.Formatter: tailwind.com is not installed. Run `mix tailwind.install`."
+      nil ->
+        :error
     end
+  end
 
-    case :tailwind_sorter.start(profile, name: {:local, @sorter}) do
-      {:ok, pid} ->
-        pid
+  # A normal build of the profile, with the options of the official
+  # program only: its input and its working directory, and an output in a
+  # temporary file. The result is the CSS.
+  defp build(profile) do
+    %{args: args, cd: cd, env: env} = :tailwind.config_for(profile)
+    env = Map.merge(%{~c"TAILWINDCSS_VERSION" => :tailwind.configured_version()}, env)
 
-      {:error, {:already_started, pid}} ->
-        pid
+    output =
+      Path.join(System.tmp_dir!(), "tailwind_formatter_#{System.unique_integer([:positive])}.css")
 
-      {:error, reason} ->
-        raise ArgumentError, "Tailwind.Formatter: the sorter does not start: #{inspect(reason)}"
+    argv = input_args(args) ++ [~c"--output=" ++ String.to_charlist(output)]
+
+    {status, messages} =
+      if :tailwind.nif() do
+        :tailwind_nif.run(
+          argv,
+          %{cd: cd, env: Map.to_list(env)},
+          fn _stream, data, acc -> [acc, data] end,
+          []
+        )
+      else
+        unless File.exists?(:tailwind.bin_path()) do
+          raise ArgumentError,
+                "Tailwind.Formatter: tailwind.com is not installed. Run `mix tailwind.install`."
+        end
+
+        {exe, port_args} = :tailwind.command(argv)
+
+        port =
+          Port.open({:spawn_executable, exe}, [
+            {:args, port_args},
+            {:cd, cd},
+            {:env, Map.to_list(env)},
+            :binary,
+            :exit_status,
+            :stderr_to_stdout,
+            :use_stdio,
+            :hide
+          ])
+
+        collect(port, [])
+      end
+
+    try do
+      if status != 0 do
+        raise ArgumentError,
+              "Tailwind.Formatter: the build of the profile #{inspect(profile)} failed:\n" <>
+                IO.iodata_to_binary(messages)
+      end
+
+      File.read!(output)
+    after
+      File.rm(output)
     end
+  end
+
+  defp collect(port, acc) do
+    receive do
+      {^port, {:data, data}} -> collect(port, [acc, data])
+      {^port, {:exit_status, status}} -> {status, acc}
+    end
+  end
+
+  # The input and the working directory of the arguments of a profile.
+  defp input_args([]), do: []
+
+  defp input_args([flag, value | rest]) when flag in [~c"--input", ~c"-i", ~c"--cwd"],
+    do: [flag, value | input_args(rest)]
+
+  defp input_args([arg | rest]) do
+    if Enum.any?([~c"--input=", ~c"-i=", ~c"--cwd="], &List.starts_with?(arg, &1)),
+      do: [arg | input_args(rest)],
+      else: input_args(rest)
+  end
+
+  @doc false
+  # The place of each class in the CSS of a build: the place of the first
+  # style rule (at any depth: the `@media` of a variant is around the rule)
+  # of the layer `utilities` that has the class. The class of a rule is the
+  # longest class of its selector: it has the text of the classes that its
+  # variants name (`group-hover:flex` has `group`). The keys are the
+  # classes as the selectors write them (`escape/1`).
+  def places(css) do
+    case :binary.match(css, "@layer utilities {") do
+      {start, length} -> rules(css, start + length, start + length, 0, 0, %{})
+      :nomatch -> %{}
+    end
+  end
+
+  @class ~r/\.((?:\\[0-9a-fA-F]{1,6} ?|\\.|[\w-]|[^\x00-\x7f])+)/u
+
+  defp rules(css, i, _from, _depth, _rank, places) when i >= byte_size(css), do: places
+
+  defp rules(css, i, from, depth, rank, places) do
+    case :binary.at(css, i) do
+      ?\\ ->
+        rules(css, i + 2, from, depth, rank, places)
+
+      quote when quote in [?", ?'] ->
+        rules(css, find_escaped(css, i + 1, quote) + 1, from, depth, rank, places)
+
+      ?{ ->
+        prelude = css |> binary_part(from, i - from) |> String.trim()
+
+        {places, rank} =
+          if String.starts_with?(prelude, "@") do
+            {places, rank}
+          else
+            case Regex.scan(@class, prelude, capture: :all_but_first) do
+              [] ->
+                {places, rank + 1}
+
+              classes ->
+                owner = classes |> List.flatten() |> Enum.max_by(&byte_size/1)
+                {Map.put_new(places, owner, rank), rank + 1}
+            end
+          end
+
+        rules(css, i + 1, i + 1, depth + 1, rank, places)
+
+      ?} ->
+        if depth == 0, do: places, else: rules(css, i + 1, i + 1, depth - 1, rank, places)
+
+      ?; ->
+        rules(css, i + 1, i + 1, depth, rank, places)
+
+      _ ->
+        rules(css, i + 1, from, depth, rank, places)
+    end
+  end
+
+  @doc false
+  # `CSS.escape`, as `escape` of Tailwind CSS: a class as a selector writes
+  # it.
+  def escape("-"), do: "\\-"
+
+  def escape(value) do
+    first = :binary.first(value <> "x")
+
+    value
+    |> :binary.bin_to_list()
+    |> Enum.with_index()
+    |> Enum.map(fn {code, index} ->
+      numeric? =
+        code in 0x01..0x1F or code == 0x7F or (index == 0 and code in ?0..?9) or
+          (index == 1 and code in ?0..?9 and first == ?-)
+
+      cond do
+        code == 0 ->
+          "�"
+
+        numeric? ->
+          "\\" <> String.downcase(Integer.to_string(code, 16)) <> " "
+
+        code >= 0x80 or code in [?-, ?_] or code in ?a..?z or code in ?A..?Z or code in ?0..?9 ->
+          <<code>>
+
+        true ->
+          <<?\\, code>>
+      end
+    end)
+    |> IO.iodata_to_binary()
+  end
+
+  ## The sort of the Prettier plugin
+
+  @dots ["...", "…"]
+
+  # `\s` of JavaScript.
+  @js_space "[\\t\\n\\v\\f\\r \\x{a0}\\x{1680}\\x{2000}-\\x{200a}\\x{2028}\\x{2029}\\x{202f}\\x{205f}\\x{3000}\\x{feff}]"
+
+  @doc false
+  # `sortClassList` of the plugin: no place first, then by place, and `...`
+  # last, with a stable sort. With `remove_duplicates`, a second copy of a
+  # class with a place goes. The result has the classes and the indexes
+  # (in the sorted list) of the classes that went.
+  def sort_class_list(classes, place, remove_duplicates) do
+    sorted =
+      classes
+      |> Enum.map(&{&1, place.(&1)})
+      |> Enum.sort_by(fn
+        {name, _} when name in @dots -> {2, 0}
+        {_, nil} -> {0, 0}
+        {_, place} -> {1, place}
+      end)
+
+    if remove_duplicates do
+      {kept, removed, _} =
+        sorted
+        |> Enum.with_index()
+        |> Enum.reduce({[], [], MapSet.new()}, fn {{name, place}, index}, {kept, removed, seen} ->
+          cond do
+            MapSet.member?(seen, name) -> {kept, [index | removed], seen}
+            place == nil -> {[name | kept], removed, seen}
+            true -> {[name | kept], removed, MapSet.put(seen, name)}
+          end
+        end)
+
+      {Enum.reverse(kept), MapSet.new(removed)}
+    else
+      {Enum.map(sorted, &elem(&1, 0)), MapSet.new()}
+    end
+  end
+
+  @doc false
+  # `sortClasses` of the plugin: the value of one attribute. The options:
+  # `remove_duplicates`, `collapse` (`true`, `false`, or `{start, end}`),
+  # `ignore_first` and `ignore_last`.
+  def sort_attribute(value, place, options) do
+    collapse =
+      case Keyword.get(options, :collapse, true) do
+        true -> {true, true}
+        other -> other
+      end
+
+    cond do
+      value == "" or String.contains?(value, "{{") ->
+        value
+
+      collapse != false and Regex.match?(~r/\A[\t\r\f\n ]+\z/, value) ->
+        " "
+
+      true ->
+        sort_parts(value, place, collapse, options)
+    end
+  end
+
+  defp sort_parts(value, place, collapse, options) do
+    # `split(/([\t\r\f\n ]+)/)`: the classes at the even places, and the
+    # whitespace between them at the odd places.
+    parts = Regex.split(~r/([\t\r\f\n ]+)/, value, include_captures: true)
+    classes = Enum.take_every(parts, 2)
+    whitespace = parts |> Enum.drop(1) |> Enum.take_every(2)
+    classes = if List.last(classes) == "", do: Enum.drop(classes, -1), else: classes
+    whitespace = if collapse != false, do: Enum.map(whitespace, fn _ -> " " end), else: whitespace
+
+    {prefix, classes, whitespace} =
+      if Keyword.get(options, :ignore_first, false) do
+        {first, classes} = pop_first(classes)
+        {space, whitespace} = pop_first(whitespace)
+        {first <> space, classes, whitespace}
+      else
+        {"", classes, whitespace}
+      end
+
+    {suffix, classes, whitespace} =
+      if Keyword.get(options, :ignore_last, false) do
+        {space, whitespace} = pop_last(whitespace)
+        {last, classes} = pop_last(classes)
+        {space <> last, classes, whitespace}
+      else
+        {"", classes, whitespace}
+      end
+
+    {list, removed} =
+      sort_class_list(classes, place, Keyword.get(options, :remove_duplicates, true))
+
+    # The plugin removes the whitespace before each removed class with the
+    # indexes of the sorted list: `!removedIndices.has(index + 1)`.
+    whitespace =
+      whitespace
+      |> Enum.with_index()
+      |> Enum.reject(fn {_, index} -> MapSet.member?(removed, index + 1) end)
+      |> Enum.map(&elem(&1, 0))
+
+    result =
+      list
+      |> Enum.with_index()
+      |> Enum.map(fn {class, index} -> [class, Enum.at(whitespace, index, "")] end)
+      |> IO.iodata_to_binary()
+
+    case collapse do
+      false ->
+        prefix <> result <> suffix
+
+      {start, stop} ->
+        trailing = Regex.compile!(@js_space <> "+\\z", "u")
+        leading = Regex.compile!("\\A" <> @js_space <> "+", "u")
+        prefix = Regex.replace(trailing, prefix, " ")
+        suffix = Regex.replace(leading, suffix, " ")
+        result = Regex.replace(leading, result, if(start, do: "", else: " "))
+        result = Regex.replace(trailing, result, if(stop, do: "", else: " "))
+        prefix <> result <> suffix
+    end
+  end
+
+  defp pop_first([]), do: {"", []}
+  defp pop_first([first | rest]), do: {first, rest}
+
+  defp pop_last([]), do: {"", []}
+  defp pop_last(list), do: {List.last(list), Enum.drop(list, -1)}
+
+  @doc false
+  # `sortTemplateLiteral` of the plugin: the fixed parts of a string with
+  # interpolations. A part keeps its first class when it touches the
+  # interpolation before it, and its last class when it touches the
+  # interpolation after it. The whitespace collapses at the start of the
+  # first part and at the end of the last part only.
+  def sort_template(parts, place, options) do
+    count = length(parts)
+    starts_with_space = Regex.compile!("\\A" <> @js_space, "u")
+    ends_with_space = Regex.compile!(@js_space <> "\\z", "u")
+
+    parts
+    |> Enum.with_index()
+    |> Enum.map(fn {part, index} ->
+      sort_attribute(part, place,
+        remove_duplicates: Keyword.get(options, :remove_duplicates, true),
+        ignore_first: index > 0 and not Regex.match?(starts_with_space, part),
+        ignore_last: index + 1 < count and not Regex.match?(ends_with_space, part),
+        collapse: Keyword.get(options, :collapse, true) and {index == 0, index + 1 >= count}
+      )
+    end)
   end
 
   # The profile of the options, or the only profile of the configuration.

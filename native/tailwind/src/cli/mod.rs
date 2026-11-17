@@ -13,7 +13,6 @@ pub mod modules;
 pub mod optimize_css;
 pub mod remapping;
 pub mod resolve;
-pub mod sort_classes;
 pub mod source_maps;
 
 use crate::index::{compile, CompileOptions, Root};
@@ -99,7 +98,6 @@ fn help_text(style: &Style) -> String {
         ("    --map", "Generate a source map"),
         ("    --cwd", "The current working directory [default: `.`]"),
         ("    --silent", "Suppress non-error output"),
-        ("    --sort-classes", "Sort the classes of templates: JSON requests on stdin, one on each line"),
         ("-h, --help", "Display usage information"),
         ("-v, --version", "Display the versions of this program and of Tailwind CSS"),
     ] {
@@ -758,30 +756,6 @@ fn print_version() -> i32 {
     0
 }
 
-/// `--sort-classes`: load the design system of the input, and answer the
-/// requests of the standard input (`sort_classes.rs`).
-fn sort_classes(options: &Options, style: &Style) -> i32 {
-    if options.input_is_stdin {
-        errln!("The input of --sort-classes cannot be stdin: stdin has the requests.");
-        return 1;
-    }
-    let build = match read_input(options, &None).and_then(|input| create_build(options, &input)) {
-        Ok(build) => build,
-        Err(e) => {
-            errln!("{}", format_error(style, &e));
-            return 1;
-        }
-    };
-    match &build.compiler {
-        AnyCompiler::Native(compiler) => sort_classes::serve(compiler.design_system()),
-        #[cfg(tw_js)]
-        AnyCompiler::Script(_) => {
-            errln!("--sort-classes needs the Rust compiler: the script engine has no order of classes.");
-            1
-        }
-    }
-}
-
 /// Run the program, as a part of another program: with the working
 /// directory, the environment and the output of `context`, and with no
 /// standard input. The result is the exit status. A watch (`--watch`)
@@ -821,10 +795,6 @@ pub fn run(mut argv: Vec<String>) -> i32 {
             return 1;
         }
     };
-
-    if parsed.flag("sort-classes", None) {
-        return sort_classes(&options, &style);
-    }
 
     if !options.silent {
         errln!("{}\n", header(&style));

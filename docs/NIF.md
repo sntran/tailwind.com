@@ -143,9 +143,6 @@ build of the NIF for WebAssembly yet.
 | `versions()` | The version of the program and of its Tailwind CSS, as binaries. |
 | `run(Args, Options)` | Run the program. The output goes to the group leader. The result is the exit status. |
 | `run(Args, Options, Fun, Acc)` | Run the program. `Fun(stdout \| stderr, Binary, Acc)` gets each part of the output. The result is `{Status, Acc}`. |
-| `start(Args, Options)` | Start a run, and return its handle at once. The output comes as messages (see [The run](#the-run)). |
-| `input(Handle, Data)` | Write to the standard input of a run of `start/2` (`--sort-classes` reads its requests there). |
-| `close(Handle)` | Close the standard input of a run of `start/2`. |
 
 The options are a map:
 
@@ -176,9 +173,7 @@ The run is not a process, and these are different from a port:
 
 - The working directory and the environment of the run do not change the
   VM. Each run has its own.
-- The standard input is the input of `input/2` of a run of `start/2`
-  (`--sort-classes` reads it). For `run/2`, it is empty, and the input
-  `-` is empty.
+- There is no standard input. The input `-` is empty.
 - A watch stops when the calling process ends: the process keeps the
   resource of the run, and when the garbage collector frees it, the
   watch stops at its next tick. This is also true for `--watch=always`.
