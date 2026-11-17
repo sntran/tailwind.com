@@ -5,11 +5,14 @@
 
 pub mod args;
 pub mod context;
+#[cfg(feature = "lower")]
 pub mod css_math;
+#[cfg(feature = "lower")]
 pub mod css_mixins;
 pub mod engine;
 pub mod events;
 pub mod modules;
+#[cfg(feature = "optimize")]
 pub mod optimize_css;
 pub mod remapping;
 pub mod resolve;
@@ -202,6 +205,7 @@ struct Options {
     output: Option<PathBuf>,
     /// The name of the input for the optimizer: the path of the input,
     /// `-` for stdin, or `input.css`.
+    #[cfg_attr(not(feature = "lower"), allow(dead_code))]
     optimizer_file: String,
     map: MapOption,
     minify: bool,
@@ -451,7 +455,31 @@ fn write(
     // The optimizer and the map run only for new CSS: the watch calls
     // this function at each tick.
     if (optimize || options.map != MapOption::None) && previous.css.as_deref() != Some(css) {
+        // The optimizer changes the map.
+        #[cfg_attr(not(feature = "optimize"), allow(unused_mut))]
         let mut map = (options.map != MapOption::None).then(source_map).transpose()?;
+        #[cfg(not(feature = "lower"))]
+        if optimize {
+            return Err(Error::new("This build of tailwind.com has no optimizer: --minify and --optimize do not work."));
+        }
+        // The program for a browser: no Lightning CSS. --optimize only
+        // lowers the new CSS (`css_mixins.rs`).
+        #[cfg(all(feature = "lower", not(feature = "optimize")))]
+        if optimize {
+            if options.minify {
+                return Err(Error::new(
+                    "This build of tailwind.com has no minifier: --minify does not work. --optimize lowers the new CSS functions and mixins only.",
+                ));
+            }
+            previous.optimized_css = match css_mixins::lower(css, &options.optimizer_file, &css_mixins::TARGETS, map.is_some()) {
+                Some(_) if map.is_some() => {
+                    return Err(Error::new("This build of tailwind.com cannot make a source map of the lowered CSS."));
+                }
+                Some(lowered) => lowered.code,
+                None => css.to_string(),
+            };
+        }
+        #[cfg(feature = "optimize")]
         if optimize {
             let optimized = optimize_css::optimize(
                 css,

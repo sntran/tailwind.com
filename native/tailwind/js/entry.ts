@@ -14,11 +14,14 @@ import createPlugin from 'tailwindcss-src/plugin'
 import { createDesignSystem } from './design-system'
 import './globals'
 import { callbacks, decode, encode, setTracking } from './host'
-import { withCauses } from './causes'
+import { withCauses, withCausesAsync } from './causes'
 import { loadModule, moduleSource, setTailwindModules } from './modules'
-import { drainTimers } from './timers'
+import { drainTimers, drainTimersAsync, runTimer } from './timers'
 
 declare function __await<T>(promise: Promise<T>): T
+// The engine of a browser (js/engine.mjs in the npm package): a promise
+// that settles after the jobs of the promises that are pending now.
+declare function __tw_yield(): Promise<void>
 
 let designSystem = createDesignSystem()
 let global = globalThis as any
@@ -52,6 +55,38 @@ global.__tw_compat = (text: string) =>
     drainTimers(__await)
     return encode({ ast, sources, features })
   })
+
+// `__tw_compat` for the engine of a browser, which has no `__await`: the
+// program waits for the promise of this function (JS Promise
+// Integration). The jobs and the timers run as with `__await`.
+global.__tw_compat_async = (text: string) =>
+  withCausesAsync(async () => {
+    let { base, ast, sources } = decode(text) as {
+      base: string
+      ast: AstNode[]
+      sources: { base: string; pattern: string; negated: boolean }[]
+    }
+    let features = await settle(
+      applyCompatibilityHooks({ designSystem: designSystem as any, base, ast, loadModule, sources }),
+    )
+    await drainTimersAsync(settle)
+    return encode({ ast, sources, features })
+  })
+
+// Wait for a promise as `__await` does: when no job is pending, the next
+// timer runs.
+async function settle<T>(promise: Promise<T>): Promise<T> {
+  let done = false
+  promise.then(
+    () => (done = true),
+    () => (done = true),
+  )
+  for (;;) {
+    await __tw_yield()
+    if (done) return promise
+    if (!runTimer()) throw new Error('The promise cannot settle: no job and no timer is pending')
+  }
+}
 
 // The compile function of a utility. `undefined`: no match. `null`: the
 // candidate is not valid.

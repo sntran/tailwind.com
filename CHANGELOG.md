@@ -6,6 +6,52 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
+## Unreleased
+
+### Added
+
+- The npm package works in the browser. On a CDN, its default file works
+  as the Play CDN of Tailwind CSS:
+  `<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>`
+  builds the CSS of the page, and builds again when its classes change.
+  The input CSS can be a file,
+  `<link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">`
+  (with the files of its `@import`, and of its plugins), so a page goes
+  to a build on the disk with a small change. A change of a file on the
+  server builds again. It can also be a
+  `<style type="text/tailwindcss">`, as for the Play CDN. The CSS is the
+  same as the output of a build of the same files, or as the CSS of
+  `@tailwindcss/browser`. The plugins in the program work. In a bundler
+  or a Web Worker, the condition `browser` of `package.json` gives
+  `runWasm` with the files in memory. The WASI host of the site is now
+  `js/wasi.mjs`.
+- The page does not show with no style. The first build waits for the
+  end of the HTML, and the page stays hidden until its first CSS (at
+  most 3 seconds). The last CSS of each page stays in `localStorage`, so
+  the next load is styled at once. The downloads start at once. With a
+  network of 20 Mbps, the first visit shows the styled page in about
+  0.5 s.
+- `tailwind-browser.wasm`: the program for a browser, with no Lightning
+  CSS and no QuickJS, 0.80 MB with brotli (`tailwind.wasm` is 1.78 MB).
+  The condition `browser` of the npm package gives it, and the page
+  script uses it. It lowers the new CSS (`@function`, `@mixin`, `if()`,
+  `@when`, the sibling functions and the math functions) with
+  `--optimize`, and the page script gives `--optimize`. Its plugins of `@plugin` and `@config` run in the JavaScript
+  engine of the host, with JS Promise Integration (`js/engine.mjs`): in
+  a page (a hidden iframe for each build), and in Node.js 24 or later (a
+  context of `node:vm`, through `runWasm`). The npm package has the plugin
+  layer, the TypeScript transform and the three plugins as files in
+  `runtime/`. The 101 recorded cases with JavaScript give the output of
+  the official program in Chromium. `--minify` gives an error: the
+  option `wasm` of `runWasm` can give `tailwind.wasm`. The
+  plugin layer has `__tw_compat_async`, and the TypeScript transform can
+  also change an ES module to CommonJS.
+- The Cargo features `program` (the program with no optimizer and no
+  JavaScript engine), `lower` (the lowering of the new CSS with no
+  Lightning CSS), `optimize` (`lower` and Lightning CSS) and `host-js`:
+  `cli` is `program`, `optimize` and `js`. `tailwind-browser.wasm` has
+  `program`, `lower` and `host-js`.
+
 ## 0.4.0 - 2026-11-17
 
 The optimizer lowers new CSS (functions, mixins, `if()`, `@when`, the
@@ -42,6 +88,7 @@ CSS, and `mix format` sorts the classes of HEEx templates.
   new option. See `docs/FORMATTER.md`.
 - The library crate has the order of classes of a design system:
   `DesignSystem::get_class_order`, as `getClassOrder` of Tailwind CSS.
+
 
 ### Fixed
 

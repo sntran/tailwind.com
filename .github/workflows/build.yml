@@ -134,7 +134,14 @@ jobs:
           echo "$WASI_SDK_SHA256  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum -c -
           mkdir -p build/wasi-sdk
           tar xzf "$RUNNER_TEMP/wasi-sdk.tar.gz" -C build/wasi-sdk --strip-components=1
+      # tailwind.wasm, and tailwind-browser.wasm for the condition "browser"
+      # of the npm package.
       - run: WASI_SDK_PATH=$PWD/build/wasi-sdk make wasm
+      # runWasm with tailwind-browser.wasm runs plugins with JS Promise
+      # Integration: Node.js 24 or later.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
       - name: The program in Node.js, against the record
         run: node tests/wasi.mjs build/tailwind.wasm
       - name: The program with JavaScript plugins and configs
@@ -144,7 +151,9 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: tailwind.wasm
-          path: build/tailwind.wasm
+          path: |
+            build/tailwind.wasm
+            build/tailwind-browser.wasm
           if-no-files-found: error
 
   # The site (site/, docs/SITE.md): tailwind.wasm in Chromium, with the
@@ -184,6 +193,14 @@ jobs:
         # Some cases and versions: site/build.mjs checks each case, and the
         # main tests compare the two engines for each version.
         run: node tests/site/page.mjs --screenshot build/site/screenshot.png --cases 5 --versions 4.3.5,4.0.0
+      - name: The npm package in Chromium, against the browser build of Tailwind CSS
+        env:
+          NODE_PATH: ${{ runner.temp }}/playwright/node_modules
+        run: |
+          . ./UPSTREAM
+          mkdir "$RUNNER_TEMP/official"
+          (cd "$RUNNER_TEMP/official" && npm pack --silent "@tailwindcss/browser@$TAILWINDCSS_VERSION" && tar xzf tailwindcss-browser-*.tgz)
+          node tests/npm-browser.mjs --wasm build/tailwind.wasm --official "$RUNNER_TEMP/official/package/dist/index.global.js"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
@@ -571,6 +588,10 @@ jobs:
         with:
           path: build
           merge-multiple: true
+      # runWasm runs plugins with JS Promise Integration: Node.js 24.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
       - name: The generated part and the package
         run: |
           chmod +x build/tailwind.com
@@ -650,12 +671,13 @@ jobs:
       # the file SOURCE of a directory of NIF files (docs/NIF.md).
       - name: SOURCE
         run: printf 'git https://github.com/%s commit=%s tag=%s\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_REF_NAME" > dist/SOURCE
-      - run: cd dist && sha256sum tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE > SHA256SUMS
+      - run: cd dist && sha256sum tailwind.com tailwind.wasm tailwind-browser.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE > SHA256SUMS
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             dist/tailwind.com
             dist/tailwind.wasm
+            dist/tailwind-browser.wasm
             dist/tailwind.com-*.tgz
             dist/libtailwind_nif.*.o
       - name: Publish the release
@@ -667,10 +689,10 @@ jobs:
           cd dist
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             # A re-run can reach this step after a later publication failed.
-            gh release upload "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE SHA256SUMS \
+            gh release upload "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind-browser.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE SHA256SUMS \
               --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE SHA256SUMS \
+            gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind-browser.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE SHA256SUMS \
               --repo "$GITHUB_REPOSITORY" --generate-notes \
               --title "$GITHUB_REF_NAME (Tailwind CSS $oldest to $TAILWINDCSS_VERSION)"
           fi

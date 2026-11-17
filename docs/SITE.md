@@ -41,7 +41,7 @@ on GitHub.
 | `site/index.html`, `site/app.mjs` | The page: the controls, the output, the preview, the list of the changes. |
 | `site/style.css` | The CSS of the page. `site/build.mjs` builds it with `tailwind.wasm`. |
 | `site/worker.mjs` | A Web Worker that runs `tailwind.wasm`, so that a build does not stop the page. |
-| `site/wasi.mjs` | The WASI host (preview 1) with a file system in memory. It has the 22 functions that `tailwind.wasm` imports, and no dependency. It runs in a browser and in Node.js. |
+| `js/wasi.mjs` | The WASI host (preview 1) with a file system in memory. It has the 22 functions that `tailwind.wasm` imports, and no dependency. It runs in a browser and in Node.js. The npm package uses it in the browser too (`js/browser.mjs`). |
 | `site/diff.mjs` | The difference of two texts, line by line (the algorithm of Myers). |
 | `site/examples.mjs` | The starter examples. |
 | `site/build.mjs` | It writes the site into `build/site`. |
@@ -51,7 +51,7 @@ The site has these files:
 
 | File | Size | What |
 |---|---:|---|
-| `tailwind.wasm` | 9.4 MB, 2.5 MB with gzip | The program, built from the commit of the site. |
+| `tailwind.wasm` | 9.5 MB, 2.5 MB with gzip | The program, built from the commit of the site. |
 | `releases/TAG/tailwind.wasm` | about 9 MB each | The program of each release (`scripts/releases.sh`, at most 20). The browser downloads one only when a viewer selects it. |
 | `packages.bin` | 0.95 MB | The packages of the 48 versions: 4.3.5 in full, and each older version as a patch, as in the ZIP directory of `tailwind.com`. |
 | `data.json` | 0.16 MB | The versions, the examples, the 195 switches, the recorded cases and the programs. |

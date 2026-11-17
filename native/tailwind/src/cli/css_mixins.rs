@@ -9,7 +9,7 @@
 //! know them. This step is a part of Lightning CSS in this program: it runs
 //! before Lightning CSS, for `--minify` and `--optimize`, when a target
 //! browser of the optimizer does not have the rule. The targets are those
-//! of Tailwind CSS (`optimize_css::TARGETS`). When Lightning CSS has its own
+//! of Tailwind CSS (`TARGETS`). When Lightning CSS has its own
 //! lowering, this step goes.
 //!
 //! The step changes nothing in a stylesheet with none of these rules.
@@ -20,7 +20,40 @@ use crate::hash::{HashMap, HashSet};
 use crate::source_maps::create_source_map;
 use crate::to_css::{to_css, to_css_tracked};
 use crate::utils::segment::segment;
-use lightningcss::targets::Browsers;
+#[cfg(feature = "optimize")]
+pub use lightningcss::targets::Browsers;
+
+/// The browsers of a target, as `Browsers` of Lightning CSS: each version
+/// is `major << 16 | minor << 8 | patch`. The program with no Lightning CSS
+/// (the feature `lower` alone) has this copy.
+#[cfg(not(feature = "optimize"))]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Browsers {
+    pub android: Option<u32>,
+    pub chrome: Option<u32>,
+    pub edge: Option<u32>,
+    pub firefox: Option<u32>,
+    pub ie: Option<u32>,
+    pub ios_saf: Option<u32>,
+    pub opera: Option<u32>,
+    pub safari: Option<u32>,
+    pub samsung: Option<u32>,
+}
+
+/// The browsers of the optimizer: the targets of `optimize.ts` of
+/// `@tailwindcss/node`. They also decide the lowering of the functions and
+/// the mixins.
+pub const TARGETS: Browsers = Browsers {
+    android: None,
+    chrome: Some(111 << 16),
+    edge: None,
+    firefox: Some(128 << 16),
+    ie: None,
+    ios_saf: Some((16 << 16) | (4 << 8)),
+    opera: None,
+    safari: Some((16 << 16) | (4 << 8)),
+    samsung: None,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -1671,7 +1704,7 @@ mod tests {
     use super::*;
 
     fn targets() -> Browsers {
-        super::super::optimize_css::TARGETS
+        TARGETS
     }
 
     fn run(css: &str) -> String {

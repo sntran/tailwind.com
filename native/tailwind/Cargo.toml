@@ -42,18 +42,34 @@ crate-type = ["rlib", "staticlib"]
 [[bin]]
 name = "tailwind"
 path = "src/main.rs"
-required-features = ["cli"]
+required-features = ["program"]
 
 [features]
 default = ["cli", "mimalloc"]
 # The command line program: the scanner of Tailwind CSS, and Lightning CSS
 # for --minify and --optimize.
-cli = ["dep:tailwindcss-oxide", "dep:lightningcss", "dep:serde_json", "dep:parcel_sourcemap", "js"]
+cli = ["program", "optimize", "js"]
+# The command line program with no optimizer and no JavaScript engine:
+# the build for the browser (js/page.js), where the browser has the
+# JavaScript engine. --minify and --optimize give an error.
+program = ["dep:tailwindcss-oxide", "dep:serde_json"]
+# The optimizer of --minify and --optimize: Lightning CSS, and the
+# lowering of CSS functions and mixins before it.
+optimize = ["lower", "dep:lightningcss", "dep:parcel_sourcemap"]
+# The lowering of the new CSS (functions, mixins, if(), @when, the sibling
+# functions, the math functions) with no Lightning CSS: the program for a
+# browser. There, --optimize only lowers, and --minify gives an error.
+lower = []
 # `@plugin` and `@config`: the QuickJS engine (c_src/quickjs, c_src/js.c)
 # and the plugin layer of Tailwind CSS (assets/compat.js). build.rs
 # compiles the C files. For wasm32-wasip1 it needs WASI_SDK_PATH: with no
 # wasi-sdk, the program has no JavaScript.
 js = ["dep:serde_json", "dep:cc"]
+# `@plugin` and `@config` in the JavaScript engine of the host: for
+# wasm32-wasip1 in a browser. The functions of the engine are imports of
+# the module "tailwind_js" (js/engine.mjs gives them), and the plugin
+# layer waits for its promises with JS Promise Integration. No C code.
+host-js = ["dep:serde_json"]
 # The build of tailwind.com (scripts/build.sh): the file events of
 # c_src/watch.c are linked into the program. scripts/build.sh compiles the
 # C files of the feature `js` with cosmocc, and build.rs compiles nothing.

@@ -39,6 +39,10 @@ The math functions of CSS Values 4 that old browsers do not have are in
 - **The optimizer** (`--minify` and `--optimize`) lowers them before
   Lightning CSS, in `native/tailwind/src/cli/css_mixins.rs`. Lightning CSS
   does not know them yet. When it has its own lowering, this step goes.
+- **In the browser**, the page script of the npm package (`js/page.js`)
+  lowers them too. Its program (`tailwind-browser.wasm`, the Cargo
+  feature `lower`) has this step and no Lightning CSS: there, `--optimize`
+  only lowers, and `--minify` gives an error.
 - **The browsers decide**, as for each other lowering of Lightning CSS.
   The step lowers a rule when a target browser of the optimizer does not
   have it. The targets are those of Tailwind CSS (Chrome 111, Safari

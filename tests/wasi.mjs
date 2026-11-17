@@ -6,8 +6,12 @@
 //        CASES=tests/upstream/cli-map node tests/wasi.mjs build/tailwind.wasm [CASE...]
 //
 // CASES is the directory of the cases (default: tests/upstream/cli). The
-// cases of tests/upstream/cli-js need a program with JavaScript: a build
-// with WASI_SDK_PATH (see docs/BUILDING.md).
+// program runs with runWasm of js/node.mjs, as a user of the npm package
+// runs it. The cases of tests/upstream/cli-js need a program with
+// JavaScript: tailwind.wasm, a build with WASI_SDK_PATH (see
+// docs/BUILDING.md), or tailwind-browser.wasm, whose plugins run in the
+// JavaScript engine of Node.js (Node.js 24 or later). The program for a
+// browser has no optimizer: the cases with --minify fail with it.
 //
 // Each case runs in a child process, because a WASI instance runs one
 // time. The project is a copy outside this repository, as in tests/cli.sh.
@@ -28,18 +32,13 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 if (process.argv[2] === '--child') {
   // The child: run the program with the project as the root directory.
   const [wasm, project, env, ...args] = process.argv.slice(3)
-  const { WASI } = await import('node:wasi')
-  const wasi = new WASI({
-    version: 'preview1',
-    args: ['tailwind', ...args],
-    env: { NO_COLOR: '1', PWD: '/', ...JSON.parse(env) },
-    preopens: { '/': project },
-    returnOnExit: true,
-    stdin: process.stdin.fd,
-  })
-  const module = await WebAssembly.compile(fs.readFileSync(wasm))
-  const instance = await WebAssembly.instantiate(module, wasi.getImportObject())
-  process.exit(wasi.start(instance))
+  const { runWasm } = await import('../js/node.mjs')
+  const input = fs.readFileSync(0, 'utf8')
+  const result = await runWasm(args, { cwd: project, env: { NO_COLOR: '1', ...JSON.parse(env) }, input, wasm })
+  // A write to a pipe is synchronous on Linux and macOS.
+  process.stdout.write(result.stdout)
+  process.stderr.write(result.stderr)
+  process.exit(result.status)
 }
 
 const wasm = path.resolve(process.argv[2])

@@ -12,7 +12,7 @@
 //!   engine (the feature `js`) and the caller gives a module loader.
 
 mod default_theme;
-#[cfg(feature = "js")]
+#[cfg(any(feature = "js", feature = "host-js"))]
 pub mod js;
 pub mod legacy_utilities;
 pub mod module_loader;

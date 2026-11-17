@@ -5,7 +5,7 @@
 //! the output is the same.
 
 use lightningcss::stylesheet::{MinifyOptions, ParserFlags, ParserOptions, PrinterOptions, StyleSheet};
-use lightningcss::targets::{Browsers, Features, Targets};
+use lightningcss::targets::{Features, Targets};
 use parcel_sourcemap::SourceMap;
 
 use std::sync::{Arc, RwLock};
@@ -13,19 +13,8 @@ use std::sync::{Arc, RwLock};
 use super::remapping;
 
 /// The browsers of the optimizer: the targets of `optimize.ts` of
-/// `@tailwindcss/node`. They also decide the lowering of the functions and
-/// the mixins (`css_mixins.rs`).
-pub const TARGETS: Browsers = Browsers {
-    android: None,
-    chrome: Some(111 << 16),
-    edge: None,
-    firefox: Some(128 << 16),
-    ie: None,
-    ios_saf: Some((16 << 16) | (4 << 8)),
-    opera: None,
-    safari: Some((16 << 16) | (4 << 8)),
-    samsung: None,
-};
+/// `@tailwindcss/node` (`css_mixins.rs`).
+pub use super::css_mixins::TARGETS;
 
 /// A warning of Lightning CSS, as its Node.js package gives it: the
 /// message, the line (from 1) and the column (from 1, in UTF-16 code

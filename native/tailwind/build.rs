@@ -73,10 +73,19 @@ fn main() {
     compat_patches();
     embedded_packages();
     println!("cargo:rustc-check-cfg=cfg(tw_js)");
+    println!("cargo:rustc-check-cfg=cfg(tw_host_js)");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=WASI_SDK_PATH");
 
-    if std::env::var_os("CARGO_FEATURE_APE").is_some() {
+    if std::env::var_os("CARGO_FEATURE_HOST_JS").is_some() {
+        // The engine of the host: no C code. The program exports the
+        // functions that the host calls.
+        println!("cargo:rustc-cfg=tw_js");
+        println!("cargo:rustc-cfg=tw_host_js");
+        for name in ["tw_host_alloc", "tw_host_free", "tw_host_call", "tw_host_release"] {
+            println!("cargo:rustc-link-arg-bins=--export={name}");
+        }
+    } else if std::env::var_os("CARGO_FEATURE_APE").is_some() {
         if std::env::var_os("CARGO_FEATURE_JS").is_some() {
             println!("cargo:rustc-cfg=tw_js");
         }

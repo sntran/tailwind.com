@@ -6,7 +6,8 @@
 #
 #   sh scripts/npm.sh TAILWIND_COM TAILWIND_WASM TAG
 #
-# TAILWIND_COM and TAILWIND_WASM: the files of the release. TAG: the tag of
+# TAILWIND_COM and TAILWIND_WASM: the files of the release, with
+# tailwind-browser.wasm in the directory of TAILWIND_WASM. TAG: the tag of
 # the GitHub release that has the file, for example v0.4.0.
 set -eu
 [ $# -eq 3 ] || { echo "usage: $0 TAILWIND_COM TAILWIND_WASM TAG" >&2; exit 2; }
@@ -26,6 +27,17 @@ fi
 out=$root/runtime
 mkdir -p "$out"
 cp "$wasm" "$out/tailwind.wasm"
+# The program for a browser (the condition "browser" of package.json): no
+# optimizer and no JavaScript engine. Its plugins run in the JavaScript
+# engine of the browser (js/engine.mjs), with the JavaScript files of the
+# program: the plugin layer, the TypeScript transform and the three
+# plugins of the standalone program.
+cp "$(dirname "$wasm")/tailwind-browser.wasm" "$out/tailwind-browser.wasm"
+assets=$root/native/tailwind/assets
+rm -rf "$out/plugins"
+mkdir -p "$out/plugins"
+cp "$assets/compat.js" "$assets/typescript.js" "$out/"
+cp "$assets"/plugins/*.js "$out/plugins/"
 printf '{"version": "%s", "tag": "%s", "tailwindcss": "%s", "sha256": "%s"}\n' \
     "$version" "$tag" "$TAILWINDCSS_VERSION" "$sha" > "$out/release.json"
 echo "$0: wrote $out (package $version, release $tag, Tailwind CSS $TAILWINDCSS_VERSION)"

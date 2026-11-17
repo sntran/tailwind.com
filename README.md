@@ -158,7 +158,90 @@ const { status, stdout, stderr } = await runWasm(['-i', 'app.css'], { cwd: 'proj
 ```
 
 `import wasm from 'tailwind.com/tailwind.wasm'` gives the module itself,
-for another WASI host.
+for another WASI host. In a bundler for the browser, the condition
+`browser` gives `tailwind-browser.wasm` in its place.
+
+### In the browser
+
+From 0.5.0, on a page, the package works as the Play CDN of Tailwind CSS: it builds
+the CSS of the page from its classes, and builds again when they change.
+The input CSS can be a file, as for a build on the disk:
+
+```html
+<link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">
+<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>
+```
+
+- The browser does not apply a stylesheet with the type
+  `text/tailwindcss`. The script gets the file, and the files of its
+  `@import`, `@reference`, `@plugin` and `@config` with a path (`./`,
+  `../` or `/`). It also gets the files that the JavaScript or
+  TypeScript of a plugin imports with a path. A path with no extension
+  finds the file as Node.js does (`./plugin` gives `./plugin.js`). The
+  CSS goes after the `<link>`, so it has the same place in the cascade as
+  the output of a build.
+- The CSS is the same as the output of a build of the same files on the
+  disk, for the classes of the page. A test in CI compares the two.
+- To build on the disk later, remove the `<script>`, remove `type`, and
+  set `href` to the output of the build:
+  `<link rel="stylesheet" href="/assets/app.out.css">`.
+- Each second, while the page is visible, the script gets the files of
+  the site again, and builds again when one changes. A server with ETag
+  or Last-Modified answers 304, so this is small. A change of `href` (a
+  live reload) gets the files at once.
+
+The input CSS can also be in the page, as for the Play CDN:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>
+<style type="text/tailwindcss">
+  @plugin "@tailwindcss/typography";
+  @theme { --color-brand: #0d9488; }
+</style>
+```
+
+- A path in the `<style>` (`@import "./extra.css"`) finds the file from
+  the URL of the page.
+- With no `@import`, `@import "tailwindcss";` comes first. The CSS is
+  the same as the CSS of the browser build of Tailwind CSS
+  (`@tailwindcss/browser`). A test in CI compares the two.
+- The plugins in the program work with `@plugin`:
+  `@tailwindcss/typography`, `@tailwindcss/forms` and
+  `@tailwindcss/aspect-ratio`.
+- After each build, the document gets the event `tailwind.com:build`.
+- The program for a browser (`tailwind-browser.wasm`) has no Lightning
+  CSS and no JavaScript engine: about 0.8 MB with compression. It lowers
+  the new CSS of the input (`@function`, `@mixin`, `if()`, `@when`,
+  `sibling-index()`, `round()`, ...) for the browsers of Tailwind CSS, as
+  `--optimize` does ([`docs/MIXINS.md`](docs/MIXINS.md)). The plugins
+  of `@plugin` and `@config` run in the JavaScript engine of the browser,
+  with JS Promise Integration: also ES modules and TypeScript files, but
+  not a module with a top-level `await`. The plugin layer of Tailwind CSS
+  adds about 45 KB.
+- The first build waits for the end of the HTML, and the page stays
+  hidden until its first CSS (at most 3 seconds), so it does not show
+  with no style. The last CSS of each page stays in `localStorage`: the
+  next load is styled at once, and the build replaces it.
+- In Chromium, with a network of 20 Mbps, the first visit shows the
+  styled page in about 0.5 s (1.0 s with the typography plugin), and a
+  reload in about 50 ms. A build after
+  a change takes about 15 ms. Use it for development, prototypes and
+  editors, not for a production site.
+
+In a bundler (Vite, webpack, esbuild) and in a Web Worker, the condition
+`browser` of the package gives `runWasm` with the files in memory:
+
+```js
+import { runWasm } from 'tailwind.com';
+
+const { status, stdout } = await runWasm(['-i', 'app.css'], {
+  files: { 'app.css': '@import "tailwindcss";', 'index.html': html },
+});
+```
+
+With no `-o`, the CSS is in `stdout`. A bundler copies
+`tailwind-browser.wasm` with the files of the site. For `--minify` and
+`--optimize`, give the URL of `tailwind.wasm` in the option `wasm`.
 
 Each release also publishes the package to GitHub Packages, with the
 name `@sntran/tailwind.com` (registry `https://npm.pkg.github.com`), and
@@ -329,7 +412,15 @@ The release job publishes it to crates.io.
 WASI file system. It has the same JavaScript engine for `@plugin` and
 `@config`, with TypeScript and the three plugins in the file. The site
 runs it in the browser, with a small WASI host in JavaScript
-(`site/wasi.mjs`, [`docs/SITE.md`](docs/SITE.md)).
+(`js/wasi.mjs`, [`docs/SITE.md`](docs/SITE.md)).
+
+`tailwind-browser.wasm` of each release is the program for a browser:
+no Lightning CSS and no JavaScript engine, about 0.8 MB with
+compression, and `tailwind.wasm` is about 1.8 MB. Its plugins run in the
+JavaScript engine of the host, with JS Promise Integration
+(`js/engine.mjs`): a browser, or Node.js 24 or later. `--optimize` only
+lowers the new CSS functions and mixins, and `--minify` gives an error.
+The condition `browser` of the npm package gives it.
 
 ## Documentation
 

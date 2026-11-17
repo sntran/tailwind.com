@@ -3,6 +3,10 @@
 // of a module. The imports and exports stay as they are, and an import
 // that is only a type goes, as with the TypeScript compiler.
 //
+// The third argument gives other transforms of Sucrase. The engine of a
+// browser (js/engine.mjs of the npm package) cannot import a file in
+// memory: it gives `imports`, so an ES module becomes CommonJS.
+//
 // Sucrase removes a `namespace` with its content. A namespace can have
 // values, so a step before Sucrase changes each namespace to the function
 // that the TypeScript compiler makes for it.
@@ -99,9 +103,12 @@ export function rewriteNamespaces(source: string): string {
   return result + source.slice(position)
 }
 
-export default function stripTypes(source: string, file: string): string {
+type Transform = 'typescript' | 'imports'
+
+export default function stripTypes(source: string, file: string, transforms: Transform[] = ['typescript']): string {
   try {
-    return transform(rewriteNamespaces(source), { transforms: ['typescript'], disableESTransforms: true, filePath: file }).code
+    let input = transforms.includes('typescript') ? rewriteNamespaces(source) : source
+    return transform(input, { transforms, disableESTransforms: true, filePath: file }).code
   } catch (error: any) {
     // The parser gives an error with `loc`: the message of a syntax error
     // has the file, the line and the column.

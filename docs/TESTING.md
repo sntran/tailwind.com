@@ -164,8 +164,9 @@ FreeBSD, NetBSD, OpenBSD), so events that do not work there fail the
 job.
 
 `node tests/wasi.mjs build/tailwind.wasm` runs the same cases with the
-WASI program in Node.js. `CASES` selects the directory of the cases, as
-for `tests/cli.sh`. The project is the root directory there, so a
+WASI program in Node.js, through `runWasm` of `js/node.mjs`, as a user
+of the npm package runs it. `CASES` selects the directory of the cases,
+as for `tests/cli.sh`. The project is the root directory there, so a
 source of a map is `/app.css`. The cases with JavaScript (all of
 `cli-js`, and 6 cases of `cli-map`) need a program from a build with
 `WASI_SDK_PATH`. `<project>` in `env.txt` is the directory `/` there.
@@ -369,11 +370,51 @@ first run of the recorded projects found the other one: the sort (see
 ## The site
 
 `tests/site/browser.mjs` runs `tailwind.wasm` in Chromium with the WASI
-host of the site (`site/wasi.mjs`), and compares each result with
+host of the site (`js/wasi.mjs`), and compares each result with
 `node:wasi` on a real directory. `tests/site/page.mjs` opens the page of
 `site/build.mjs` in Chromium, with each example and each recorded case.
 The job `site` of `.github/workflows/build.yml` runs the two tests. See
 [`SITE.md`](SITE.md).
+
+`tests/npm-browser.mjs` runs the npm package in Chromium, from a local
+server with the paths of jsDelivr:
+
+- `js/page.js`, the default file on a CDN: the first build, a new
+  element, a new class, a change of the stylesheet, and a change with no
+  new class (no build). A class that goes from the page stays in the CSS.
+- `js/page.js` with `<link rel="stylesheet" type="text/tailwindcss">`:
+  the file, a relative `@import`, an `@import` from the root, a plugin of
+  the program, and a plugin file with no extension that imports a file.
+  The server gives HTML for each other path, as a server for a single
+  page. The browser does not apply the file, and the output has the
+  place of the link in the cascade. The CSS is the same, byte for byte,
+  as the output of the program for the same files on the disk. A change
+  of a file on the server builds again, and a change of `href` too.
+- `js/page.js` with a path in a `<style type="text/tailwindcss">`: the
+  file comes from the URL of the page.
+- The first visit: the page is hidden while the HTML is parsed, and
+  shows with the first CSS. A reload: the CSS of the last build styles
+  the page while the HTML is parsed.
+- A page with plugins: its plugins run in the JavaScript engine of
+  Chromium, and no realm stays after a build.
+- `--cases DIR` (default `tests/upstream/cli-js`): each recorded case
+  with JavaScript (plugins, configs, ES modules, TypeScript, errors) runs
+  with `tailwind-browser.wasm` and `runWasm` in Chromium, and must give
+  the output and the status of the official program, and the lines of
+  its error output. A case with `--minify` runs with `tailwind.wasm`.
+- `runWasm` with `tailwind-browser.wasm` gives an error for `--minify`,
+  and `runWasm` with the URL of `tailwind.wasm` minifies.
+- The page script lowers the new CSS (`@function`, `@mixin`, `if()`,
+  `sibling-index()`): the output has none of them, and the computed
+  styles of the page are right.
+- With `--official FILE`: on a page with `@theme`, `@utility`, `@apply`
+  and variants, the CSS of `js/page.js` is the same, byte for byte, as
+  the CSS of the browser build of Tailwind CSS (`@tailwindcss/browser` of
+  the version of `UPSTREAM`).
+- `js/browser.mjs`, the condition `browser`: `runWasm` in a module and in
+  a Web Worker, and the URL of `tailwind.wasm` from the URLs of the CDNs.
+
+The job `site` runs it.
 
 ## Benchmarks
 

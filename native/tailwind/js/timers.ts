@@ -91,6 +91,24 @@ export function drainTimers(wait: (promise: Promise<unknown>) => unknown) {
   }
 }
 
+// `drainTimers` for an engine with no `__await` (the engine of a browser):
+// `wait` gives a promise.
+export async function drainTimersAsync(wait: (promise: Promise<unknown>) => Promise<unknown>) {
+  for (let timer of timers.values()) {
+    if (timer.interval !== null) timers.delete(timer.id)
+  }
+  while (timers.size > 0) {
+    let last = 0
+    for (let timer of timers.values()) last = Math.max(last, timer.time)
+    await wait(
+      new Promise<void>((resolve) => {
+        let id = nextId++
+        timers.set(id, { id, fn: resolve, args: [], time: last, interval: null, runs: 0 })
+      }),
+    )
+  }
+}
+
 export function install(global: any) {
   global.setTimeout = (fn: unknown, delay?: unknown, ...args: unknown[]) => add(fn, delay, args, false)
   global.setInterval = (fn: unknown, delay?: unknown, ...args: unknown[]) => add(fn, delay, args, true)

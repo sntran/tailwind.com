@@ -136,7 +136,10 @@ export class Files {
 // the program sees, as { "path in the program": "path in files" }
 // (default { "/": "/" }). A second directory, such as { "/packages":
 // "/packages" }, is not in the root of the program, so the scanner of
-// the project does not see it.
+// the project does not see it. imports: other import modules, or a
+// function that gets a function of the exports of the instance and gives
+// them. promising: start the program with WebAssembly.promising, for an
+// import that suspends it (js/engine.mjs).
 export async function run(module, options = {}) {
   const files = options.files ?? new Files()
   const args = ['tailwind', ...(options.args ?? [])]
@@ -403,11 +406,18 @@ export async function run(module, options = {}) {
     if (from === 'wasi_snapshot_preview1' && !imports[name]) imports[name] = () => ERRNO.NOSYS
   }
 
-  const instance = await WebAssembly.instantiate(module, { wasi_snapshot_preview1: imports })
+  // Other import modules: `options.imports` is a function of a function
+  // that gives the exports of the instance.
+  let instance = null
+  const others = typeof options.imports === 'function' ? options.imports(() => instance.exports) : (options.imports ?? {})
+  instance = await WebAssembly.instantiate(module, { ...others, wasi_snapshot_preview1: imports })
   memory = instance.exports.memory
   let status = 0
   try {
-    instance.exports._start()
+    // With `promising`, an import can suspend the program (JS Promise
+    // Integration): the start gives a promise.
+    if (options.promising) await WebAssembly.promising(instance.exports._start)()
+    else instance.exports._start()
   } catch (error) {
     if (!(error instanceof Exit)) throw error
     status = error.code
