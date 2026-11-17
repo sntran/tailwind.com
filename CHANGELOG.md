@@ -6,7 +6,11 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
-## Unreleased
+## 0.4.0 - 2026-11-17
+
+The optimizer lowers new CSS (functions, mixins, `if()`, `@when`, the
+sibling functions and more math functions) for the browsers of Tailwind
+CSS, and `mix format` sorts the classes of HEEx templates.
 
 ### Added
 
