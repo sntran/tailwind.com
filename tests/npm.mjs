@@ -181,17 +181,19 @@ test('runWasm() reads the input from options.input', { skip: !hasWasm }, async (
   assert.match(result.stdout, /--color-x: red/);
 });
 
-// The plugins run in the JavaScript engine of Node.js (js/engine.mjs):
-// with JS Promise Integration only (Node.js 24 or later).
-test('runWasm() runs plugins in the JavaScript engine of Node.js', { skip: !hasWasm || typeof WebAssembly.Suspending !== 'function' }, async () => {
+// The program for a browser has no JavaScript engine: in Node.js, its
+// plugins run in the JavaScript engine of Node.js (js/engine.mjs), with
+// JS Promise Integration only (Node.js 24 or later).
+const browserWasm = path.join(path.dirname(wasm), 'tailwind-browser.wasm');
+test('runWasm() runs the plugins of the program for a browser in the JavaScript engine of Node.js', { skip: !fs.existsSync(browserWasm) || typeof WebAssembly.Suspending !== 'function' }, async () => {
   const dir = project('wasm-plugin');
   fs.writeFileSync(path.join(dir, 'index.html'), '<p class="prose ring-x">');
   // An ES module that imports a file: it becomes CommonJS.
   fs.writeFileSync(path.join(dir, 'plugin.mjs'), "import { width } from './width.mjs';\nexport default ({ addUtilities }) => addUtilities({ '.ring-x': { 'outline-width': width } });\n");
   fs.writeFileSync(path.join(dir, 'width.mjs'), "export const width = '3px';\n");
   const input = '@import "tailwindcss";\n@plugin "@tailwindcss/typography";\n@plugin "./plugin.mjs";\n';
-  const result = await runWasm(['-i', '-', '--minify'], { cwd: dir, wasm, input, env: { NO_COLOR: '1' } });
+  const result = await runWasm(['-i', '-'], { cwd: dir, wasm: browserWasm, input, env: { NO_COLOR: '1' } });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /\.prose\{/);
-  assert.match(result.stdout, /\.ring-x\{outline-width:3px\}/);
+  assert.match(result.stdout, /\.prose \{/);
+  assert.match(result.stdout, /\.ring-x \{\n    outline-width: 3px;/);
 });

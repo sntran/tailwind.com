@@ -4,14 +4,12 @@
 #   make native     target/release/tailwind: a program for this computer
 #   make nif        build/nif: the native NIF objects for BEAM.com
 #                   (docs/NIF.md)
-#   make wasm       build/tailwind.wasm: the program for WASI, for a host
-#                   with JavaScript (a browser, Node.js, Deno). The plugins
-#                   of @plugin and @config run in the JavaScript engine of
-#                   the host (js/engine.mjs).
-#   make wasm-quickjs
-#                   build/tailwind-quickjs.wasm: the program with QuickJS
-#                   and the script engine, for the site. It needs
-#                   WASI_SDK_PATH (a wasi-sdk). It is not published.
+#   make wasm       build/tailwind.wasm: the program for WASI. With
+#                   WASI_SDK_PATH (a wasi-sdk), the program has JavaScript
+#                   for @plugin and @config. Also build/tailwind-browser.wasm:
+#                   the program for a browser, with no optimizer and no
+#                   JavaScript engine: its plugins run in the JavaScript
+#                   engine of the browser (js/engine.mjs).
 #   make test       all the tests
 #   make test-wasm  the WASI program against the record, in Node.js
 #   make tlc        the TLA+ models of specs/, with TLC
@@ -20,7 +18,7 @@
 
 BUILD ?= $(CURDIR)/build
 
-.PHONY: all native nif wasm wasm-quickjs test test-rust test-cli test-wasm test-mix tlc
+.PHONY: all native nif wasm test test-rust test-cli test-wasm test-mix tlc
 
 all: $(BUILD)/tailwind.com
 
@@ -34,14 +32,11 @@ nif:
 	sh scripts/nif.sh $(BUILD)/nif
 
 wasm:
-	CARGO_TARGET_DIR=target/wasm cargo build --release --target wasm32-wasip1 -p tailwind --no-default-features --features program,optimize,host-js
-	mkdir -p $(BUILD)
-	cp target/wasm/wasm32-wasip1/release/tailwind.wasm $(BUILD)/tailwind.wasm
-
-wasm-quickjs:
 	cargo build --release --target wasm32-wasip1
 	mkdir -p $(BUILD)
-	cp target/wasm32-wasip1/release/tailwind.wasm $(BUILD)/tailwind-quickjs.wasm
+	cp target/wasm32-wasip1/release/tailwind.wasm $(BUILD)/tailwind.wasm
+	CARGO_TARGET_DIR=target/wasm cargo build --release --target wasm32-wasip1 -p tailwind --no-default-features --features program,host-js
+	cp target/wasm/wasm32-wasip1/release/tailwind.wasm $(BUILD)/tailwind-browser.wasm
 
 test: test-rust test-cli tlc test-mix
 

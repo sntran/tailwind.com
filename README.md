@@ -157,13 +157,9 @@ await run(['-i', 'app.css', '-o', 'dist/app.css', '--minify']);
 const { status, stdout, stderr } = await runWasm(['-i', 'app.css'], { cwd: 'project' });
 ```
 
-The plugins of `@plugin` and `@config` run in the JavaScript engine of
-Node.js, in a context of `node:vm`. That needs JS Promise Integration:
-Node.js 24 or later (Node.js 22 with `--experimental-wasm-jspi`).
-
 `import wasm from 'tailwind.com/tailwind.wasm'` gives the module itself,
-for another WASI host. Its plugins need the imports of
-`js/engine.mjs`.
+for another WASI host. In a bundler for the browser, the condition
+`browser` gives `tailwind-browser.wasm` in its place.
 
 ### In the browser
 
@@ -213,8 +209,9 @@ The input CSS can also be in the page, as for the Play CDN:
   `@tailwindcss/typography`, `@tailwindcss/forms` and
   `@tailwindcss/aspect-ratio`.
 - After each build, the document gets the event `tailwind.com:build`.
-- The program is about 1.35 MB with compression. The plugins of
-  `@plugin` and `@config` run in the JavaScript engine of the browser,
+- The program for a browser (`tailwind-browser.wasm`) has no optimizer
+  and no JavaScript engine: about 0.77 MB with compression. The plugins
+  of `@plugin` and `@config` run in the JavaScript engine of the browser,
   with JS Promise Integration: also ES modules and TypeScript files, but
   not a module with a top-level `await`. The plugin layer of Tailwind CSS
   adds about 45 KB.
@@ -223,7 +220,7 @@ The input CSS can also be in the page, as for the Play CDN:
   with no style. The last CSS of each page stays in `localStorage`: the
   next load is styled at once, and the build replaces it.
 - In Chromium, with a network of 20 Mbps, the first visit shows the
-  styled page in about 0.9 s (1.2 s with the typography plugin), and a
+  styled page in about 0.5 s (1.0 s with the typography plugin), and a
   reload in about 50 ms. A build after
   a change takes about 15 ms. Use it for development, prototypes and
   editors, not for a production site.
@@ -234,13 +231,14 @@ In a bundler (Vite, webpack, esbuild) and in a Web Worker, the condition
 ```js
 import { runWasm } from 'tailwind.com';
 
-const { status, stdout } = await runWasm(['-i', 'app.css', '--minify'], {
+const { status, stdout } = await runWasm(['-i', 'app.css'], {
   files: { 'app.css': '@import "tailwindcss";', 'index.html': html },
 });
 ```
 
-With no `-o`, the CSS is in `stdout`. A bundler copies `tailwind.wasm`
-with the files of the site; the option `wasm` gives another URL.
+With no `-o`, the CSS is in `stdout`. A bundler copies
+`tailwind-browser.wasm` with the files of the site. For `--minify` and
+`--optimize`, give the URL of `tailwind.wasm` in the option `wasm`.
 
 Each release also publishes the package to GitHub Packages, with the
 name `@sntran/tailwind.com` (registry `https://npm.pkg.github.com`), and
@@ -407,15 +405,18 @@ The release job publishes it to crates.io.
 ## WebAssembly
 
 `tailwind.wasm` of each release is the same program for WASI
-(`wasm32-wasip1`), for a host with JavaScript: a browser, Node.js 24 or
-later, Deno. It has no JavaScript engine of its own: the plugins of
-`@plugin` and `@config` (also TypeScript and ES modules, and the three
-plugins of the standalone program) run in the JavaScript engine of the
-host, with JS Promise Integration (`js/engine.mjs`). A host with no
-JavaScript, such as Wasmtime, runs it with no `@plugin` and no
-`@config`. In the browser, it runs with a small WASI host in JavaScript
-(`js/wasi.mjs`). The site has its own build with QuickJS and the script
-engine ([`docs/SITE.md`](docs/SITE.md)).
+(`wasm32-wasip1`): it runs in Node.js, Wasmtime, and other hosts with a
+WASI file system. It has the same JavaScript engine for `@plugin` and
+`@config`, with TypeScript and the three plugins in the file. The site
+runs it in the browser, with a small WASI host in JavaScript
+(`js/wasi.mjs`, [`docs/SITE.md`](docs/SITE.md)).
+
+`tailwind-browser.wasm` of each release is the program for a browser:
+no optimizer and no JavaScript engine, about 0.77 MB with compression,
+and `tailwind.wasm` is about 1.8 MB. Its plugins run in the JavaScript
+engine of the host, with JS Promise Integration (`js/engine.mjs`): a
+browser, or Node.js 24 or later. `--minify` and `--optimize` give an
+error. The condition `browser` of the npm package gives it.
 
 ## Documentation
 

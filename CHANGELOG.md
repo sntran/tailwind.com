@@ -30,29 +30,24 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   most 3 seconds). The last CSS of each page stays in `localStorage`, so
   the next load is styled at once. The downloads start at once. With a
   network of 20 Mbps, the first visit shows the styled page in about
-  0.9 s.
-- `tailwind.wasm` has no QuickJS: the plugins of `@plugin` and
-  `@config` run in the JavaScript engine of the host, with JS Promise
-  Integration (`js/engine.mjs`): in a page (a hidden iframe for each
-  build) and in Node.js 24 or later (a context of `node:vm`, through
-  `runWasm`). The npm package has the plugin layer, the TypeScript
-  transform and the three plugins as files in `runtime/`. The program is
-  1.35 MB with brotli, and was 1.78 MB. The 101 recorded cases with
-  JavaScript give the output of the official program in Node.js and in
-  Chromium. A host with no JavaScript (Wasmtime) runs it with no
-  `@plugin` and no `@config`. The plugin layer has `__tw_compat_async`,
-  and the TypeScript transform can also change an ES module to
-  CommonJS.
+  0.5 s.
+- `tailwind-browser.wasm`: the program for a browser, with no optimizer
+  and no QuickJS, 0.77 MB with brotli (`tailwind.wasm` is 1.78 MB). The
+  condition `browser` of the npm package gives it, and the page script
+  uses it. Its plugins of `@plugin` and `@config` run in the JavaScript
+  engine of the host, with JS Promise Integration (`js/engine.mjs`): in
+  a page (a hidden iframe for each build), and in Node.js 24 or later (a
+  context of `node:vm`, through `runWasm`). The npm package has the plugin
+  layer, the TypeScript transform and the three plugins as files in
+  `runtime/`. The 101 recorded cases with JavaScript give the output of
+  the official program in Chromium. `--minify` and `--optimize` give an
+  error: the option `wasm` of `runWasm` can give `tailwind.wasm`. The
+  plugin layer has `__tw_compat_async`, and the TypeScript transform can
+  also change an ES module to CommonJS.
 - The Cargo features `program` (the program with no optimizer and no
   JavaScript engine), `optimize` and `host-js`: `cli` is `program`,
-  `optimize` and `js`. `tailwind.wasm` has `program`, `optimize` and
+  `optimize` and `js`. `tailwind-browser.wasm` has `program` and
   `host-js`.
-
-### Changed
-
-- The site has its own build of the program, `tailwind-quickjs.wasm`
-  (`make wasm-quickjs`), with QuickJS and the script engine. It is not
-  published.
 
 ## 0.4.0 - 2026-11-17
 

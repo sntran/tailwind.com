@@ -148,7 +148,7 @@ engines give the same output in each cell.
 
 ```sh
 make                                 # build/tailwind.com
-make wasm                            # build/tailwind.wasm (Node.js 24 for its plugins)
+make wasm                            # build/tailwind.wasm
 cargo build --release --bin tailwind # target/release/tailwind
 sh tests/fuzz/install.sh build/official
 sh tests/standalone.sh --download build/standalone   # Linux x86_64

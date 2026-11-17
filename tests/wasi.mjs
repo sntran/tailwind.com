@@ -7,9 +7,11 @@
 //
 // CASES is the directory of the cases (default: tests/upstream/cli). The
 // program runs with runWasm of js/node.mjs, as a user of the npm package
-// runs it. The plugins of the cases of tests/upstream/cli-js run in the
-// JavaScript engine of Node.js: they need JS Promise Integration (Node.js
-// 24 or later).
+// runs it. The cases of tests/upstream/cli-js need a program with
+// JavaScript: tailwind.wasm, a build with WASI_SDK_PATH (see
+// docs/BUILDING.md), or tailwind-browser.wasm, whose plugins run in the
+// JavaScript engine of Node.js (Node.js 24 or later). The program for a
+// browser has no optimizer: the cases with --minify fail with it.
 //
 // Each case runs in a child process, because a WASI instance runs one
 // time. The project is a copy outside this repository, as in tests/cli.sh.

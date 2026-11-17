@@ -1,20 +1,27 @@
 // The API of the npm package tailwind.com in a browser: the condition
 // "browser" of package.json gives this file in place of js/node.mjs. It
-// runs tailwind.wasm with a file system in memory (js/wasi.mjs).
+// runs the program for a browser, tailwind-browser.wasm, with a file
+// system in memory (js/wasi.mjs).
 //
 //   import { runWasm } from 'tailwind.com';
 //
-//   const { status, stdout, stderr } = await runWasm(['-i', 'app.css', '--minify'], {
+//   const { status, stdout, stderr } = await runWasm(['-i', 'app.css'], {
 //     files: { 'app.css': '@import "tailwindcss";', 'index.html': '<div class="flex p-4">' },
 //   });
 //
+// tailwind-browser.wasm has no optimizer and no JavaScript engine: --minify
+// and --optimize give an error, and the plugins run in the JavaScript
+// engine of the browser (js/engine.mjs). For --minify, give the URL of
+// tailwind.wasm in options.wasm (about 1.8 MB with compression).
+//
 // It also runs in a Web Worker, and in Deno and Node.js with no file
-// system. A bundler (Vite, webpack, esbuild) copies tailwind.wasm with the
-// pattern `new URL('../runtime/tailwind.wasm', import.meta.url)`.
+// system. A bundler (Vite, webpack, esbuild) copies tailwind-browser.wasm
+// with the pattern `new URL('../runtime/tailwind-browser.wasm', import.meta.url)`.
 import { createEngine, hasPromiseIntegration, needsEngine } from './engine.mjs';
 import { Files, run } from './wasi.mjs';
 
-// The URL of tailwind.wasm, from the URL of a file of the package. A CDN
+// The URL of tailwind-browser.wasm, from the URL of a file of the
+// package. A CDN
 // URL has the package root in it: "https://cdn.jsdelivr.net/npm/tailwind.com@0.4.0/+esm",
 // "https://esm.sh/tailwind.com@0.4.0/es2022/tailwind.com.mjs", or only the
 // root for the default file, "https://cdn.jsdelivr.net/npm/tailwind.com@0.5".
@@ -22,9 +29,9 @@ import { Files, run } from './wasi.mjs';
 export function wasmUrl(from = import.meta.url) {
   const url = new URL(from);
   const found = url.pathname.match(/^(.*\/tailwind\.com(?:@[^/]*)?)(?:\/|$)/);
-  if (found) return new URL(`${found[1]}/runtime/tailwind.wasm`, url).href;
-  if (from === import.meta.url) return new URL('../runtime/tailwind.wasm', import.meta.url).href;
-  return new URL('../runtime/tailwind.wasm', url).href;
+  if (found) return new URL(`${found[1]}/runtime/tailwind-browser.wasm`, url).href;
+  if (from === import.meta.url) return new URL('../runtime/tailwind-browser.wasm', import.meta.url).href;
+  return new URL('../runtime/tailwind-browser.wasm', url).href;
 }
 
 // The compiled module of each URL. A failed download can be tried again.
@@ -65,7 +72,7 @@ function text(url) {
 const PLUGINS = ['@tailwindcss/forms', '@tailwindcss/typography', '@tailwindcss/aspect-ratio'];
 
 // The JavaScript files that a build of `input` and `files` needs, from the
-// directory of tailwind.wasm: none with no @plugin and no @config.
+// directory of the program: none with no @plugin and no @config.
 async function assets(wasm, input, files) {
   const all = [input, ...Object.values(files).filter((value) => typeof value === 'string')].join('\n');
   if (!/@(?:plugin|config)\b/.test(all)) return {};
@@ -85,10 +92,10 @@ async function assets(wasm, input, files) {
 // program. The program sees no other file.
 //
 // options: files, env (default: empty), input (the text of stdin), wasm
-// (the URL of tailwind.wasm, default: wasmUrl()).
+// (the URL of the program, default: wasmUrl(), tailwind-browser.wasm).
 //
-// tailwind.wasm has no JavaScript engine: for @plugin and @config, it
-// runs the plugins in the JavaScript engine of the browser
+// tailwind-browser.wasm has no JavaScript engine: for @plugin and
+// @config, it runs the plugins in the JavaScript engine of the browser
 // (js/engine.mjs). That needs a page (not a worker) and JS Promise
 // Integration. The JavaScript files come from the directory of the
 // program.

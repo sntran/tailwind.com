@@ -125,8 +125,8 @@ host result back to Rust.
 
 ### The engine of the host
 
-With the feature `host-js` (for `tailwind.wasm`), the program has no
-QuickJS: the functions `tw_js_new`, `tw_js_free`, `tw_js_eval` and
+With the feature `host-js` (for `tailwind-browser.wasm`), the program
+has no QuickJS: the functions `tw_js_new`, `tw_js_free`, `tw_js_eval` and
 `tw_js_call` are imports of the WebAssembly module `tailwind_js`, and
 `js/engine.mjs` of the npm package gives them with the JavaScript engine
 of the host: a browser (`js/browser.mjs`) or Node.js (`js/node.mjs`). The program exports `tw_host_alloc` and `tw_host_free`

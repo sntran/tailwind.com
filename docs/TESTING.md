@@ -167,10 +167,9 @@ job.
 WASI program in Node.js, through `runWasm` of `js/node.mjs`, as a user
 of the npm package runs it. `CASES` selects the directory of the cases,
 as for `tests/cli.sh`. The project is the root directory there, so a
-source of a map is `/app.css`. The plugins of the cases with JavaScript
-(all of `cli-js`, and 6 cases of `cli-map`) run in the JavaScript engine
-of Node.js: they need Node.js 24 or later. `<project>` in `env.txt` is
-the directory `/` there.
+source of a map is `/app.css`. The cases with JavaScript (all of
+`cli-js`, and 6 cases of `cli-map`) need a program from a build with
+`WASI_SDK_PATH`. `<project>` in `env.txt` is the directory `/` there.
 
 ## The TLA+ models
 
@@ -400,9 +399,11 @@ server with the paths of jsDelivr:
   Chromium, and no realm stays after a build.
 - `--cases DIR` (default `tests/upstream/cli-js`): each recorded case
   with JavaScript (plugins, configs, ES modules, TypeScript, errors) runs
-  with `tailwind.wasm` and `runWasm` in Chromium, and must give the
-  output and the status of the official program, and the lines of its
-  error output.
+  with `tailwind-browser.wasm` and `runWasm` in Chromium, and must give
+  the output and the status of the official program, and the lines of
+  its error output. A case with `--minify` runs with `tailwind.wasm`.
+- `runWasm` with `tailwind-browser.wasm` gives an error for `--minify`,
+  and `runWasm` with the URL of `tailwind.wasm` minifies.
 - With `--official FILE`: on a page with `@theme`, `@utility`, `@apply`
   and variants, the CSS of `js/page.js` is the same, byte for byte, as
   the CSS of the browser build of Tailwind CSS (`@tailwindcss/browser` of

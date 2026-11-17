@@ -51,9 +51,9 @@
 //
 // It is the same program as the command line: the plugins in the program
 // (@tailwindcss/typography, @tailwindcss/forms and
-// @tailwindcss/aspect-ratio) work with @plugin. The program is large (about
-// 1.35 MB with compression), so this script is for development, prototypes
-// and editors, not for a production site.
+// @tailwindcss/aspect-ratio) work with @plugin. The program
+// (tailwind-browser.wasm) is about 0.77 MB with compression, so this script
+// is for development, prototypes and editors, not for a production site.
 //
 // A classic script, not a module: a <script src> with no type loads it,
 // as the Play CDN. It loads js/browser.mjs with import().
@@ -82,7 +82,8 @@
   const found = source.pathname.match(/^(.*\/tailwind\.com(?:@[^/]*)?)(?:\/|$)/);
   const js = found ? new URL(`${found[1]}/js/`, source) : new URL('./', source);
 
-  const wasm = new URL('../runtime/tailwind.wasm', js).href;
+  // The program for a browser: no optimizer and no JavaScript engine.
+  const wasm = new URL('../runtime/tailwind-browser.wasm', js).href;
   const head = document.head ?? document.documentElement;
 
   // Start the downloads now: the module of the API, its import, and the

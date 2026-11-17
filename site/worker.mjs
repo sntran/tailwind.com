@@ -33,18 +33,6 @@ function unpack(buffer) {
   }
 }
 
-// The tailwind.wasm of a release from 0.5.0 runs plugins in the
-// JavaScript engine of the host (js/engine.mjs), in a realm of a page. A
-// worker has no such realm: these imports give an error for @plugin and
-// @config. The program of the site (tailwind-quickjs.wasm) has QuickJS.
-function imports(module) {
-  if (!WebAssembly.Module.imports(module).some((item) => item.module === 'tailwind_js')) return {}
-  const missing = () => {
-    throw new Error('This program of a release runs @plugin and @config only in a page, not in the worker of the site.')
-  }
-  return { tailwind_js: { tw_js_new: missing, tw_js_free: missing, tw_js_eval: missing, tw_js_call: missing, tw_js_call_async: missing } }
-}
-
 function program(url) {
   if (!modules.has(url)) {
     const compiled = WebAssembly.compileStreaming(fetch(url))
@@ -79,7 +67,7 @@ const preopens = { '/': '/project', '/packages': '/packages' }
 async function check(module, message) {
   const key = `${message.wasm} ${message.version} ${message.engine}`
   if (!checked.has(key)) {
-    const result = await run(module, { args: ['--version'], env: environment(message), files, preopens, imports: imports(module) })
+    const result = await run(module, { args: ['--version'], env: environment(message), files, preopens })
     const line = (result.stdout + result.stderr).trim()
     const found = line.match(/\(tailwindcss v([^,)]+)(, script engine)?\)/)
     const same = result.status === 0 && found?.[1] === message.version && Boolean(found[2]) === (message.engine === 'script')
@@ -99,7 +87,7 @@ async function build(message) {
   const args = ['-i', 'app.css', '-o', 'out.css']
   if (message.minify) args.push('--minify')
   const start = performance.now()
-  const result = await run(module, { args, env: environment(message), files, preopens, imports: imports(module) })
+  const result = await run(module, { args, env: environment(message), files, preopens })
   const ms = performance.now() - start
   const css = result.status === 0 && files.exists('/project/out.css') ? files.readText('/project/out.css') : ''
   // The program writes its version line and its time to stderr. The page

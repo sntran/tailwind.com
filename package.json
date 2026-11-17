@@ -22,7 +22,10 @@
       "browser": "./js/browser.mjs",
       "default": "./js/node.mjs"
     },
-    "./tailwind.wasm": "./runtime/tailwind.wasm",
+    "./tailwind.wasm": {
+      "browser": "./runtime/tailwind-browser.wasm",
+      "default": "./runtime/tailwind.wasm"
+    },
     "./package.json": "./package.json"
   },
   "files": [

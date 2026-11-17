@@ -6,14 +6,16 @@
 //
 // Usage: node tests/npm-browser.mjs [--wasm FILE] [--official FILE] [--cases DIR]
 //
-//   --wasm FILE      the module (default build/tailwind.wasm)
+//   --wasm FILE      the module (default build/tailwind.wasm), with
+//                    tailwind-browser.wasm in its directory: the program
+//                    of the condition "browser"
 //   --official FILE  the browser build of Tailwind CSS
 //                    (@tailwindcss/browser, dist/index.global.js): the
 //                    page script must give the same CSS. With no file, no
 //                    comparison.
 //   --cases DIR      the recorded cases with JavaScript (default
 //                    tests/upstream/cli-js): each one must give the output
-//                    of the official program with tailwind.wasm, its
+//                    of the official program with tailwind-browser.wasm, its
 //                    plugins in the JavaScript engine of Chromium
 //                    (js/engine.mjs).
 //
@@ -41,15 +43,16 @@ for (let i = 0; i < args.length; i++) {
 }
 
 
-// The URL of tailwind.wasm from the URL of a file of the package.
+// The URL of tailwind-browser.wasm from the URL of a file of the package.
+const browserWasm = path.join(path.dirname(opts.wasm), 'tailwind-browser.wasm')
 const cases = [
-  ['https://cdn.jsdelivr.net/npm/tailwind.com@0.4', 'https://cdn.jsdelivr.net/npm/tailwind.com@0.4/runtime/tailwind.wasm'],
-  ['https://cdn.jsdelivr.net/npm/tailwind.com@0.4.0/+esm', 'https://cdn.jsdelivr.net/npm/tailwind.com@0.4.0/runtime/tailwind.wasm'],
-  ['https://cdn.jsdelivr.net/npm/tailwind.com/js/browser.mjs', 'https://cdn.jsdelivr.net/npm/tailwind.com/runtime/tailwind.wasm'],
-  ['https://esm.sh/tailwind.com@0.4.0/es2022/tailwind.com.mjs', 'https://esm.sh/tailwind.com@0.4.0/runtime/tailwind.wasm'],
-  ['https://unpkg.com/tailwind.com@0.4.0/js/page.js', 'https://unpkg.com/tailwind.com@0.4.0/runtime/tailwind.wasm'],
-  ['http://localhost:5173/node_modules/tailwind.com/js/browser.mjs', 'http://localhost:5173/node_modules/tailwind.com/runtime/tailwind.wasm'],
-  ['https://tailwind.com/assets/index-abc.js', 'https://tailwind.com/runtime/tailwind.wasm'],
+  ['https://cdn.jsdelivr.net/npm/tailwind.com@0.4', 'https://cdn.jsdelivr.net/npm/tailwind.com@0.4/runtime/tailwind-browser.wasm'],
+  ['https://cdn.jsdelivr.net/npm/tailwind.com@0.4.0/+esm', 'https://cdn.jsdelivr.net/npm/tailwind.com@0.4.0/runtime/tailwind-browser.wasm'],
+  ['https://cdn.jsdelivr.net/npm/tailwind.com/js/browser.mjs', 'https://cdn.jsdelivr.net/npm/tailwind.com/runtime/tailwind-browser.wasm'],
+  ['https://esm.sh/tailwind.com@0.4.0/es2022/tailwind.com.mjs', 'https://esm.sh/tailwind.com@0.4.0/runtime/tailwind-browser.wasm'],
+  ['https://unpkg.com/tailwind.com@0.4.0/js/page.js', 'https://unpkg.com/tailwind.com@0.4.0/runtime/tailwind-browser.wasm'],
+  ['http://localhost:5173/node_modules/tailwind.com/js/browser.mjs', 'http://localhost:5173/node_modules/tailwind.com/runtime/tailwind-browser.wasm'],
+  ['https://tailwind.com/assets/index-abc.js', 'https://tailwind.com/runtime/tailwind-browser.wasm'],
 ]
 for (const [from, want] of cases) assert.equal(wasmUrl(from), want, from)
 
@@ -117,7 +120,9 @@ window.run = (args, files, input, env) => {
   for (const [name, value] of Object.entries(files)) {
     if (typeof value !== 'string') files[name] = Uint8Array.from(atob(value.base64), (c) => c.charCodeAt(0))
   }
-  return runWasm(args, { files, input, env: { NO_COLOR: '1', ...env }, wasm: '${prefix}/runtime/tailwind.wasm' })
+  // tailwind-browser.wasm has no optimizer: tailwind.wasm for --minify.
+  const wasm = args.includes('--minify') || args.includes('--optimize') ? 'tailwind.wasm' : 'tailwind-browser.wasm'
+  return runWasm(args, { files, input, env: { NO_COLOR: '1', ...env }, wasm: '${prefix}/runtime/' + wasm })
 }
 window.ready = true
 </script>`,
@@ -125,7 +130,10 @@ window.ready = true
   '/api.html': `<!doctype html><meta charset="utf-8"><script type="module">
 import { runWasm } from '${prefix}/js/browser.mjs'
 const files = { 'app.css': '@import "tailwindcss";', 'index.html': '<div class="flex p-4">' }
-window.main = await runWasm(['-i', 'app.css', '--minify'], { files, env: { NO_COLOR: '1' } })
+window.main = await runWasm(['-i', 'app.css'], { files, env: { NO_COLOR: '1' } })
+// --minify: no optimizer in the program for a browser, and the full program.
+window.small = await runWasm(['-i', 'app.css', '--minify'], { files, env: { NO_COLOR: '1' } })
+window.full = await runWasm(['-i', 'app.css', '--minify'], { files, env: { NO_COLOR: '1' }, wasm: '${prefix}/runtime/tailwind.wasm' })
 const worker = new Worker(URL.createObjectURL(new Blob([\`
   import { runWasm } from '\${new URL('${prefix}/js/browser.mjs', location.href)}'
   self.onmessage = async ({ data }) => self.postMessage(await runWasm(data.args, data.options))
@@ -142,6 +150,7 @@ const server = http.createServer((request, response) => {
   let type = types[path.extname(url)]
   if (url === prefix) [body, type] = [fs.readFileSync(path.join(root, 'js/page.js')), types['.js']]
   else if (url === `${prefix}/runtime/tailwind.wasm`) body = fs.readFileSync(opts.wasm)
+  else if (url === `${prefix}/runtime/tailwind-browser.wasm`) body = fs.readFileSync(browserWasm)
   else if (url.startsWith(`${prefix}/js/`)) body = fs.readFileSync(path.join(root, 'js', path.basename(url)))
   // The JavaScript files of the program for its engine (js/engine.mjs).
   else if (/^\/runtime\/(compat|typescript|plugins\/[a-z-]+)\.js$/.test(url.slice(prefix.length)) && url.startsWith(prefix)) {
@@ -289,10 +298,14 @@ try {
     tab.on('pageerror', (e) => messages.push(`api.html: ${e}`))
     await tab.goto(`${base}/api.html`)
     await tab.waitForFunction(() => window.main && window.worker, null, { timeout: 30_000 })
-    const { main, worker } = await tab.evaluate(() => ({ main: window.main, worker: window.worker }))
+    const { main, small, full, worker } = await tab.evaluate(() => ({ main: window.main, small: window.small, full: window.full, worker: window.worker }))
     assert.equal(main.status, 0, main.stderr)
-    assert.ok(main.stdout.includes('.flex{display:flex}'), main.stdout.slice(-300))
-    assert.ok(main.stdout.includes('.p-4{padding:calc(var(--spacing) * 4)}'), main.stdout.slice(-300))
+    assert.ok(main.stdout.includes('.flex {\n    display: flex;'), main.stdout.slice(-300))
+    assert.equal(small.status, 1)
+    assert.match(small.stderr, /no optimizer/)
+    assert.equal(full.status, 0, full.stderr)
+    assert.ok(full.stdout.includes('.flex{display:flex}'), full.stdout.slice(-300))
+    assert.ok(full.stdout.includes('.p-4{padding:calc(var(--spacing) * 4)}'), full.stdout.slice(-300))
     assert.equal(worker.status, 0, worker.stderr)
     assert.ok(worker.stdout.includes('.underline {'), worker.stdout.slice(-300))
     await tab.close()

@@ -51,8 +51,8 @@ The site has these files:
 
 | File | Size | What |
 |---|---:|---|
-| `tailwind.wasm` | 9.5 MB, 2.5 MB with gzip | The program, built from the commit of the site: `tailwind-quickjs.wasm` (`make wasm-quickjs`), with QuickJS and the script engine, so the worker runs plugins and each engine. |
-| `releases/TAG/tailwind.wasm` | 3 MB to 9 MB each | The program of each release (`scripts/releases.sh`, at most 20). The browser downloads one only when a viewer selects it. From 0.5.0, the program of a release runs plugins in the JavaScript engine of a page: in the worker, `@plugin` and `@config` give an error. |
+| `tailwind.wasm` | 9.5 MB, 2.5 MB with gzip | The program, built from the commit of the site. |
+| `releases/TAG/tailwind.wasm` | about 9 MB each | The program of each release (`scripts/releases.sh`, at most 20). The browser downloads one only when a viewer selects it. |
 | `packages.bin` | 0.95 MB | The packages of the 48 versions: 4.3.5 in full, and each older version as a patch, as in the ZIP directory of `tailwind.com`. |
 | `data.json` | 0.16 MB | The versions, the examples, the 195 switches, the recorded cases and the programs. |
 | The page | 0.06 MB | `index.html`, the modules and `style.css`. |
@@ -95,9 +95,9 @@ page. Now 286 of the 301 cases are on the page.
 ## Build the site
 
 ```sh
-WASI_SDK_PATH=... make wasm-quickjs          # build/tailwind-quickjs.wasm
+WASI_SDK_PATH=... make wasm                  # build/tailwind.wasm
 sh scripts/releases.sh build/releases        # optional: the release programs (GitHub CLI)
-node site/build.mjs --wasm build/tailwind-quickjs.wasm --releases build/releases
+node site/build.mjs --wasm build/tailwind.wasm --releases build/releases
 ```
 
 With no `--packages DIR`, the script gets the packages with

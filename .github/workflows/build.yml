@@ -126,8 +126,7 @@ jobs:
         with:
           path: build/wasi-sdk
           key: wasi-sdk-${{ env.WASI_SDK_VERSION }}-x86_64-linux
-      # The clang of wasi-sdk compiles QuickJS for wasm32-wasip1: for
-      # tailwind-quickjs.wasm of the site.
+      # The clang of wasi-sdk compiles QuickJS for wasm32-wasip1.
       - name: Download wasi-sdk
         if: steps.wasi-sdk.outputs.cache-hit != 'true'
         run: |
@@ -135,12 +134,10 @@ jobs:
           echo "$WASI_SDK_SHA256  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum -c -
           mkdir -p build/wasi-sdk
           tar xzf "$RUNNER_TEMP/wasi-sdk.tar.gz" -C build/wasi-sdk --strip-components=1
-      # tailwind.wasm, the program of the release and of the npm package:
-      # the plugins run in the JavaScript engine of the host. The site
-      # also has the script engine: tailwind-quickjs.wasm.
-      - run: make wasm
-      - run: WASI_SDK_PATH=$PWD/build/wasi-sdk make wasm-quickjs
-      # The plugins of the cases with JavaScript need JS Promise
+      # tailwind.wasm, and tailwind-browser.wasm for the condition "browser"
+      # of the npm package.
+      - run: WASI_SDK_PATH=$PWD/build/wasi-sdk make wasm
+      # runWasm with tailwind-browser.wasm runs plugins with JS Promise
       # Integration: Node.js 24 or later.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -156,7 +153,7 @@ jobs:
           name: tailwind.wasm
           path: |
             build/tailwind.wasm
-            build/tailwind-quickjs.wasm
+            build/tailwind-browser.wasm
           if-no-files-found: error
 
   # The site (site/, docs/SITE.md): tailwind.wasm in Chromium, with the
@@ -181,7 +178,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: sh scripts/releases.sh build/releases
       - name: Build the site
-        run: node site/build.mjs --wasm build/tailwind-quickjs.wasm --releases build/releases
+        run: node site/build.mjs --wasm build/tailwind.wasm --releases build/releases
       - name: Playwright with Chromium
         run: |
           npm install --no-save --prefix "$RUNNER_TEMP/playwright" playwright@1.63.0
@@ -674,12 +671,13 @@ jobs:
       # the file SOURCE of a directory of NIF files (docs/NIF.md).
       - name: SOURCE
         run: printf 'git https://github.com/%s commit=%s tag=%s\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_REF_NAME" > dist/SOURCE
-      - run: cd dist && sha256sum tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE > SHA256SUMS
+      - run: cd dist && sha256sum tailwind.com tailwind.wasm tailwind-browser.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE > SHA256SUMS
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             dist/tailwind.com
             dist/tailwind.wasm
+            dist/tailwind-browser.wasm
             dist/tailwind.com-*.tgz
             dist/libtailwind_nif.*.o
       - name: Publish the release
@@ -691,10 +689,10 @@ jobs:
           cd dist
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             # A re-run can reach this step after a later publication failed.
-            gh release upload "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE SHA256SUMS \
+            gh release upload "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind-browser.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE SHA256SUMS \
               --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE SHA256SUMS \
+            gh release create "$GITHUB_REF_NAME" tailwind.com tailwind.wasm tailwind-browser.wasm tailwind.com-*.tgz libtailwind_nif.*.o SOURCE SHA256SUMS \
               --repo "$GITHUB_REPOSITORY" --generate-notes \
               --title "$GITHUB_REF_NAME (Tailwind CSS $oldest to $TAILWINDCSS_VERSION)"
           fi

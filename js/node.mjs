@@ -29,6 +29,10 @@ export function release() {
 // The path of the WebAssembly module (WASI preview 1).
 export const wasmPath = path.join(root, 'runtime', 'tailwind.wasm');
 
+// The path of the program for a browser (the condition "browser"): no
+// optimizer and no JavaScript engine.
+export const browserWasmPath = path.join(root, 'runtime', 'tailwind-browser.wasm');
+
 // The path of tailwind.com, after a download when it is not in the cache.
 export function binPath(options = {}) {
   return ensure(release(), options);
@@ -97,10 +101,11 @@ class Exit {
 // The result is { status, stdout, stderr } with the output as text.
 // --watch does not end: use run() for a watch.
 //
-// The plugins of @plugin and @config run in the JavaScript engine of
-// Node.js, in a context of node:vm (js/engine.mjs). That needs JS Promise
-// Integration: Node.js 24 or later (Node.js 22 with
-// --experimental-wasm-jspi).
+// tailwind.wasm runs the plugins of @plugin and @config in QuickJS. The
+// program for a browser (browserWasmPath) has no JavaScript engine: with
+// it, the plugins run in the JavaScript engine of Node.js, in a context of
+// node:vm (js/engine.mjs). That needs JS Promise Integration: Node.js 24
+// or later (Node.js 22 with --experimental-wasm-jspi).
 export async function runWasm(args = [], options = {}) {
   const { WASI } = await import('node:wasi');
   const cwd = path.resolve(options.cwd ?? '.');

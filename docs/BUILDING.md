@@ -29,9 +29,8 @@ JavaScript engine: `--minify`, `--optimize`, `@plugin` and `@config`
 give an error. The feature `optimize` adds the optimizer, and the
 feature `host-js` runs `@plugin` and `@config` in the JavaScript engine
 of the host, with JS Promise Integration (`js/engine.mjs`, see "The
-engine of the host" in `INTERNALS.md`). `tailwind.wasm` of the release
-and of the npm package has these three features: see "The WASI program"
-below.
+engine of the host" in `INTERNALS.md`). `tailwind-browser.wasm` has the
+features `program` and `host-js`: see "The WASI program" below.
 
 This is the same program as `tailwind.com`, for one system. Use it for
 development and for the tests.
@@ -78,28 +77,27 @@ nightly Rust. See "The file tailwind.com" in
 
 ```sh
 rustup target add wasm32-wasip1
-make wasm                                        # build/tailwind.wasm
-WASI_SDK_PATH=/path/to/wasi-sdk make wasm-quickjs # build/tailwind-quickjs.wasm
+WASI_SDK_PATH=/path/to/wasi-sdk make wasm    # build/tailwind.wasm and build/tailwind-browser.wasm
 ```
 
-`tailwind.wasm` is the program for a host with JavaScript: a browser,
-Node.js or Deno. It has the features `program`, `optimize` and
-`host-js`, with no QuickJS: its plugins run in the JavaScript engine of
-the host, with JS Promise Integration (a browser of 2025 or later,
-Node.js 24 or later), and the npm package has the JavaScript files of
-the program in `runtime/`. It is 7.8 MB, or 1.35 MB with brotli.
-`js/browser.mjs` and `js/node.mjs` (`runWasm`) give the imports of the
-engine. A host with no JavaScript (Wasmtime) can run it with no
-`@plugin` and no `@config`.
-
-`tailwind-quickjs.wasm` is the program with the default features: QuickJS
-and the script engine (`VERSIONS.md`), as in `tailwind.com`. The site
-uses it to compare the two engines of each version. It is not
-published. `WASI_SDK_PATH` is the directory of an unpacked
+`tailwind.wasm` is the program with the default features, as
+`tailwind.com`: QuickJS, the script engine (`VERSIONS.md`) and the
+optimizer. It runs in each WASI host: 9.5 MB, or 1.78 MB with brotli.
+`WASI_SDK_PATH` is the directory of an unpacked
 [wasi-sdk](https://github.com/WebAssembly/wasi-sdk/releases) (CI uses
 version 27, and checks its SHA-256): its clang compiles QuickJS for
 `wasm32-wasip1`. With no `WASI_SDK_PATH`, the build works and prints a
-warning, and the program has no JavaScript.
+warning, and the program has no JavaScript: `@plugin` and `@config` are
+then errors.
+
+`tailwind-browser.wasm` is the program for a browser: the features
+`program` and `host-js`, with no optimizer and no QuickJS, 3.5 MB, or
+0.77 MB with brotli. Its plugins run in the JavaScript engine of the
+host, with JS Promise Integration (a browser of 2025 or later, Node.js
+24 or later), and the npm package has the JavaScript files of the
+program in `runtime/`. `js/browser.mjs` and `js/node.mjs` (`runWasm`)
+give the imports of the engine. For the same input with no `--minify`,
+the two programs give the same CSS.
 
 `native/tailwind/build.rs` has the two things that QuickJS needs on
 WASI, with no change of its files: `-include malloc.h` (for
