@@ -57,6 +57,13 @@ case "$CPUS" in
 esac
 log "Linking $OUT with $cc"
 (cd "$work" && sh "$C/bin/$cc" -O2 -o tailwind.com main.c tailwind.o)
+# The shell header runs only a loader with the contents of the loaders of
+# this file (issue #28). A file for one CPU keeps the header of cosmocc,
+# which has another form.
+if [ "$cc" = cosmocc ]; then
+    loader=$(sh "$root/scripts/ape_loader.sh" "$work/tailwind.com")
+    log "The APE loader of the shell header: $loader"
+fi
 
 # The packages of the script engine. An APE file is also a ZIP file: the
 # program reads the directory tailwindcss/ of its own file (/zip).

@@ -328,6 +328,7 @@ jobs:
         run: rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component rust-src
       - run: make
       - run: ls -l build/tailwind.com
+      - run: sh tests/ape_loader.sh build/tailwind.com
       - run: sh tests/cli.sh build/tailwind.com
       - run: CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com
       - run: CASES=tests/upstream/cli-map sh tests/cli.sh build/tailwind.com
@@ -364,6 +365,11 @@ jobs:
           # shell starts it.
           if [ "$RUNNER_OS" = Windows ]; then ./build/tailwind.com --version; else sh build/tailwind.com --version; fi
           sh tests/cli.sh build/tailwind.com
+      # The shell header runs only its own APE loader (issue #28). Windows
+      # does not use the shell header.
+      - name: The APE loader of the shell header
+        if: runner.os != 'Windows'
+        run: sh tests/ape_loader.sh build/tailwind.com
       - name: The program with JavaScript plugins and configs, against the record
         run: CASES=tests/upstream/cli-js sh tests/cli.sh build/tailwind.com
       # The script does not run these cases on Windows: the paths in a
