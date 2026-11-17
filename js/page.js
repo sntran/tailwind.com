@@ -41,6 +41,9 @@
 // - The program has no JavaScript engine: for @plugin and @config, the
 //   plugins run in the JavaScript engine of the browser (js/engine.mjs),
 //   with JS Promise Integration.
+// - The new CSS of the input (@function, @mixin, if(), @when,
+//   sibling-index(), round(), ...) is lowered for the browsers of Tailwind
+//   CSS, as with --optimize of the command line, with no Lightning CSS.
 // - The last CSS of each page stays in localStorage. On the next load, it
 //   styles the page at once, and the build replaces it. With no such CSS
 //   and the script in <head>, the page stays hidden until the first CSS
@@ -52,7 +55,7 @@
 // It is the same program as the command line: the plugins in the program
 // (@tailwindcss/typography, @tailwindcss/forms and
 // @tailwindcss/aspect-ratio) work with @plugin. The program
-// (tailwind-browser.wasm) is about 0.77 MB with compression, so this script
+// (tailwind-browser.wasm) is about 0.8 MB with compression, so this script
 // is for development, prototypes and editors, not for a production site.
 //
 // A classic script, not a module: a <script src> with no type loads it,
@@ -287,7 +290,11 @@
     input = key;
     // The classes go in a file of the project. The scanner finds them
     // there, as in a template of a project on the disk.
-    const result = await api.runWasm(['-i', '-'], {
+    // --optimize: the program for a browser lowers the new CSS (functions,
+    // mixins, if(), @when, the sibling functions, the math functions) for
+    // the browsers of Tailwind CSS. With nothing to lower, the CSS does not
+    // change.
+    const result = await api.runWasm(['-i', '-', '--optimize'], {
       input: `${css}@source ${quote(`./${CLASSES}`)};\n`,
       files: { ...files, [CLASSES]: [...classes].join('\n') },
       env: { NO_COLOR: '1' },

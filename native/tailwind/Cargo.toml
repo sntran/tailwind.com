@@ -55,7 +55,11 @@ cli = ["program", "optimize", "js"]
 program = ["dep:tailwindcss-oxide", "dep:serde_json"]
 # The optimizer of --minify and --optimize: Lightning CSS, and the
 # lowering of CSS functions and mixins before it.
-optimize = ["dep:lightningcss", "dep:parcel_sourcemap"]
+optimize = ["lower", "dep:lightningcss", "dep:parcel_sourcemap"]
+# The lowering of the new CSS (functions, mixins, if(), @when, the sibling
+# functions, the math functions) with no Lightning CSS: the program for a
+# browser. There, --optimize only lowers, and --minify gives an error.
+lower = []
 # `@plugin` and `@config`: the QuickJS engine (c_src/quickjs, c_src/js.c)
 # and the plugin layer of Tailwind CSS (assets/compat.js). build.rs
 # compiles the C files. For wasm32-wasip1 it needs WASI_SDK_PATH: with no

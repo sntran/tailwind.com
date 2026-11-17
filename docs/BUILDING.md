@@ -26,11 +26,14 @@ build without JavaScript: the feature `cli` has the features `program`,
 
 The feature `program` alone is the program with no optimizer and no
 JavaScript engine: `--minify`, `--optimize`, `@plugin` and `@config`
-give an error. The feature `optimize` adds the optimizer, and the
-feature `host-js` runs `@plugin` and `@config` in the JavaScript engine
-of the host, with JS Promise Integration (`js/engine.mjs`, see "The
-engine of the host" in `INTERNALS.md`). `tailwind-browser.wasm` has the
-features `program` and `host-js`: see "The WASI program" below.
+give an error. The feature `optimize` adds the optimizer: the lowering
+of the new CSS (`css_mixins.rs`, the feature `lower`) and Lightning CSS.
+The feature `lower` alone has only the lowering: `--optimize` lowers,
+and `--minify` gives an error. The feature `host-js` runs `@plugin` and
+`@config` in the JavaScript engine of the host, with JS Promise
+Integration (`js/engine.mjs`, see "The engine of the host" in
+`INTERNALS.md`). `tailwind-browser.wasm` has the features `program`,
+`lower` and `host-js`: see "The WASI program" below.
 
 This is the same program as `tailwind.com`, for one system. Use it for
 development and for the tests.
@@ -91,13 +94,13 @@ warning, and the program has no JavaScript: `@plugin` and `@config` are
 then errors.
 
 `tailwind-browser.wasm` is the program for a browser: the features
-`program` and `host-js`, with no optimizer and no QuickJS, 3.5 MB, or
-0.77 MB with brotli. Its plugins run in the JavaScript engine of the
+`program`, `lower` and `host-js`, with no Lightning CSS and no QuickJS,
+3.6 MB, or 0.80 MB with brotli. `--optimize` lowers the new CSS only. Its plugins run in the JavaScript engine of the
 host, with JS Promise Integration (a browser of 2025 or later, Node.js
 24 or later), and the npm package has the JavaScript files of the
 program in `runtime/`. `js/browser.mjs` and `js/node.mjs` (`runWasm`)
-give the imports of the engine. For the same input with no `--minify`,
-the two programs give the same CSS.
+give the imports of the engine. For the same input with no `--minify`
+and no `--optimize`, the two programs give the same CSS.
 
 `native/tailwind/build.rs` has the two things that QuickJS needs on
 WASI, with no change of its files: `-include malloc.h` (for

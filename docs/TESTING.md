@@ -404,6 +404,9 @@ server with the paths of jsDelivr:
   its error output. A case with `--minify` runs with `tailwind.wasm`.
 - `runWasm` with `tailwind-browser.wasm` gives an error for `--minify`,
   and `runWasm` with the URL of `tailwind.wasm` minifies.
+- The page script lowers the new CSS (`@function`, `@mixin`, `if()`,
+  `sibling-index()`): the output has none of them, and the computed
+  styles of the page are right.
 - With `--official FILE`: on a page with `@theme`, `@utility`, `@apply`
   and variants, the CSS of `js/page.js` is the same, byte for byte, as
   the CSS of the browser build of Tailwind CSS (`@tailwindcss/browser` of

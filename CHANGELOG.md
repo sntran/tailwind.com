@@ -31,23 +31,26 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   the next load is styled at once. The downloads start at once. With a
   network of 20 Mbps, the first visit shows the styled page in about
   0.5 s.
-- `tailwind-browser.wasm`: the program for a browser, with no optimizer
-  and no QuickJS, 0.77 MB with brotli (`tailwind.wasm` is 1.78 MB). The
-  condition `browser` of the npm package gives it, and the page script
-  uses it. Its plugins of `@plugin` and `@config` run in the JavaScript
+- `tailwind-browser.wasm`: the program for a browser, with no Lightning
+  CSS and no QuickJS, 0.80 MB with brotli (`tailwind.wasm` is 1.78 MB).
+  The condition `browser` of the npm package gives it, and the page
+  script uses it. It lowers the new CSS (`@function`, `@mixin`, `if()`,
+  `@when`, the sibling functions and the math functions) with
+  `--optimize`, and the page script gives `--optimize`. Its plugins of `@plugin` and `@config` run in the JavaScript
   engine of the host, with JS Promise Integration (`js/engine.mjs`): in
   a page (a hidden iframe for each build), and in Node.js 24 or later (a
   context of `node:vm`, through `runWasm`). The npm package has the plugin
   layer, the TypeScript transform and the three plugins as files in
   `runtime/`. The 101 recorded cases with JavaScript give the output of
-  the official program in Chromium. `--minify` and `--optimize` give an
-  error: the option `wasm` of `runWasm` can give `tailwind.wasm`. The
+  the official program in Chromium. `--minify` gives an error: the
+  option `wasm` of `runWasm` can give `tailwind.wasm`. The
   plugin layer has `__tw_compat_async`, and the TypeScript transform can
   also change an ES module to CommonJS.
 - The Cargo features `program` (the program with no optimizer and no
-  JavaScript engine), `optimize` and `host-js`: `cli` is `program`,
-  `optimize` and `js`. `tailwind-browser.wasm` has `program` and
-  `host-js`.
+  JavaScript engine), `lower` (the lowering of the new CSS with no
+  Lightning CSS), `optimize` (`lower` and Lightning CSS) and `host-js`:
+  `cli` is `program`, `optimize` and `js`. `tailwind-browser.wasm` has
+  `program`, `lower` and `host-js`.
 
 ## 0.4.0 - 2026-11-17
 

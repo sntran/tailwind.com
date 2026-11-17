@@ -209,8 +209,11 @@ The input CSS can also be in the page, as for the Play CDN:
   `@tailwindcss/typography`, `@tailwindcss/forms` and
   `@tailwindcss/aspect-ratio`.
 - After each build, the document gets the event `tailwind.com:build`.
-- The program for a browser (`tailwind-browser.wasm`) has no optimizer
-  and no JavaScript engine: about 0.77 MB with compression. The plugins
+- The program for a browser (`tailwind-browser.wasm`) has no Lightning
+  CSS and no JavaScript engine: about 0.8 MB with compression. It lowers
+  the new CSS of the input (`@function`, `@mixin`, `if()`, `@when`,
+  `sibling-index()`, `round()`, ...) for the browsers of Tailwind CSS, as
+  `--optimize` does ([`docs/MIXINS.md`](docs/MIXINS.md)). The plugins
   of `@plugin` and `@config` run in the JavaScript engine of the browser,
   with JS Promise Integration: also ES modules and TypeScript files, but
   not a module with a top-level `await`. The plugin layer of Tailwind CSS
@@ -412,11 +415,12 @@ runs it in the browser, with a small WASI host in JavaScript
 (`js/wasi.mjs`, [`docs/SITE.md`](docs/SITE.md)).
 
 `tailwind-browser.wasm` of each release is the program for a browser:
-no optimizer and no JavaScript engine, about 0.77 MB with compression,
-and `tailwind.wasm` is about 1.8 MB. Its plugins run in the JavaScript
-engine of the host, with JS Promise Integration (`js/engine.mjs`): a
-browser, or Node.js 24 or later. `--minify` and `--optimize` give an
-error. The condition `browser` of the npm package gives it.
+no Lightning CSS and no JavaScript engine, about 0.8 MB with
+compression, and `tailwind.wasm` is about 1.8 MB. Its plugins run in the
+JavaScript engine of the host, with JS Promise Integration
+(`js/engine.mjs`): a browser, or Node.js 24 or later. `--optimize` only
+lowers the new CSS functions and mixins, and `--minify` gives an error.
+The condition `browser` of the npm package gives it.
 
 ## Documentation
 

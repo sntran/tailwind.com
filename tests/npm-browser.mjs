@@ -106,6 +106,16 @@ const pages = {
 <body><div class="flex items-center gap-4 bg-brand/50 p-4 hover:underline md:grid-cols-2 tab-4 [mask-type:luminance] dark:text-white">x</div>
 <p class="text-[length:var(--size)] -mt-2 lg:hover:bg-red-500 space-y-2 *:p-1 group-hover:opacity-50 group">y</p></body></html>`,
   // A <style> with a path: from the URL of the page.
+  // The new CSS: the page script lowers it, as --optimize does.
+  '/lower.html': `<!doctype html><html><head><meta charset="utf-8">
+<script src="${prefix}"></script>
+<style type="text/tailwindcss">
+@function --double(--x) { result: calc(var(--x) * 2); }
+@mixin --box { padding: 12px; }
+.a { margin-left: --double(10px); @apply --box; color: if(media(width >= 1px): rgb(1, 2, 3); else: red); }
+.list > li { margin-top: calc(sibling-index() * 1px); }
+</style></head>
+<body><p class="a" id="a">x</p><ul class="list"><li>1</li><li>2</li><li id="third">3</li></ul></body></html>`,
   '/docs/style.html': `<!doctype html><html><head><meta charset="utf-8">
 <script src="${prefix}"></script>
 <style type="text/tailwindcss">
@@ -120,7 +130,8 @@ window.run = (args, files, input, env) => {
   for (const [name, value] of Object.entries(files)) {
     if (typeof value !== 'string') files[name] = Uint8Array.from(atob(value.base64), (c) => c.charCodeAt(0))
   }
-  // tailwind-browser.wasm has no optimizer: tailwind.wasm for --minify.
+  // tailwind-browser.wasm has no Lightning CSS: tailwind.wasm for --minify
+  // and --optimize, as the official program.
   const wasm = args.includes('--minify') || args.includes('--optimize') ? 'tailwind.wasm' : 'tailwind-browser.wasm'
   return runWasm(args, { files, input, env: { NO_COLOR: '1', ...env }, wasm: '${prefix}/runtime/' + wasm })
 }
@@ -131,7 +142,7 @@ window.ready = true
 import { runWasm } from '${prefix}/js/browser.mjs'
 const files = { 'app.css': '@import "tailwindcss";', 'index.html': '<div class="flex p-4">' }
 window.main = await runWasm(['-i', 'app.css'], { files, env: { NO_COLOR: '1' } })
-// --minify: no optimizer in the program for a browser, and the full program.
+// --minify: no minifier in the program for a browser, and the full program.
 window.small = await runWasm(['-i', 'app.css', '--minify'], { files, env: { NO_COLOR: '1' } })
 window.full = await runWasm(['-i', 'app.css', '--minify'], { files, env: { NO_COLOR: '1' }, wasm: '${prefix}/runtime/tailwind.wasm' })
 const worker = new Worker(URL.createObjectURL(new Blob([\`
@@ -284,6 +295,22 @@ try {
     await tab.close()
   })
 
+  await check('the page script lowers the new CSS for the browsers of Tailwind CSS', async () => {
+    const tab = await browser.newPage()
+    tab.on('console', (m) => messages.push(`lower.html: ${m.text()}`))
+    tab.on('pageerror', (e) => messages.push(`lower.html: ${e}`))
+    await tab.goto(`${base}/lower.html`)
+    await settle(tab, () => getComputedStyle(document.getElementById('a')).marginLeft === '20px')
+    const css = await pageCss(tab)
+    for (const text of ['@function', '@mixin', '@apply', 'if(', 'sibling-index(']) assert.ok(!css.includes(text), text)
+    const styles = await tab.evaluate(() => {
+      const a = getComputedStyle(document.getElementById('a'))
+      return [a.paddingTop, a.color, getComputedStyle(document.getElementById('third')).marginTop]
+    })
+    assert.deepEqual(styles, ['12px', 'rgb(1, 2, 3)', '3px'])
+    await tab.close()
+  })
+
   await check('the page script with a path in a <style>: from the URL of the page', async () => {
     const tab = await browser.newPage()
     tab.on('pageerror', (e) => messages.push(`style.html: ${e}`))
@@ -302,7 +329,7 @@ try {
     assert.equal(main.status, 0, main.stderr)
     assert.ok(main.stdout.includes('.flex {\n    display: flex;'), main.stdout.slice(-300))
     assert.equal(small.status, 1)
-    assert.match(small.stderr, /no optimizer/)
+    assert.match(small.stderr, /no minifier/)
     assert.equal(full.status, 0, full.stderr)
     assert.ok(full.stdout.includes('.flex{display:flex}'), full.stdout.slice(-300))
     assert.ok(full.stdout.includes('.p-4{padding:calc(var(--spacing) * 4)}'), full.stdout.slice(-300))
