@@ -15,6 +15,8 @@
 # The patterns are text of the header: $ is not an expansion here.
 # shellcheck disable=SC2016
 set -eu
+# The header is binary data: the byte locale for grep and sed.
+export LC_ALL=C
 program=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -23,6 +25,11 @@ failures=0
 fail() {
     echo "ape_loader: $*" >&2
     failures=$((failures + 1))
+}
+
+# The SHA-256 of stdin. macOS can have shasum only.
+sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi
 }
 
 head -c 65536 "$program" > "$tmp/head"
@@ -41,7 +48,7 @@ sed -n 's/^dd if="\$o" skip=\([0-9]*\) *count=\([0-9]*\) *bs=1 .*| gzip -dc.*/\1
 while read -r skip count; do
     tail -c +$((skip + 1)) "$program" | head -c "$count" | gzip -dc >> "$tmp/all"
 done < "$tmp/loaders"
-hash=$(sha256sum < "$tmp/all" | cut -c1-12)
+hash=$(sha256 < "$tmp/all" | cut -c1-12)
 [ "$name" = ".ape-$version-$hash" ] || fail "the header names $name, not .ape-$version-$hash"
 
 # Two other loaders, which fail.

@@ -25,6 +25,8 @@
 # The patterns are text of the header: $ is not an expansion here.
 # shellcheck disable=SC2016
 set -eu
+# The header is binary data: the byte locale for grep and sed.
+export LC_ALL=C
 f=$1
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
