@@ -34,9 +34,10 @@ pub struct Context {
     /// The messages have colors, as on a terminal. `NO_COLOR` and
     /// `FORCE_COLOR` of `env` still apply.
     pub terminal: bool,
-    /// The watch stops when this is true. There is no standard input: the
-    /// end of the standard input does not stop the watch, and the input
-    /// `-` is empty.
+    /// The run stops when this is true: a watch at its next tick, and a
+    /// build at its next check (`stop.rs`). There is no standard input:
+    /// the end of the standard input does not stop the watch, and the
+    /// input `-` is empty.
     pub stop: Arc<AtomicBool>,
 }
 
@@ -46,7 +47,10 @@ thread_local! {
 }
 
 /// The context of the thread until the guard drops.
-pub(crate) struct Guard;
+/// It also gives the flag `stop` to the compiler (`stop.rs`).
+pub(crate) struct Guard {
+    _stop: crate::stop::Guard,
+}
 
 impl Drop for Guard {
     fn drop(&mut self) {
@@ -56,9 +60,10 @@ impl Drop for Guard {
 }
 
 pub(crate) fn enter(context: Context, args: Vec<String>) -> Guard {
+    let stop = crate::stop::watch(context.stop.clone());
     CURRENT.with(|current| *current.borrow_mut() = Some(context));
     ARGS.with(|current| *current.borrow_mut() = Some(args));
-    Guard
+    Guard { _stop: stop }
 }
 
 /// The arguments of a run of `run_with`, for `process.argv` of a plugin.
@@ -118,7 +123,7 @@ pub fn terminal() -> bool {
         .unwrap_or_else(|| std::io::stderr().is_terminal())
 }
 
-/// True when the caller asks the watch to stop.
+/// True when the caller asks the run to stop.
 pub fn stopped() -> bool {
     CURRENT.with(|current| current.borrow().as_ref().is_some_and(|context| context.stop.load(Ordering::SeqCst)))
 }

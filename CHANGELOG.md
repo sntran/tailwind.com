@@ -51,6 +51,14 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   Lightning CSS), `optimize` (`lower` and Lightning CSS) and `host-js`:
   `cli` is `program`, `optimize` and `js`. `tailwind-browser.wasm` has
   `program`, `lower` and `host-js`.
+- The NIF stops a build, not only a watch. A build stops when the
+  calling process ends (as a watch already did), or at the end of the
+  time of the new option `timeout` of `tailwind_nif:run/2` and
+  `tailwind_nif:run/4`: the result is then `timeout`. The compiler, the
+  program and the JavaScript engine of the plugins check the stop, so
+  the thread ends soon and frees its memory, also for a plugin with an
+  endless loop. After the stop, the process gets no more messages of the
+  run (`docs/NIF.md`, "Stop a run").
 
 ### Fixed
 

@@ -88,8 +88,12 @@ pub fn compile_candidates(
     let mut sorted: Vec<SortedNode> = Vec::new();
     let mut matches: crate::hash::IndexMap<&str, Rc<Vec<Rc<Candidate>>>> = crate::hash::IndexMap::default();
 
-    // Parse the candidates and the variants.
+    // Parse the candidates and the variants. A stopped run needs no more
+    // candidates (`stop.rs`).
     for raw in raw_candidates {
+        if crate::stop::requested() {
+            break;
+        }
         if design_system.invalid_candidates.borrow().contains(raw.as_str()) {
             on_invalid_candidate(raw);
             continue;
@@ -113,6 +117,9 @@ pub fn compile_candidates(
 
     // Make the rules.
     for (raw, candidates) in &matches {
+        if crate::stop::requested() {
+            break;
+        }
         let mut found = false;
         for candidate in candidates.iter() {
             let rules = design_system.compiled_ast_nodes_owned(candidate, flags);

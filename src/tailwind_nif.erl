@@ -23,16 +23,17 @@ there (`docs/NIF.md`). The variable `TAILWIND_COM_PACKAGES` can give
 another directory. The program runs on a thread of its own,
 not on a scheduler of the VM. When the process that calls `run/2` ends,
 a watch stops at its next tick, as the program does at the end of its
-standard input.
+standard input, and a build stops soon after (`docs/NIF.md`). The
+option `timeout` stops a run after a time.
 
 The module needs Erlang/OTP 29 or later. `docs/NIF.md` has more.
 """.
 
 -export([available/0, load/1, run/2, run/4, versions/0]).
 %% The functions of the NIF.
--export([nif_start/6, nif_versions/0]).
+-export([nif_start/6, nif_stop/1, nif_versions/0]).
 
--nifs([nif_start/6, nif_versions/0]).
+-nifs([nif_start/6, nif_stop/1, nif_versions/0]).
 
 %% The key of persistent_term when the default NIF is not there.
 -define(MISSING, {?MODULE, missing}).
@@ -41,7 +42,8 @@ The module needs Erlang/OTP 29 or later. `docs/NIF.md` has more.
 -type options() :: #{
     cd => file:filename_all(),
     env => [{string() | binary(), string() | binary() | false | nil}] | #{string() | binary() => term()},
-    colors => boolean()
+    colors => boolean(),
+    timeout => timeout()
 }.
 -export_type([options/0, stream/0]).
 
@@ -110,8 +112,12 @@ Options:
   The environment of the VM does not change.
 - `colors`: the messages have colors, as on a terminal (default:
   `false`, as for a port).
+- `timeout`: the most milliseconds for the run (default: `infinity`).
+  At the end of this time, the run stops, and the result is `timeout`.
+  The thread of the run ends at its next check, and frees its memory
+  (`docs/NIF.md`). The process gets no more message of the run.
 """.
--spec run([string() | binary()], options()) -> non_neg_integer().
+-spec run([string() | binary()], options()) -> non_neg_integer() | timeout.
 run(Args, Options) ->
     {Status, ok} = run(Args, Options, fun(_Stream, Data, ok) -> io:put_chars(Data), ok end, ok),
     Status.
@@ -119,10 +125,11 @@ run(Args, Options) ->
 -doc """
 Run the program as `run/2` does, and give each part of the output to
 `Fun(Stream, Data, Acc)`. `Stream` is `stdout` or `stderr`, and `Data` is
-a binary. The result is the exit status and the last `Acc`.
+a binary. The result is the exit status and the last `Acc`, or `timeout`
+and the last `Acc` when the option `timeout` stopped the run.
 """.
 -spec run([string() | binary()], options(), fun((stream(), binary(), Acc) -> Acc), Acc) ->
-    {non_neg_integer(), Acc}.
+    {non_neg_integer() | timeout, Acc}.
 run(Args, Options, Fun, Acc) when is_list(Args), is_map(Options), is_function(Fun, 3) ->
     ensure(),
     Cwd =
@@ -136,17 +143,40 @@ run(Args, Options, Fun, Acc) when is_list(Args), is_map(Options), is_function(Fu
     Env = packages([{binary(Name), value(Value)} || {Name, Value} <- env(maps:get(env, Options, []))]),
     Id = erlang:unique_integer([positive]),
     Colors = maps:get(colors, Options, false),
+    Deadline =
+        case maps:get(timeout, Options, infinity) of
+            infinity -> infinity;
+            Time when is_integer(Time), Time >= 0 -> erlang:monotonic_time(millisecond) + Time;
+            Time -> erlang:error(badarg, [{timeout, Time}])
+        end,
     Run = nif_start([binary(Arg) || Arg <- Args], binary(Cwd), Env, self(), Id, Colors),
-    loop(Run, Id, Fun, Acc).
+    loop(Run, Id, Fun, Acc, Deadline).
 
 %% `Run` is the resource of the run: while this process keeps it, the run
-%% goes on. When the garbage collector frees it, a watch stops.
-loop(Run, Id, Fun, Acc) ->
+%% goes on. When the garbage collector frees it, the run stops.
+loop(Run, Id, Fun, Acc, Deadline) ->
     receive
         {?MODULE, Id, exit, Status} ->
             {Status, Acc};
         {?MODULE, Id, Stream, Data} ->
-            loop(Run, Id, Fun, Fun(Stream, Data, Acc))
+            loop(Run, Id, Fun, Fun(Stream, Data, Acc), Deadline)
+    after remaining(Deadline) ->
+        %% After `nif_stop/1`, the thread sends nothing: remove the
+        %% messages that came before.
+        ok = nif_stop(Run),
+        flush(Id),
+        {timeout, Acc}
+    end.
+
+remaining(infinity) ->
+    infinity;
+remaining(Deadline) ->
+    max(0, Deadline - erlang:monotonic_time(millisecond)).
+
+flush(Id) ->
+    receive
+        {?MODULE, Id, _, _} -> flush(Id)
+    after 0 -> ok
     end.
 
 ensure() ->
@@ -198,6 +228,10 @@ binary(Value) ->
 
 -doc false.
 nif_start(_Args, _Cwd, _Env, _Pid, _Id, _Colors) ->
+    erlang:nif_error(nif_not_loaded).
+
+-doc false.
+nif_stop(_Run) ->
     erlang:nif_error(nif_not_loaded).
 
 -doc false.

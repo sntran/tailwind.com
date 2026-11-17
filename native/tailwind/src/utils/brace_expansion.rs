@@ -30,6 +30,10 @@ impl std::error::Error for ExpandError {}
 
 /// Expand a pattern such as `a/{x,y}/{1..3}`.
 pub fn expand(pattern: &str) -> Result<Vec<String>, ExpandError> {
+    // A stopped run needs no more parts (`stop.rs`).
+    if crate::stop::requested() {
+        return Ok(Vec::new());
+    }
     let Some(index) = pattern.find('{') else {
         return Ok(vec![pattern.to_string()]);
     };
@@ -78,6 +82,9 @@ pub fn expand(pattern: &str) -> Result<Vec<String>, ExpandError> {
 
     let mut result = Vec::with_capacity(parts.len() * expanded_tail.len());
     for tail in &expanded_tail {
+        if crate::stop::requested() {
+            return Ok(Vec::new());
+        }
         for part in &parts {
             let mut item = String::with_capacity(pre.len() + part.len() + tail.len());
             item.push_str(pre);

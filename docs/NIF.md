@@ -156,8 +156,8 @@ build of the NIF for WebAssembly yet.
 | `available()` | True when the NIF is loaded. The first call loads it from `priv/native/libtailwind_nif`. |
 | `load(Path)` | Load the NIF from `Path`. |
 | `versions()` | The version of the program and of its Tailwind CSS, as binaries. |
-| `run(Args, Options)` | Run the program. The output goes to the group leader. The result is the exit status. |
-| `run(Args, Options, Fun, Acc)` | Run the program. `Fun(stdout \| stderr, Binary, Acc)` gets each part of the output. The result is `{Status, Acc}`. |
+| `run(Args, Options)` | Run the program. The output goes to the group leader. The result is the exit status, or `timeout`. |
+| `run(Args, Options, Fun, Acc)` | Run the program. `Fun(stdout \| stderr, Binary, Acc)` gets each part of the output. The result is `{Status, Acc}`, or `{timeout, Acc}`. |
 
 The options are a map:
 
@@ -166,6 +166,7 @@ The options are a map:
 | `cd` | The working directory of the run (default: the working directory of the VM). |
 | `env` | Changes of the environment of the run: a list of `{Name, Value}` or a map. `false` or `nil` removes a variable. |
 | `colors` | The messages have colors (default: `false`, as for a port). |
+| `timeout` | The most milliseconds for the run (default: `infinity`). Then the run stops (see [Stop a run](#stop-a-run)), and the result is `timeout`. |
 
 ```erlang
 0 = tailwind_nif:run(["-i", "assets/css/app.css", "-o", "priv/static/assets/css/app.css"],
@@ -189,9 +190,10 @@ The run is not a process, and these are different from a port:
 - The working directory and the environment of the run do not change the
   VM. Each run has its own.
 - There is no standard input. The input `-` is empty.
-- A watch stops when the calling process ends: the process keeps the
-  resource of the run, and when the garbage collector frees it, the
-  watch stops at its next tick. This is also true for `--watch=always`.
+- A run stops when the calling process ends: the process keeps the
+  resource of the run, and when the garbage collector frees it, the run
+  stops (see [Stop a run](#stop-a-run)). This is also true for
+  `--watch=always`.
 - A panic of the program does not stop the VM: the exit status is 101.
 - An input that nests too deep does not stop the VM. The thread of a run
   has a stack of 256 MiB (the system uses only the pages that the run
@@ -201,6 +203,39 @@ The run is not a process, and these are different from a port:
 - The standard output and the standard error are two streams (`run/4`).
   `run/2` writes the two to the group leader, as a port with
   `stderr_to_stdout`.
+
+## Stop a run
+
+A run stops when the calling process ends, or at the end of the time of
+the option `timeout`. A server that compiles the CSS of its users gives
+a time to each build, as it closes the port of a program. For another
+condition, run the build in a process of its own, and end that process.
+
+The stop sets a flag of the run. A watch reads it at each tick. A build
+reads it at these checks, and then ends with no output
+(`native/tailwind/src/stop.rs`):
+
+- the compiler: at each candidate, and at each part of a brace
+  expansion of `@source inline()`;
+- the program: before and after the scan of the sources, and before the
+  optimizer and the write of the output;
+- the JavaScript engine of `@plugin` and `@config`: about each 10,000
+  instructions (the interrupt handler of QuickJS). A plugin with an
+  endless loop also stops.
+
+The thread then ends, and frees its memory. The longest delay is the
+longest step with no check: one scan of the sources, one parse of the
+stylesheet and its imports, or one pass of the optimizer (Lightning CSS
+for `--minify` and `--optimize`). For a build of 400,000 candidates
+(3 seconds), the thread ends at most 250 ms after the stop, with the
+free of its memory. A plugin with an endless loop stops in 2 ms. Lightning
+CSS can take a very long time for some inputs, also in the official
+program (`calc()` in `calc()` 30 times, with `var()` in the deepest one):
+there, the thread ends only at the end of the optimizer.
+
+After the stop, the thread sends no more messages: with `timeout`,
+`run/2` and `run/4` return at once, and the mailbox of the process has no
+message of the run.
 
 ## Speed
 
