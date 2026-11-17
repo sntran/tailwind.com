@@ -31,7 +31,7 @@ The answer has the same parts, sorted, or `<<"error">>` with a message.
 """.
 -behaviour(gen_server).
 
--export([start_link/1, start_link/2, sort/2, sort/3, stop/1, sort_args/1]).
+-export([start/2, start_link/1, start_link/2, sort/2, sort/3, stop/1, sort_args/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 %% The variable that gives the version of Tailwind CSS to tailwind.com.
@@ -53,7 +53,22 @@ start_link(Profile) ->
 -doc "Start a sorter, as `start_link/1` does, with the options of `gen_server:start_link/3`.".
 -spec start_link(atom(), [gen_server:start_opt()]) -> gen_server:start_ret().
 start_link(Profile, Options) when is_atom(Profile) ->
-    gen_server:start_link(?MODULE, Profile, Options).
+    case lists:keytake(name, 1, Options) of
+        {value, {name, Name}, Rest} -> gen_server:start_link(Name, ?MODULE, Profile, Rest);
+        false -> gen_server:start_link(?MODULE, Profile, Options)
+    end.
+
+-doc """
+Start a sorter, as `start_link/1` does, with no link to the calling
+process, and with the options of `gen_server:start/3` (for example
+`{name, {local, Name}}`).
+""".
+-spec start(atom(), [gen_server:start_opt()]) -> gen_server:start_ret().
+start(Profile, Options) when is_atom(Profile) ->
+    case lists:keytake(name, 1, Options) of
+        {value, {name, Name}, Rest} -> gen_server:start(Name, ?MODULE, Profile, Rest);
+        false -> gen_server:start(?MODULE, Profile, Options)
+    end.
 
 -doc "Sort the classes of a request, with a timeout of 60 seconds.".
 -spec sort(gen_server:server_ref(), request()) -> request().

@@ -30,6 +30,14 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   exponent, and `progress()`, with the functions of trigonometry that
   Chrome 111 has. `progress()` with fixed values is a number at build
   time.
+- `mix format` sorts the classes of HEEx templates (`.heex` files and
+  `~H`), as the official Prettier plugin of Tailwind CSS does, with the
+  theme, plugins and version of the project: the plugin
+  `Tailwind.Formatter`, before `Phoenix.LiveView.HTMLFormatter`. An
+  Erlang project uses `tailwind_sorter`, and other tools use
+  `tailwind.com --sort-classes`. See `docs/FORMATTER.md`.
+- A run of the NIF can have a standard input: `tailwind_nif:start/2`,
+  `input/2` and `close/1`.
 
 ### Fixed
 
