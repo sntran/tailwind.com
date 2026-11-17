@@ -30,6 +30,14 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   exponent, and `progress()`, with the functions of trigonometry that
   Chrome 111 has. `progress()` with fixed values is a number at build
   time.
+- `mix format` sorts the classes of HEEx templates (`.heex` files and
+  `~H`), as the official Prettier plugin of Tailwind CSS does, with the
+  theme, plugins and version of the project: the plugin
+  `Tailwind.Formatter`, before `Phoenix.LiveView.HTMLFormatter`. The
+  order comes from a normal build of the profile, so the program has no
+  new option. See `docs/FORMATTER.md`.
+- The library crate has the order of classes of a design system:
+  `DesignSystem::get_class_order`, as `getClassOrder` of Tailwind CSS.
 
 ### Fixed
 
