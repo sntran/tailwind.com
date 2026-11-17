@@ -557,6 +557,15 @@ the method of BEAM.com for Rust:
   (`-Zbuild-std`, a nightly Rust).
 - `scripts/rust_link.sh` makes one object with one global name,
   `tailwind_main`, and `native/tailwind/c_src/main.c` calls it.
+- `scripts/ape_loader.sh` changes the path of the APE loader in the
+  shell header from `.ape-1.10` to `.ape-1.10-HASH`, with HASH the
+  SHA-256 of the loaders in the file (12 digits). The header of apelink
+  runs `$TMPDIR/.ape-1.10` (or `~/.ape-1.10`) when it exists, and does
+  not examine it. Other APE programs write a different loader to the
+  same path (the loader of BEAM.com has a patch for macOS), and
+  `tailwind.com` then failed with their loader (issue #28). The header
+  keeps its size: the script takes the bytes from the padding of the
+  numbers of the `dd` commands. `tests/ape_loader.sh` checks the file.
 
 ### The allocator
 

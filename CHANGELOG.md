@@ -61,6 +61,20 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   variable with no use had it. The official program scans its input
   file from 4.3.2: the new switch `INPUT_FILE_IS_A_SOURCE`. The output
   of 4.3.2 to 4.3.5 does not change.
+- The shell header of `tailwind.com` runs only an APE loader with the
+  contents of its own loaders: `$TMPDIR/.ape-1.10-HASH` (or
+  `~/.ape-1.10-HASH`), with the SHA-256 of the loaders of the file.
+  Before, it ran each file at `$TMPDIR/.ape-1.10`, also the different
+  loader of an other APE program (BEAM.com has a patch in its loader).
+  On macOS 27 arm64 that loader stopped the program with "the fixed
+  addresses of the program are in use" (#28). `scripts/ape_loader.sh`
+  changes the header, and `tests/ape_loader.sh` checks it.
+- The aarch64 NIF object (`libtailwind_nif.aarch64.o`) has no
+  PC-relative reference to `beam.com`: its C files use the large code
+  model. A `beam.com` with the new loader of BEAM.com then loads it far
+  from its program when no memory near the program is free. On macOS 27
+  arm64, the load failed with "no free memory near the program for
+  9764864 bytes" (#27). An older `beam.com` loads the object as before.
 
 ## 0.4.0 - 2026-11-17
 
