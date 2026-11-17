@@ -18,8 +18,10 @@ import fs from 'node:fs'
 import http from 'node:http'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { wasmUrl } from '../js/browser.mjs'
+import { runWasm } from '../js/node.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
@@ -45,7 +47,29 @@ const cases = [
 for (const [from, want] of cases) assert.equal(wasmUrl(from), want, from)
 
 const prefix = '/npm/tailwind.com@0.0.0'
+
+// The files of a project, as on the disk: a link of the page gives
+// /assets/app.css. The test changes them.
+const assets = {
+  '/assets/app.css': `@import "tailwindcss";
+@import "./components.css";
+@import "/theme/brand.css";
+@plugin "@tailwindcss/typography";
+.after-check { color: rgb(1, 2, 3); }
+`,
+  '/assets/components.css': '.card { @apply rounded-lg p-6 shadow-md; }\n',
+  '/theme/brand.css': '@theme { --color-brand: #0d9488; }\n',
+}
+const linkBody = '<div id="box" class="card flex bg-brand hover:underline"><article class="prose">Text</article></div><p class="after-check" id="after">z</p>'
+
 const pages = {
+  // A file with the input CSS, as for a build on the disk. The <style>
+  // after the link must come after the output in the cascade.
+  '/link.html': `<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">
+<style>.after-check { color: rgb(4, 5, 6); }</style>
+<script src="${prefix}"></script></head>
+<body>${linkBody}</body></html>`,
   // The Play CDN form: a classic script and a <style type="text/tailwindcss">.
   '/page.html': `<!doctype html><html><head><meta charset="utf-8">
 <script src="${prefix}"></script>
@@ -89,6 +113,7 @@ const server = http.createServer((request, response) => {
   else if (url === '/official.js' && opts.official) body = fs.readFileSync(opts.official)
   else if (url === '/compare.html') body = pages[url](new URL(request.url, 'http://localhost').searchParams.get('script'))
   else if (typeof pages[url] === 'string') body = pages[url]
+  else if (assets[url] !== undefined) [body, type] = [assets[url], 'text/css']
   if (body === undefined) {
     response.writeHead(404).end()
     return
@@ -150,6 +175,42 @@ try {
     await tab.waitForTimeout(300)
     assert.equal(builds.length, count)
     assert.ok(builds.every((status) => status === 0), String(builds))
+    await tab.close()
+  })
+
+  await check('the page script with a <link> to a file: the CSS of a build on the disk', async () => {
+    const tab = await browser.newPage()
+    tab.on('console', (m) => messages.push(`link.html: ${m.text()}`))
+    tab.on('pageerror', (e) => messages.push(`link.html: ${e}`))
+    await tab.goto(`${base}/link.html`)
+    await settle(tab, () => getComputedStyle(document.getElementById('box')).display === 'flex')
+    // The browser does not apply the file itself.
+    assert.equal(await tab.evaluate(() => document.querySelector('link').sheet), null)
+    // The output has the place of the link: the <style> after it wins.
+    assert.equal(await tab.evaluate(() => document.querySelector('link').nextElementSibling.textContent.includes('.card {')), true)
+    assert.equal(await tab.evaluate(() => getComputedStyle(document.getElementById('after')).color), 'rgb(4, 5, 6)')
+    assert.equal(await tab.evaluate(() => getComputedStyle(document.getElementById('box')).paddingTop), '24px')
+
+    // The same files and classes on the disk, with the program.
+    const css = await tab.evaluate(() => document.querySelector('link').nextElementSibling.textContent)
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'npm-browser-'))
+    try {
+      for (const [name, text] of Object.entries(assets)) {
+        fs.mkdirSync(path.join(dir, path.dirname(name)), { recursive: true })
+        fs.writeFileSync(path.join(dir, name), text)
+      }
+      fs.writeFileSync(path.join(dir, 'assets/index.html'), linkBody)
+      const local = await runWasm(['-i', 'assets/app.css'], { cwd: dir, wasm: opts.wasm, env: { NO_COLOR: '1' } })
+      assert.equal(local.status, 0, local.stderr)
+      assert.equal(css, local.stdout.replace(/\n$/, ''))
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+
+    // A live reload: the file changes, and then the href.
+    assets['/theme/brand.css'] = '@theme { --color-brand: #ff0000; }\n'
+    await tab.evaluate(() => (document.querySelector('link').href = '/assets/app.css?v=2'))
+    await settle(tab, () => getComputedStyle(document.getElementById('box')).backgroundColor === 'rgb(255, 0, 0)')
     await tab.close()
   })
 

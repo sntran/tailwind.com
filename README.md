@@ -164,6 +164,26 @@ for another WASI host.
 
 On a page, the package works as the Play CDN of Tailwind CSS: it builds
 the CSS of the page from its classes, and builds again when they change.
+The input CSS can be a file, as for a build on the disk:
+
+```html
+<link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">
+<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.4"></script>
+```
+
+- The browser does not apply a stylesheet with the type
+  `text/tailwindcss`. The script gets the file, and the files of its
+  `@import`, `@reference`, `@plugin` and `@config` with a path (`./`,
+  `../` or `/`). The CSS goes after the `<link>`, so it has the same
+  place in the cascade as the output of a build.
+- The CSS is the same as the output of a build of the same files on the
+  disk, for the classes of the page. A test in CI compares the two.
+- To build on the disk later, remove the `<script>`, remove `type`, and
+  set `href` to the output of the build:
+  `<link rel="stylesheet" href="/assets/app.out.css">`.
+- A change of `href` (a live reload) gets the files again.
+
+The input CSS can also be in the page, as for the Play CDN:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.4"></script>
@@ -173,7 +193,8 @@ the CSS of the page from its classes, and builds again when they change.
 </style>
 ```
 
-- The CSS is the same as the CSS of the browser build of Tailwind CSS
+- With no `@import`, `@import "tailwindcss";` comes first. The CSS is
+  the same as the CSS of the browser build of Tailwind CSS
   (`@tailwindcss/browser`). A test in CI compares the two.
 - The plugins in the program work with `@plugin`:
   `@tailwindcss/typography`, `@tailwindcss/forms` and
