@@ -69,6 +69,12 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   On macOS 27 arm64 that loader stopped the program with "the fixed
   addresses of the program are in use" (#28). `scripts/ape_loader.sh`
   changes the header, and `tests/ape_loader.sh` checks it.
+- The aarch64 NIF object (`libtailwind_nif.aarch64.o`) has no
+  PC-relative reference to `beam.com`: its C files use the large code
+  model. A `beam.com` with the new loader of BEAM.com then loads it far
+  from its program when no memory near the program is free. On macOS 27
+  arm64, the load failed with "no free memory near the program for
+  9764864 bytes" (#27). An older `beam.com` loads the object as before.
 
 ## 0.4.0 - 2026-11-17
 

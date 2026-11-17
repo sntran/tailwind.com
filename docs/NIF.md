@@ -102,6 +102,21 @@ one for each function: about 36,000 sections took 8 MB for their headers,
 names and symbols. LTO already removed the code that the crate does not
 use, so the loader has no more to remove.
 
+The loader of BEAM.com puts the object near the program: the code of
+cosmocc reads values of `beam.com` (`EINVAL`, `O_CREAT`,
+`CLOCK_MONOTONIC`) with PC-relative instructions, which reach 4 GB on
+aarch64. On macOS 27 arm64, no memory near the program can be free, and
+the load failed with "no free memory near the program" (issue #27). So
+the C files of the aarch64 object use the large code model
+(`-mcmodel=large`): the code reads each address of `beam.com` from the
+object. The code of Rust calls `beam.com` only through the stubs of the
+loader. `scripts/nif.sh` stops when the aarch64 object has a PC-relative
+reference to `beam.com`. A `beam.com` with the change of the loader for
+this (BEAM.com, after 2026-11-17) can put the object far from the
+program. An older `beam.com` loads the object near the program, as
+before. The x86_64 object does not change: its loader keeps it below
+2 GB.
+
 `make nif` (`scripts/nif.sh`) builds the objects in `build/nif`, with the
 cosmocc and the Rust of `make`. The job `nif-beam` of CI
 loads them in the `beam.com` of the release `edge` of BEAM.com, on

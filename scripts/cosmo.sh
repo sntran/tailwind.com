@@ -115,24 +115,26 @@ mimalloc_object() {
         -I"$mi/include" -c -o "$o" "$mi/src/static.c"
 }
 
-# c_objects CPU DIR [WATCH_FLAGS]: the C files of the program for CPU, in
-# DIR: cosmo_rust.c, the file events of the watch (watch.c, with
+# c_objects CPU DIR [WATCH_FLAGS [CFLAGS]]: the C files of the program for
+# CPU, in DIR: cosmo_rust.c, the file events of the watch (watch.c, with
 # WATCH_FLAGS), and the JavaScript engine (QuickJS and its API for Rust).
-# The C library is Cosmopolitan, so cosmocc compiles them: with the
-# feature `ape`, native/tailwind/build.rs compiles no C. The list of the
-# objects goes into the variable objects.
+# CFLAGS go to each file. The C library is Cosmopolitan, so cosmocc
+# compiles them: with the feature `ape`, native/tailwind/build.rs
+# compiles no C. The list of the objects goes into the variable objects.
 c_objects() {
-    cpu=$1 d=$2 watch_flags=${3:-}
+    cpu=$1 d=$2 watch_flags=${3:-} cflags=${4:-}
     src=$root/native/tailwind/c_src
     cc=$C/bin/$cpu-unknown-cosmo-cc
     mkdir -p "$d"
-    sh "$cc" -O2 -c -o "$d/shim.o" "$src/cosmo_rust.c"
     # shellcheck disable=SC2086
-    sh "$cc" -O2 $watch_flags -c -o "$d/watch.o" "$src/watch.c"
+    sh "$cc" -O2 $cflags -c -o "$d/shim.o" "$src/cosmo_rust.c"
+    # shellcheck disable=SC2086
+    sh "$cc" -O2 $cflags $watch_flags -c -o "$d/watch.o" "$src/watch.c"
     objects="$d/shim.o $d/watch.o"
     for f in quickjs/quickjs quickjs/libregexp quickjs/libunicode quickjs/cutils quickjs/dtoa js; do
         o=$d/js_$(basename "$f").o
-        sh "$cc" -O2 -fwrapv -funsigned-char -D_GNU_SOURCE \
+        # shellcheck disable=SC2086
+        sh "$cc" -O2 $cflags -fwrapv -funsigned-char -D_GNU_SOURCE \
             "-DCONFIG_VERSION=\"$(cat "$src/quickjs/VERSION")\"" \
             -c -o "$o" "$src/$f.c" &
         objects="$objects $o"
