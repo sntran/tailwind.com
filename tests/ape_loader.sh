@@ -10,7 +10,7 @@
 #   - an other loader at $TMPDIR/.ape-VERSION (the name of cosmocc) and
 #     at $TMPDIR/.ape-VERSION-OTHERHASH does not run;
 #   - the program extracts its loader one time, and uses it after that;
-#   - on Linux, `--assimilate` still makes an ELF file that runs.
+#   - on Linux x86_64, `--assimilate` still makes an ELF file that runs.
 # The last line is "ape_loader: ok".
 # The patterns are text of the header: $ is not an expansion here.
 # shellcheck disable=SC2016
@@ -73,8 +73,9 @@ if [ -x "$dir/$name" ]; then
     [ "$(ls -l "$dir/$name")" = "$before" ] || fail "the second start extracts the loader again"
 fi
 
-# --assimilate changes the header of a copy to ELF (Linux only).
-if [ "$(uname -s)" = Linux ]; then
+# --assimilate changes the header of a copy to ELF (Linux x86_64 only:
+# the header of cosmocc 4.0.2 exits before its part for aarch64).
+if [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ]; then
     cp "$program" "$tmp/copy.com"
     TMPDIR=$dir sh "$tmp/copy.com" --assimilate || fail "--assimilate fails"
     [ "$(od -An -c -N4 "$tmp/copy.com" | tr -d ' ')" = '177ELF' ] || fail "--assimilate gives no ELF file"

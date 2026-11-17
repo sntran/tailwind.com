@@ -169,8 +169,8 @@ header (`scripts/ape_loader.sh`, issue #28). The header must name
 `.ape-1.10-HASH`, with the SHA-256 of the loaders of the file. With a
 different loader at `$TMPDIR/.ape-1.10` and at an other hashed name,
 the program must start with its own loader, extract it one time, and
-use it at the next start. On Linux, `--assimilate` must still give an
-ELF file that runs. CI runs it on Linux and macOS.
+use it at the next start. On Linux x86_64, `--assimilate` must still
+give an ELF file that runs. CI runs it on Linux and macOS.
 
 `node tests/wasi.mjs build/tailwind.wasm` runs the same cases with the
 WASI program in Node.js, through `runWasm` of `js/node.mjs`, as a user
