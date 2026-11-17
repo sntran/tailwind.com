@@ -157,8 +157,13 @@ await run(['-i', 'app.css', '-o', 'dist/app.css', '--minify']);
 const { status, stdout, stderr } = await runWasm(['-i', 'app.css'], { cwd: 'project' });
 ```
 
+The plugins of `@plugin` and `@config` run in the JavaScript engine of
+Node.js, in a context of `node:vm`. That needs JS Promise Integration:
+Node.js 24 or later (Node.js 22 with `--experimental-wasm-jspi`).
+
 `import wasm from 'tailwind.com/tailwind.wasm'` gives the module itself,
-for another WASI host.
+for another WASI host. Its plugins need the imports of
+`js/engine.mjs`.
 
 ### In the browser
 
@@ -208,19 +213,18 @@ The input CSS can also be in the page, as for the Play CDN:
   `@tailwindcss/typography`, `@tailwindcss/forms` and
   `@tailwindcss/aspect-ratio`.
 - After each build, the document gets the event `tailwind.com:build`.
-- The program for a page has no JavaScript engine and no optimizer:
-  about 0.77 MB with compression (`tailwind-small.wasm`). The plugins of
+- The program is about 1.35 MB with compression. The plugins of
   `@plugin` and `@config` run in the JavaScript engine of the browser,
   with JS Promise Integration: also ES modules and TypeScript files, but
   not a module with a top-level `await`. The plugin layer of Tailwind CSS
-  adds about 45 KB. A browser with no JS Promise Integration gets the
-  full program for them, about 1.8 MB.
+  adds about 45 KB.
 - The first build waits for the end of the HTML, and the page stays
   hidden until its first CSS (at most 3 seconds), so it does not show
   with no style. The last CSS of each page stays in `localStorage`: the
   next load is styled at once, and the build replaces it.
 - In Chromium, with a network of 20 Mbps, the first visit shows the
-  styled page in about 0.5 s, and a reload in about 50 ms. A build after
+  styled page in about 0.9 s (1.2 s with the typography plugin), and a
+  reload in about 50 ms. A build after
   a change takes about 15 ms. Use it for development, prototypes and
   editors, not for a production site.
 
@@ -403,12 +407,15 @@ The release job publishes it to crates.io.
 ## WebAssembly
 
 `tailwind.wasm` of each release is the same program for WASI
-(`wasm32-wasip1`): it runs in Node.js, Wasmtime, and other hosts with a
-WASI file system. It has the same JavaScript engine for `@plugin` and
-`@config`, with TypeScript and the three plugins in the file. The site
-runs it in the browser, with a small WASI host in JavaScript
-(`js/wasi.mjs`, [`docs/SITE.md`](docs/SITE.md)). The npm package uses
-the same host in the browser.
+(`wasm32-wasip1`), for a host with JavaScript: a browser, Node.js 24 or
+later, Deno. It has no JavaScript engine of its own: the plugins of
+`@plugin` and `@config` (also TypeScript and ES modules, and the three
+plugins of the standalone program) run in the JavaScript engine of the
+host, with JS Promise Integration (`js/engine.mjs`). A host with no
+JavaScript, such as Wasmtime, runs it with no `@plugin` and no
+`@config`. In the browser, it runs with a small WASI host in JavaScript
+(`js/wasi.mjs`). The site has its own build with QuickJS and the script
+engine ([`docs/SITE.md`](docs/SITE.md)).
 
 ## Documentation
 

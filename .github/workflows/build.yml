@@ -126,7 +126,8 @@ jobs:
         with:
           path: build/wasi-sdk
           key: wasi-sdk-${{ env.WASI_SDK_VERSION }}-x86_64-linux
-      # The clang of wasi-sdk compiles QuickJS for wasm32-wasip1.
+      # The clang of wasi-sdk compiles QuickJS for wasm32-wasip1: for
+      # tailwind-quickjs.wasm of the site.
       - name: Download wasi-sdk
         if: steps.wasi-sdk.outputs.cache-hit != 'true'
         run: |
@@ -134,7 +135,16 @@ jobs:
           echo "$WASI_SDK_SHA256  $RUNNER_TEMP/wasi-sdk.tar.gz" | sha256sum -c -
           mkdir -p build/wasi-sdk
           tar xzf "$RUNNER_TEMP/wasi-sdk.tar.gz" -C build/wasi-sdk --strip-components=1
-      - run: WASI_SDK_PATH=$PWD/build/wasi-sdk make wasm
+      # tailwind.wasm, the program of the release and of the npm package:
+      # the plugins run in the JavaScript engine of the host. The site
+      # also has the script engine: tailwind-quickjs.wasm.
+      - run: make wasm
+      - run: WASI_SDK_PATH=$PWD/build/wasi-sdk make wasm-quickjs
+      # The plugins of the cases with JavaScript need JS Promise
+      # Integration: Node.js 24 or later.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
       - name: The program in Node.js, against the record
         run: node tests/wasi.mjs build/tailwind.wasm
       - name: The program with JavaScript plugins and configs
@@ -146,7 +156,7 @@ jobs:
           name: tailwind.wasm
           path: |
             build/tailwind.wasm
-            build/tailwind-small.wasm
+            build/tailwind-quickjs.wasm
           if-no-files-found: error
 
   # The site (site/, docs/SITE.md): tailwind.wasm in Chromium, with the
@@ -171,7 +181,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: sh scripts/releases.sh build/releases
       - name: Build the site
-        run: node site/build.mjs --wasm build/tailwind.wasm --releases build/releases
+        run: node site/build.mjs --wasm build/tailwind-quickjs.wasm --releases build/releases
       - name: Playwright with Chromium
         run: |
           npm install --no-save --prefix "$RUNNER_TEMP/playwright" playwright@1.63.0
@@ -581,6 +591,10 @@ jobs:
         with:
           path: build
           merge-multiple: true
+      # runWasm runs plugins with JS Promise Integration: Node.js 24.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
       - name: The generated part and the package
         run: |
           chmod +x build/tailwind.com

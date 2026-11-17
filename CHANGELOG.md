@@ -28,20 +28,31 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 - The page does not show with no style. The first build waits for the
   end of the HTML, and the page stays hidden until its first CSS (at
   most 3 seconds). The last CSS of each page stays in `localStorage`, so
-  the next load is styled at once. The downloads start at once.
-- `tailwind-small.wasm`: the program with no JavaScript engine and no
-  optimizer (the Cargo features `program` and `host-js`), 0.77 MB with
-  brotli, and the full program is 1.78 MB. The page script uses it. With
-  a network of 20 Mbps, the first visit shows the styled page in about
-  0.5 s.
-- With `tailwind-small.wasm`, the plugins of `@plugin` and `@config` run
-  in the JavaScript engine of the browser, with JS Promise Integration
-  (`js/engine.mjs`): the program has no QuickJS, and the npm package has
-  the plugin layer as a file. The 99 recorded cases with JavaScript give
-  the output of the official program in Chromium. A browser with no JS
-  Promise Integration gets the full program for them. The plugin layer
-  has `__tw_compat_async`, and the TypeScript transform can also change
-  an ES module to CommonJS.
+  the next load is styled at once. The downloads start at once. With a
+  network of 20 Mbps, the first visit shows the styled page in about
+  0.9 s.
+- `tailwind.wasm` has no QuickJS: the plugins of `@plugin` and
+  `@config` run in the JavaScript engine of the host, with JS Promise
+  Integration (`js/engine.mjs`): in a page (a hidden iframe for each
+  build) and in Node.js 24 or later (a context of `node:vm`, through
+  `runWasm`). The npm package has the plugin layer, the TypeScript
+  transform and the three plugins as files in `runtime/`. The program is
+  1.35 MB with brotli, and was 1.78 MB. The 101 recorded cases with
+  JavaScript give the output of the official program in Node.js and in
+  Chromium. A host with no JavaScript (Wasmtime) runs it with no
+  `@plugin` and no `@config`. The plugin layer has `__tw_compat_async`,
+  and the TypeScript transform can also change an ES module to
+  CommonJS.
+- The Cargo features `program` (the program with no optimizer and no
+  JavaScript engine), `optimize` and `host-js`: `cli` is `program`,
+  `optimize` and `js`. `tailwind.wasm` has `program`, `optimize` and
+  `host-js`.
+
+### Changed
+
+- The site has its own build of the program, `tailwind-quickjs.wasm`
+  (`make wasm-quickjs`), with QuickJS and the script engine. It is not
+  published.
 
 ## 0.4.0 - 2026-11-17
 

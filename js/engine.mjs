@@ -1,16 +1,17 @@
-// The JavaScript engine of a browser for tailwind-small.wasm: the imports
-// of the module "tailwind_js" (the feature `host-js` of the crate,
+// The JavaScript engine of the host for tailwind.wasm: the imports of the
+// module "tailwind_js" (the feature `host-js` of the crate,
 // native/tailwind/src/compat/js/engine.rs). They do what c_src/js.c does
-// with QuickJS in tailwind.wasm, for `@plugin` and `@config`:
+// with QuickJS in tailwind.com, for `@plugin` and `@config`:
 //
-// - Each engine is a realm: a hidden <iframe> of the page. The plugin
-//   layer changes the globals of its realm (process, Buffer, the timers),
-//   so it does not run in the page itself.
+// - Each engine is a realm: a hidden <iframe> of the page, or a context of
+//   node:vm in Node.js (js/node.mjs). The plugin layer changes the globals
+//   of its realm (process, Buffer, the timers), so it does not run in the
+//   page or the program itself.
 // - JavaScript calls the program with `__host(op, text)`, through the
 //   exports tw_host_call and tw_host_release.
 // - The JavaScript files of the program (the plugin layer, the TypeScript
 //   transform and the three plugins of the standalone program) are not in
-//   tailwind-small.wasm: `assets` gives them.
+//   tailwind.wasm: `asset` gives them.
 // - A browser cannot import a file that is only in memory: an ES module
 //   becomes CommonJS with the `imports` transform of Sucrase.
 // - The plugin layer waits for its promises in `tw_js_call_async`, the
@@ -30,11 +31,12 @@ export function needsEngine(module) {
 
 // The engine of one run: { imports, dispose }. `imports` are the imports
 // of the module "tailwind_js". `exports` gives the exports of the instance
-// (after it is made). `assets`: the JavaScript files by name ("compat",
-// "typescript", "plugin:@tailwindcss/typography", ...). The program ends
-// with proc_exit and does not free its engines: `dispose` removes their
-// realms after the run.
-export function createEngine(exports, assets = {}) {
+// (after it is made). `asset(name)` gives a JavaScript file of the program
+// by its name ("compat", "typescript", "plugin:@tailwindcss/typography"),
+// or undefined. options.realm makes a realm: { global, dispose } (default:
+// a hidden <iframe> of the page). The program ends with proc_exit and does
+// not free its engines: `dispose` removes their realms after the run.
+export function createEngine(exports, asset = () => undefined, options = {}) {
   const engines = new Map();
   let nextId = 1;
 
@@ -97,9 +99,9 @@ export function createEngine(exports, assets = {}) {
   }
 
   // A realm: the window of a hidden <iframe>.
-  function realm() {
+  function frame() {
     if (typeof document === 'undefined') {
-      throw new Error('tailwind.com: @plugin and @config in tailwind-small.wasm need a document (a page, not a worker). Use tailwind.wasm.');
+      throw new Error('tailwind.com: @plugin and @config need a page or Node.js: a worker has no realm for the plugins.');
     }
     const frame = document.createElement('iframe');
     frame.hidden = true;
@@ -122,6 +124,8 @@ export function createEngine(exports, assets = {}) {
     });
   }
 
+  const realm = options.realm ?? frame;
+
   function create(user) {
     const { global, dispose } = realm();
     let strip = null;
@@ -129,8 +133,9 @@ export function createEngine(exports, assets = {}) {
     // The TypeScript transform of the program, in the realm.
     function transform(source, file, transforms) {
       if (strip === null) {
-        if (typeof assets.typescript !== 'string') throw new global.Error(`Cannot load '${file}': the TypeScript transform is not loaded.`);
-        strip = (0, global.eval)(`${assets.typescript}\n//# sourceURL=tailwindcss/typescript.js`);
+        const typescript = asset('typescript');
+        if (typeof typescript !== 'string') throw new global.Error(`Cannot load '${file}': the TypeScript transform is not loaded.`);
+        strip = (0, global.eval)(`${typescript}\n//# sourceURL=tailwindcss/typescript.js`);
       }
       return strip(source, file, transforms);
     }
@@ -184,8 +189,8 @@ export function createEngine(exports, assets = {}) {
     global.__host = (op, text) => {
       op = String(op);
       if (op === 'asset') {
-        const asset = assets[String(text)];
-        return typeof asset === 'string' ? asset : undefined;
+        const file = asset(String(text));
+        return typeof file === 'string' ? file : undefined;
       }
       const value = call(op, text === undefined ? '' : String(text));
       // The argument is JSON text: the name of the file.
@@ -219,8 +224,9 @@ export function createEngine(exports, assets = {}) {
       if (isModule) throw new global.Error('This JavaScript engine has no ES modules of the program.');
       // The program gives an empty plugin layer: the host has it.
       if (filename === 'tailwindcss/compat.js' && source === '') {
-        if (typeof assets.compat !== 'string') throw new global.Error('The plugin layer of Tailwind CSS is not loaded.');
-        source = assets.compat;
+        const compat = asset('compat');
+        if (typeof compat !== 'string') throw new global.Error('The plugin layer of Tailwind CSS is not loaded.');
+        source = compat;
       }
       const value = (0, global.eval)(`${source}\n//# sourceURL=${filename}`);
       if (typeof value === 'string') setOut(out, value);

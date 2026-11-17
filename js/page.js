@@ -38,11 +38,9 @@
 // - After each build, the document gets the event "tailwind.com:build".
 // - The first build waits for the end of the HTML, so that it has all the
 //   classes. The downloads start at once.
-// - The program is tailwind-small.wasm: no JavaScript engine and no
-//   optimizer, about a third of the size. For @plugin and @config, the
+// - The program has no JavaScript engine: for @plugin and @config, the
 //   plugins run in the JavaScript engine of the browser (js/engine.mjs),
-//   with JS Promise Integration. A browser with no JS Promise Integration
-//   gets the full tailwind.wasm for them.
+//   with JS Promise Integration.
 // - The last CSS of each page stays in localStorage. On the next load, it
 //   styles the page at once, and the build replaces it. With no such CSS
 //   and the script in <head>, the page stays hidden until the first CSS
@@ -54,7 +52,7 @@
 // It is the same program as the command line: the plugins in the program
 // (@tailwindcss/typography, @tailwindcss/forms and
 // @tailwindcss/aspect-ratio) work with @plugin. The program is large (about
-// 2 MB with compression), so this script is for development, prototypes
+// 1.35 MB with compression), so this script is for development, prototypes
 // and editors, not for a production site.
 //
 // A classic script, not a module: a <script src> with no type loads it,
@@ -84,11 +82,7 @@
   const found = source.pathname.match(/^(.*\/tailwind\.com(?:@[^/]*)?)(?:\/|$)/);
   const js = found ? new URL(`${found[1]}/js/`, source) : new URL('./', source);
 
-  // The program for a page: no JavaScript engine and no optimizer, about a
-  // third of the size. The full program only for @plugin and @config in a
-  // browser with no JS Promise Integration.
-  const small = new URL('../runtime/tailwind-small.wasm', js).href;
-  const full = new URL('../runtime/tailwind.wasm', js).href;
+  const wasm = new URL('../runtime/tailwind.wasm', js).href;
   const head = document.head ?? document.documentElement;
 
   // Start the downloads now: the module of the API, its import, and the
@@ -103,8 +97,7 @@
   }
   preload('modulepreload', new URL('wasi.mjs', js).href);
   preload('modulepreload', new URL('engine.mjs', js).href);
-  const promiseIntegration = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
-  preload('preload', small, 'fetch');
+  preload('preload', wasm, 'fetch');
   const loading = import(new URL('browser.mjs', js).href);
   loading.catch(() => {});
 
@@ -297,7 +290,7 @@
       input: `${css}@source ${quote(`./${CLASSES}`)};\n`,
       files: { ...files, [CLASSES]: [...classes].join('\n') },
       env: { NO_COLOR: '1' },
-      wasm: !promiseIntegration && /@(?:plugin|config)\b/.test(key) ? full : small,
+      wasm,
     });
     // The program writes its version and its time to stderr. Show only the
     // other lines: the warnings and the errors.

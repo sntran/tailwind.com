@@ -46,7 +46,7 @@ function compile(url) {
   return modules.get(url);
 }
 
-// The JavaScript files of the program for tailwind-small.wasm, by URL.
+// The JavaScript files of the program, by URL.
 const texts = new Map();
 
 function text(url) {
@@ -65,7 +65,7 @@ function text(url) {
 const PLUGINS = ['@tailwindcss/forms', '@tailwindcss/typography', '@tailwindcss/aspect-ratio'];
 
 // The JavaScript files that a build of `input` and `files` needs, from the
-// directory of tailwind-small.wasm: none with no @plugin and no @config.
+// directory of tailwind.wasm: none with no @plugin and no @config.
 async function assets(wasm, input, files) {
   const all = [input, ...Object.values(files).filter((value) => typeof value === 'string')].join('\n');
   if (!/@(?:plugin|config)\b/.test(all)) return {};
@@ -87,8 +87,8 @@ async function assets(wasm, input, files) {
 // options: files, env (default: empty), input (the text of stdin), wasm
 // (the URL of tailwind.wasm, default: wasmUrl()).
 //
-// tailwind-small.wasm has no JavaScript engine: for @plugin and @config,
-// it runs the plugins in the JavaScript engine of the browser
+// tailwind.wasm has no JavaScript engine: for @plugin and @config, it
+// runs the plugins in the JavaScript engine of the browser
 // (js/engine.mjs). That needs a page (not a worker) and JS Promise
 // Integration. The JavaScript files come from the directory of the
 // program.
@@ -97,22 +97,25 @@ async function assets(wasm, input, files) {
 export async function runWasm(args = [], options = {}) {
   // A relative URL is relative to the page.
   const url = new URL(String(options.wasm ?? wasmUrl()), globalThis.location?.href ?? import.meta.url).href;
+  // The JavaScript files download while the program compiles.
+  const loading = assets(url, options.input ?? '', options.files ?? {});
+  loading.catch(() => {});
   const module = await compile(url);
   let imports = {};
   let promising = false;
   let engine = null;
   if (needsEngine(module)) {
-    const found = await assets(url, options.input ?? '', options.files ?? {});
+    const found = await loading;
     if (found.compat !== undefined) {
       if (!hasPromiseIntegration) {
-        throw new Error('tailwind.com: @plugin and @config in tailwind-small.wasm need JS Promise Integration (WebAssembly.Suspending). Use tailwind.wasm.');
+        throw new Error('tailwind.com: @plugin and @config need JS Promise Integration (WebAssembly.Suspending) in the browser.');
       }
       promising = true;
     }
     // The imports are there also when no build calls them.
     imports = (exports) => {
       if (!promising) return { tailwind_js: missingEngine() };
-      engine = createEngine(exports, found);
+      engine = createEngine(exports, (name) => found[name]);
       return { tailwind_js: engine.imports };
     };
   }

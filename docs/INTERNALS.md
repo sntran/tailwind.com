@@ -123,23 +123,26 @@ its stack. Each side frees its own text: text from C is from `malloc`
 and Rust gives it back with `tw_js_free_text`, and C gives the text of a
 host result back to Rust.
 
-### The engine of a browser
+### The engine of the host
 
-With the feature `host-js` (for `tailwind-small.wasm`), the program has
-no QuickJS: the functions `tw_js_new`, `tw_js_free`, `tw_js_eval` and
+With the feature `host-js` (for `tailwind.wasm`), the program has no
+QuickJS: the functions `tw_js_new`, `tw_js_free`, `tw_js_eval` and
 `tw_js_call` are imports of the WebAssembly module `tailwind_js`, and
 `js/engine.mjs` of the npm package gives them with the JavaScript engine
-of the browser. The program exports `tw_host_alloc` and `tw_host_free`
+of the host: a browser (`js/browser.mjs`) or Node.js (`js/node.mjs`). The program exports `tw_host_alloc` and `tw_host_free`
 for the text that the host gives, and `tw_host_call` and
 `tw_host_release` for `__host`.
 
-- Each engine is a realm: a hidden `<iframe>` of the page. The plugin
-  layer changes the globals of its realm, not of the page. The program
-  ends with `proc_exit` and does not free its engines, so `runWasm`
-  removes the realms of a run at its end.
+- Each engine is a realm: a hidden `<iframe>` of the page, or a context
+  of `node:vm` in Node.js. The plugin layer changes the globals of its
+  realm, not of the page or the program. The program ends with
+  `proc_exit` and does not free its engines, so `runWasm` removes the
+  realms of a run at its end.
 - The JavaScript files of the program are not in the program: the npm
   package has them in `runtime/` (`compat.js`, `typescript.js`,
-  `plugins/`), and `js/browser.mjs` gets the ones that a build needs.
+  `plugins/`). `js/browser.mjs` downloads the ones that a build needs,
+  while the program compiles, and `js/node.mjs` reads each one when the
+  program asks.
   The program evaluates an empty `tailwindcss/compat.js`, and the host
   evaluates its copy. `__host('asset', name)` gets the other files from
   the host.
@@ -149,7 +152,10 @@ for the text that the host gives, and `tw_host_call` and
   browser) in place of the job loop. The program calls it through
   `tw_js_call_async`, the only import that suspends the program (JS
   Promise Integration: `WebAssembly.Suspending`), and the WASI host
-  starts the program with `WebAssembly.promising`. The other calls stay
+  starts the program with `WebAssembly.promising`. In Node.js,
+  `node:wasi` starts an object with the memory of the instance and a
+  `_start` that calls the program in this way, and `proc_exit` ends the
+  run with an exception that gives the status. The other calls stay
   synchronous. A call of `__host` while the program waits enters the
   program again, as with QuickJS.
 - A browser cannot import a file that is only in memory: an ES module,

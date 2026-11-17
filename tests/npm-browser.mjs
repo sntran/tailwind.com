@@ -4,21 +4,18 @@
 // "browser"). A local server gives the files at the paths of jsDelivr:
 // "/npm/tailwind.com@0.0.0" is the default file, with no redirect.
 //
-// Usage: node tests/npm-browser.mjs [--wasm FILE] [--small FILE] [--official FILE] [--cases DIR]
+// Usage: node tests/npm-browser.mjs [--wasm FILE] [--official FILE] [--cases DIR]
 //
 //   --wasm FILE      the module (default build/tailwind.wasm)
-//   --small FILE     the module with no JavaScript engine and no optimizer
-//                    (default: tailwind-small.wasm next to --wasm)
 //   --official FILE  the browser build of Tailwind CSS
 //                    (@tailwindcss/browser, dist/index.global.js): the
 //                    page script must give the same CSS. With no file, no
 //                    comparison.
 //   --cases DIR      the recorded cases with JavaScript (default
 //                    tests/upstream/cli-js): each one must give the output
-//                    of the official program with tailwind-small.wasm, its
+//                    of the official program with tailwind.wasm, its
 //                    plugins in the JavaScript engine of Chromium
-//                    (js/engine.mjs). The cases with --minify are not for
-//                    the small program.
+//                    (js/engine.mjs).
 //
 // It needs Playwright with Chromium.
 import assert from 'node:assert/strict'
@@ -34,19 +31,15 @@ import { runWasm } from '../js/node.mjs'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
 
-const opts = { wasm: path.join(root, 'build/tailwind.wasm'), small: null, official: null, cases: path.join(root, 'tests/upstream/cli-js') }
+const opts = { wasm: path.join(root, 'build/tailwind.wasm'), official: null, cases: path.join(root, 'tests/upstream/cli-js') }
 const args = process.argv.slice(2)
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--wasm') opts.wasm = path.resolve(args[++i])
-  else if (args[i] === '--small') opts.small = path.resolve(args[++i])
   else if (args[i] === '--official') opts.official = path.resolve(args[++i])
   else if (args[i] === '--cases') opts.cases = path.resolve(args[++i])
   else throw new Error(`npm-browser.mjs: unknown argument ${args[i]}`)
 }
-opts.small ??= path.join(path.dirname(opts.wasm), 'tailwind-small.wasm')
 
-// The downloads of each program.
-const downloads = { 'tailwind.wasm': 0, 'tailwind-small.wasm': 0 }
 
 // The URL of tailwind.wasm from the URL of a file of the package.
 const cases = [
@@ -117,15 +110,14 @@ const pages = {
 @import "./extra.css";
 </style></head>
 <body><p id="extra" class="extra-check mt-2">x</p></body></html>`,
-  // A recorded case: window.run(args, files, input, env) with the small
-  // program.
+  // A recorded case: window.run(args, files, input, env).
   '/cases.html': `<!doctype html><meta charset="utf-8"><script type="module">
 import { runWasm } from '${prefix}/js/browser.mjs'
 window.run = (args, files, input, env) => {
   for (const [name, value] of Object.entries(files)) {
     if (typeof value !== 'string') files[name] = Uint8Array.from(atob(value.base64), (c) => c.charCodeAt(0))
   }
-  return runWasm(args, { files, input, env: { NO_COLOR: '1', ...env }, wasm: '${prefix}/runtime/tailwind-small.wasm' })
+  return runWasm(args, { files, input, env: { NO_COLOR: '1', ...env }, wasm: '${prefix}/runtime/tailwind.wasm' })
 }
 window.ready = true
 </script>`,
@@ -149,10 +141,9 @@ const server = http.createServer((request, response) => {
   let body
   let type = types[path.extname(url)]
   if (url === prefix) [body, type] = [fs.readFileSync(path.join(root, 'js/page.js')), types['.js']]
-  else if (url === `${prefix}/runtime/tailwind.wasm`) [body, downloads['tailwind.wasm']] = [fs.readFileSync(opts.wasm), downloads['tailwind.wasm'] + 1]
-  else if (url === `${prefix}/runtime/tailwind-small.wasm`) [body, downloads['tailwind-small.wasm']] = [fs.readFileSync(opts.small), downloads['tailwind-small.wasm'] + 1]
+  else if (url === `${prefix}/runtime/tailwind.wasm`) body = fs.readFileSync(opts.wasm)
   else if (url.startsWith(`${prefix}/js/`)) body = fs.readFileSync(path.join(root, 'js', path.basename(url)))
-  // The JavaScript files of the program for tailwind-small.wasm.
+  // The JavaScript files of the program for its engine (js/engine.mjs).
   else if (/^\/runtime\/(compat|typescript|plugins\/[a-z-]+)\.js$/.test(url.slice(prefix.length)) && url.startsWith(prefix)) {
     ;[body, type] = [fs.readFileSync(path.join(root, 'native/tailwind/assets', url.slice(prefix.length + '/runtime/'.length))), types['.js']]
   }
@@ -278,9 +269,8 @@ try {
     assets['/theme/brand.css'] = '@theme { --color-brand: #00ff00; }\n'
     await tab.evaluate(() => (document.querySelector('link').href = '/assets/app.css?v=2'))
     await settle(tab, () => getComputedStyle(document.getElementById('box')).backgroundColor === 'rgb(0, 255, 0)')
-    // The plugins ran in the JavaScript engine of the browser: no full
-    // program, and the realm of each build is gone.
-    assert.equal(downloads['tailwind.wasm'], 0)
+    // The plugins ran in the JavaScript engine of the browser: the realm of
+    // each build is gone.
     assert.equal(await tab.evaluate(() => document.querySelectorAll('iframe[data-tailwind-com]').length), 0)
     await tab.close()
   })
@@ -319,7 +309,6 @@ try {
       const dir = path.join(opts.cases, name)
       if (!fs.existsSync(path.join(dir, 'args.txt'))) continue
       const args = fs.readFileSync(path.join(dir, 'args.txt'), 'utf8').split('\n').filter((line) => line !== '')
-      if (args.some((arg) => arg === '--minify' || arg === '-m' || arg === '--optimize' || arg.startsWith('--map'))) continue
       // The project: text as text, other bytes as Base64.
       const shared = path.join(dir, 'project.txt')
       const source = fs.existsSync(shared) ? path.join(opts.cases, fs.readFileSync(shared, 'utf8').trim(), 'project') : path.join(dir, 'project')
@@ -367,7 +356,6 @@ try {
   if (opts.official) {
     await check('the page script gives the CSS of the browser build of Tailwind CSS', async () => {
       const css = []
-      const before = { ...downloads }
       for (const script of [prefix, '/official.js']) {
         const tab = await browser.newPage()
         await tab.goto(`${base}/compare.html?script=${encodeURIComponent(script)}`)
@@ -376,9 +364,6 @@ try {
         await tab.close()
       }
       assert.equal(css[0], css[1])
-      // A page with no @plugin gets only the small program.
-      assert.equal(downloads['tailwind.wasm'], before['tailwind.wasm'])
-      assert.ok(downloads['tailwind-small.wasm'] > before['tailwind-small.wasm'])
     })
   }
 } finally {

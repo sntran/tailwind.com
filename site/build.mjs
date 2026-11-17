@@ -3,8 +3,9 @@
 //
 // Usage: node site/build.mjs --wasm FILE [--packages DIR] [--releases DIR] [--out DIR]
 //
-//   --wasm FILE      tailwind.wasm, built with WASI_SDK_PATH (make wasm), so
-//                    that it has the JavaScript engine for @plugin
+//   --wasm FILE      tailwind-quickjs.wasm, built with WASI_SDK_PATH (make
+//                    wasm-quickjs), so that it has the JavaScript engine for
+//                    @plugin and the script engine
 //   --packages DIR   the packages in the form of the ZIP directory of
 //                    tailwind.com (default: build/site-packages, made with
 //                    scripts/packages.sh and tools/twpatch, as

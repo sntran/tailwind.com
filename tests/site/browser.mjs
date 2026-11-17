@@ -6,7 +6,8 @@
 //
 // Usage: node tests/site/browser.mjs [--wasm FILE] [--packages DIR] [--runs N]
 //
-//   --wasm FILE      the module (default build/tailwind.wasm)
+//   --wasm FILE      the module (default build/tailwind-quickjs.wasm, the
+//                    program of the site: make wasm-quickjs)
 //   --packages DIR   the packages of Tailwind CSS in the form of the ZIP
 //                    directory of tailwind.com (default
 //                    build/ape/zip/tailwindcss, which `make` writes)
@@ -25,7 +26,7 @@ import { project, scenarios } from './scenarios.mjs'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '../..')
 
-const opts = { wasm: path.join(root, 'build/tailwind.wasm'), packages: path.join(root, 'build/ape/zip/tailwindcss'), runs: 5 }
+const opts = { wasm: path.join(root, 'build/tailwind-quickjs.wasm'), packages: path.join(root, 'build/ape/zip/tailwindcss'), runs: 5 }
 const args = process.argv.slice(2)
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--wasm') opts.wasm = path.resolve(args[++i])
