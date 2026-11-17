@@ -21,7 +21,9 @@
 # line of the file must be in the error output of the program, without
 # the color codes. A case can have env.txt: the environment variables for
 # the program, one NAME=VALUE for each line, with <project> at the place
-# of the path of the project. The program
+# of the path of the project. A case with TAILWINDCSS_VERSION in env.txt
+# is for that version: when the program does not have that version, the
+# case is skipped. The program
 # runs on a copy of project/ outside this repository, as the record was
 # made: the .gitignore of this repository must not change the scan. A
 # case with a file project.txt has no project/: the file names another
@@ -119,6 +121,14 @@ for name in "$@"; do
         case "$(uname -s)" in
             MINGW*|MSYS*|CYGWIN*) echo "cli.sh: $name: not on Windows (env.txt)"; continue ;;
         esac
+        # A case for another version of Tailwind CSS needs the package of
+        # that version. A program of `cargo build` has no packages in its
+        # file: TAILWIND_COM_PACKAGES gives them.
+        version=$(sed -n 's/^TAILWINDCSS_VERSION=//p' "$cases/$name/env.txt" | tr -d "\r")
+        if [ -n "$version" ] && ! (TAILWINDCSS_VERSION=$version; export TAILWINDCSS_VERSION; run --version) > /dev/null 2>&1; then
+            echo "cli.sh: $name: skipped: the program has no Tailwind CSS $version"
+            continue
+        fi
     fi
     count=$((count + 1))
     mkdir -p "$work/$name"

@@ -225,6 +225,15 @@ impl Selection {
         }
     }
 
+    /// The version of Tailwind CSS as a number, for a switch. `None`: a
+    /// package with a version of another form (a prerelease).
+    pub fn version_number(&self) -> Option<Version> {
+        match self {
+            Selection::Native { version, .. } => Some(*version),
+            Selection::Script(package) => Version::parse(&package.version),
+        }
+    }
+
     /// The name of the engine.
     pub fn engine(&self) -> &'static str {
         match self {

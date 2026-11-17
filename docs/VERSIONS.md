@@ -153,6 +153,9 @@ version, these are the same as the official program of that version:
 These parts are the code of this program, for each version:
 
 - **The command line program** (the options, the messages, the watch).
+  It follows the version in one place: from 4.3.2, the official program
+  also scans its input file (`INPUT_FILE_IS_A_SOURCE` of
+  [`SWITCHES.md`](SWITCHES.md)).
 - **The scanner of source files**: the scanner of the version of
   `UPSTREAM` (`native/scanner`). An older version of Tailwind CSS has an older
   scanner, which can find other candidates in a source file in rare

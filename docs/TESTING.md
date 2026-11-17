@@ -73,15 +73,16 @@ The crate uses `proptest`:
 
 ## The program
 
-`tests/cli.sh PROGRAM` runs the program on 20 small projects, and
+`tests/cli.sh PROGRAM` runs the program on 22 small projects, and
 compares the output and the exit status with the record of the official
 program (`tests/upstream/cli`): automatic source detection with
 `.gitignore`, `source(none)`, `@source`, `@source not`,
 `@source inline()`, imports, `@theme`, `@utility`, `@variant`, `@apply`,
 `@reference`, the functions, a prefix, `--minify`, `--optimize`, `--cwd`,
-a Phoenix project, two errors, and three projects with warnings (the
+a Phoenix project, two errors, three projects with warnings (the
 optimizer with one warning and with three, and `--value(…)` of
-`@utility`).
+`@utility`), and the CSS variables of the input file as 4.3.5 and as
+4.3.1 (`INPUT_FILE_IS_A_SOURCE` of [`SWITCHES.md`](SWITCHES.md)).
 
 A case can have more files than the output and the exit status:
 
@@ -89,7 +90,7 @@ A case can have more files than the output and the exit status:
 |---|---|
 | `stderr.txt` | For an error: each line of the message of the official program must be in the error output. |
 | `stderr-contains.txt` | With the exit status 0: the warning lines of the official program, with no color codes. Each line must be in the error output. With an error: the lines that must be there, for a message that another JavaScript engine cannot repeat. |
-| `env.txt` | The environment variables for the program, one `NAME=VALUE` for each line. `<project>` is the path of the project. These cases do not run on Windows. |
+| `env.txt` | The environment variables for the program, one `NAME=VALUE` for each line. `<project>` is the path of the project. These cases do not run on Windows. With `TAILWINDCSS_VERSION`, the record comes from the official program of that version, and the case is skipped when the program does not have that version (a program of `cargo build` with no `TAILWIND_COM_PACKAGES`). |
 | `project.txt` | In place of `project/`: the name of another case. The two cases use one project. |
 | `standalone.txt` | The record comes from the npm program with the module rules of the standalone program: see `tests/standalone.sh` below.
 

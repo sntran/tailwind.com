@@ -63,6 +63,12 @@ count=0
 for name in "$@"; do
     [ -f "$cases/$name/args.txt" ] || continue
     [ "${ALL:-}" = 1 ] || [ -f "$cases/$name/standalone.txt" ] || continue
+    # A case for another version of Tailwind CSS (TAILWINDCSS_VERSION in
+    # env.txt) is not for the standalone program of this version.
+    if [ -f "$cases/$name/env.txt" ] && grep -q '^TAILWINDCSS_VERSION=' "$cases/$name/env.txt"; then
+        echo "standalone.sh: $name: skipped: a case for another version of Tailwind CSS"
+        continue
+    fi
     count=$((count + 1))
     mkdir -p "$work/$name"
     source=$cases/$name/project

@@ -405,8 +405,12 @@ fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), fr
             });
         }
     }
-    // The input file can have classes too.
-    if let Some(input) = &options.input {
+    // The input file can have CSS variables too. Only from 4.3.2
+    // (`INPUT_FILE_IS_A_SOURCE`). A version of another form is a
+    // prerelease: it has the newest behavior.
+    let input_is_a_source =
+        options.engine.version_number().is_none_or(|version| crate::switches::INPUT_FILE_IS_A_SOURCE.on_as(version));
+    if let Some(input) = options.input.as_ref().filter(|_| input_is_a_source) {
         if let (Some(dir), Some(name)) = (input.parent(), input.file_name()) {
             sources.push(PublicSourceEntry {
                 base: dir.to_string_lossy().into_owned(),

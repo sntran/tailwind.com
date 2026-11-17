@@ -1,0 +1,7 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source inline("p-6");
+@theme {
+  --duration: 0.3s;
+  --animate-fade-in: fade-in var(--duration) linear both;
+}

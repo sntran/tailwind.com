@@ -54,7 +54,7 @@ The site has these files:
 | `tailwind.wasm` | 9.5 MB, 2.5 MB with gzip | The program, built from the commit of the site. |
 | `releases/TAG/tailwind.wasm` | about 9 MB each | The program of each release (`scripts/releases.sh`, at most 20). The browser downloads one only when a viewer selects it. |
 | `packages.bin` | 0.95 MB | The packages of the 48 versions: 4.3.5 in full, and each older version as a patch, as in the ZIP directory of `tailwind.com`. |
-| `data.json` | 0.16 MB | The versions, the examples, the 195 switches, the recorded cases and the programs. |
+| `data.json` | 0.16 MB | The versions, the examples, the 196 switches, the recorded cases and the programs. |
 | The page | 0.06 MB | `index.html`, the modules and `style.css`. |
 
 ## How a build runs

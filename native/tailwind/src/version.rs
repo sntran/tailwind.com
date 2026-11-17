@@ -94,7 +94,14 @@ impl Switch {
 
     /// True when the selected version has the new behavior.
     pub fn on(&self) -> bool {
-        current() >= self.since
+        self.on_as(current())
+    }
+
+    /// True when this version has the new behavior. The command line
+    /// program uses it: it runs outside of a compile, and also with the
+    /// script engine.
+    pub fn on_as(&self, version: Version) -> bool {
+        version >= self.since
     }
 }
 
@@ -132,5 +139,12 @@ mod tests {
             assert!(!NEW.on());
         }
         assert!(NEW.on());
+        assert!(!NEW.on_as(Version(4, 3, 3)));
+        assert!(NEW.on_as(Version(4, 3, 4)));
+        {
+            // `on_as` does not read the version of the thread.
+            let _guard = enter(Version(4, 0, 0));
+            assert!(NEW.on_as(Version::NATIVE));
+        }
     }
 }

@@ -30,6 +30,11 @@
 //
 // A case can have env.txt: the environment variables for the program, one NAME=VALUE for each
 // line. The text <project> in a value is the absolute path of the project copy.
+// TAILWINDCSS_VERSION in env.txt selects the version of Tailwind CSS in tailwind.com. For such
+// a case, the script runs the official CLI of that version: it installs the packages of that
+// version into versions/VERSION of the scratch directory, with index.css of the repository
+// only, and the copy of the project goes there. These cases get no plugins of the standalone
+// program.
 //
 // The fixtures do not keep node_modules/.bin: its entries are symbolic links, and a copy of a
 // symbolic link fails on Windows. Delete node_modules/.bin from a project after npm install.
@@ -98,6 +103,21 @@ fs.rmSync(work, { recursive: true, force: true })
 fs.mkdirSync(work, { recursive: true })
 work = fs.realpathSync(work)
 
+// The official CLI of another version, in versions/VERSION of the scratch directory. index.css of
+// the repository is the same file in each version 4. The other stylesheets stay as the package of
+// that version has them.
+function installVersion(other) {
+  let home = path.join(scratch, 'versions', other)
+  if (!fs.existsSync(path.join(home, 'node_modules/@tailwindcss/cli/dist/index.mjs'))) {
+    fs.mkdirSync(home, { recursive: true })
+    fs.writeFileSync(path.join(home, 'package.json'), '{"private":true}\n')
+    execFileSync('npm', ['install', `tailwindcss@${other}`, `@tailwindcss/cli@${other}`], { cwd: home, stdio: 'inherit' })
+  }
+  let upstreamCss = path.join(path.dirname(fileURLToPath(import.meta.url)), '../css')
+  fs.copyFileSync(path.join(upstreamCss, 'index.css'), path.join(home, 'node_modules/tailwindcss/index.css'))
+  return fs.realpathSync(home)
+}
+
 function listFiles(dir, prefix = '') {
   let out = []
   for (let entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -113,7 +133,20 @@ for (let name of fs.readdirSync(cliDir).sort()) {
   if (!fs.existsSync(path.join(caseDir, 'args.txt'))) continue
   if (only.length > 0 && !only.includes(name)) continue
 
+  // The version of the case (TAILWINDCSS_VERSION in env.txt), or the version of the arguments.
+  let caseVersion = null
+  if (fs.existsSync(path.join(caseDir, 'env.txt'))) {
+    let match = /^TAILWINDCSS_VERSION=(.+)$/m.exec(fs.readFileSync(path.join(caseDir, 'env.txt'), 'utf8'))
+    if (match) caseVersion = match[1].trim()
+  }
+  let caseBin = bin
   let project = path.join(work, name, 'project')
+  if (caseVersion !== null && caseVersion !== version) {
+    let home = installVersion(caseVersion)
+    caseBin = path.join(home, 'node_modules/@tailwindcss/cli/dist/index.mjs')
+    project = path.join(home, 'work', name, 'project')
+    fs.rmSync(path.dirname(project), { recursive: true, force: true })
+  }
   let source = path.join(caseDir, 'project')
   if (fs.existsSync(path.join(caseDir, 'project.txt'))) {
     source = path.join(cliDir, fs.readFileSync(path.join(caseDir, 'project.txt'), 'utf8').trim(), 'project')
@@ -142,7 +175,7 @@ for (let name of fs.readdirSync(cliDir).sort()) {
     }
   }
   let nodeArgs = fs.existsSync(path.join(caseDir, 'standalone.txt')) ? ['--import', interop] : []
-  let result = spawnSync(process.execPath, [...nodeArgs, bin, ...args], {
+  let result = spawnSync(process.execPath, [...nodeArgs, caseBin, ...args], {
     cwd: project,
     // NODE_NO_WARNINGS: the warnings of Node.js itself are not a part of the record.
     env: { ...process.env, NODE_ENV: '', NO_COLOR: '1', NODE_NO_WARNINGS: '1', ...env },
