@@ -6,6 +6,26 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
+## Unreleased
+
+### Added
+
+- The npm package works in the browser. On a CDN, its default file works
+  as the Play CDN of Tailwind CSS:
+  `<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>`
+  builds the CSS of the page, and builds again when its classes change.
+  The input CSS can be a file,
+  `<link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">`
+  (with the files of its `@import`, and of its plugins), so a page goes
+  to a build on the disk with a small change. A change of a file on the
+  server builds again. It can also be a
+  `<style type="text/tailwindcss">`, as for the Play CDN. The CSS is the
+  same as the output of a build of the same files, or as the CSS of
+  `@tailwindcss/browser`. The plugins in the program work. In a bundler
+  or a Web Worker, the condition `browser` of `package.json` gives
+  `runWasm` with the files in memory. The WASI host of the site is now
+  `js/wasi.mjs`.
+
 ## 0.4.0 - 2026-11-17
 
 The optimizer lowers new CSS (functions, mixins, `if()`, `@when`, the
@@ -43,21 +63,6 @@ CSS, and `mix format` sorts the classes of HEEx templates.
 - The library crate has the order of classes of a design system:
   `DesignSystem::get_class_order`, as `getClassOrder` of Tailwind CSS.
 
-- The npm package works in the browser. On a CDN, its default file works
-  as the Play CDN of Tailwind CSS:
-  `<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.4"></script>`
-  builds the CSS of the page, and builds again when its classes change.
-  The input CSS can be a file,
-  `<link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">`
-  (with the files of its `@import`, and of its plugins), so a page goes
-  to a build on the disk with a small change. A change of a file on the
-  server builds again. It can also be a
-  `<style type="text/tailwindcss">`, as for the Play CDN. The CSS is the
-  same as the output of a build of the same files, or as the CSS of
-  `@tailwindcss/browser`. The plugins in the program work. In a bundler
-  or a Web Worker, the condition `browser` of `package.json` gives
-  `runWasm` with the files in memory. The WASI host of the site is now
-  `js/wasi.mjs`.
 
 ### Fixed
 

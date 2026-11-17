@@ -162,13 +162,13 @@ for another WASI host.
 
 ### In the browser
 
-On a page, the package works as the Play CDN of Tailwind CSS: it builds
+From 0.5.0, on a page, the package works as the Play CDN of Tailwind CSS: it builds
 the CSS of the page from its classes, and builds again when they change.
 The input CSS can be a file, as for a build on the disk:
 
 ```html
 <link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">
-<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.4"></script>
+<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>
 ```
 
 - The browser does not apply a stylesheet with the type
@@ -192,7 +192,7 @@ The input CSS can be a file, as for a build on the disk:
 The input CSS can also be in the page, as for the Play CDN:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.4"></script>
+<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>
 <style type="text/tailwindcss">
   @plugin "@tailwindcss/typography";
   @theme { --color-brand: #0d9488; }

@@ -5,11 +5,11 @@
 // The input CSS can be a file, as for a build on the disk:
 //
 //   <link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">
-//   <script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.4"></script>
+//   <script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>
 //
 // or a <style>, as for the Play CDN:
 //
-//   <script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.4"></script>
+//   <script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>
 //   <style type="text/tailwindcss">
 //     @theme { --color-brand: #0d9488; }
 //   </style>
@@ -66,7 +66,7 @@
 
   const script = document.currentScript;
   const source = new URL(script?.src || location.href);
-  // The package root of a CDN URL ("/npm/tailwind.com@0.4", with no file),
+  // The package root of a CDN URL ("/npm/tailwind.com@0.5", with no file),
   // else the directory js/ of this file.
   const found = source.pathname.match(/^(.*\/tailwind\.com(?:@[^/]*)?)(?:\/|$)/);
   const js = found ? new URL(`${found[1]}/js/`, source) : new URL('./', source);

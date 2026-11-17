@@ -16,7 +16,7 @@ import { Files, run } from './wasi.mjs';
 // The URL of tailwind.wasm, from the URL of a file of the package. A CDN
 // URL has the package root in it: "https://cdn.jsdelivr.net/npm/tailwind.com@0.4.0/+esm",
 // "https://esm.sh/tailwind.com@0.4.0/es2022/tailwind.com.mjs", or only the
-// root for the default file, "https://cdn.jsdelivr.net/npm/tailwind.com@0.4".
+// root for the default file, "https://cdn.jsdelivr.net/npm/tailwind.com@0.5".
 // Else, the file is in js/ of the package.
 export function wasmUrl(from = import.meta.url) {
   const url = new URL(from);
