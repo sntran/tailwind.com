@@ -9,6 +9,10 @@ defmodule TailwindNifTest do
   @moduletag :nif
   @version Tailwind.latest_version()
 
+  # A stylesheet whose build takes some seconds: 400,000 candidates.
+  @slow ~s(@import "tailwindcss" source\(none\);\n) <>
+          ~s[@source inline("{,hover:,focus:,md:,lg:}{p,m,px,py,mx,my,w,h}-{0..10000}");\n]
+
   setup do
     dir = Path.join(System.tmp_dir!(), "tailwind_nif_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
@@ -97,6 +101,54 @@ defmodule TailwindNifTest do
     assert text(output, :stdout) =~ value
 
     {0, _} = :tailwind_nif.run(~w(-i app.css -o out.css), %{cd: dir}, &collect/3, [])
+  end
+
+  test "the option timeout stops a build", %{dir: dir} do
+    File.write!(Path.join(dir, "slow.css"), @slow)
+    start = System.monotonic_time(:millisecond)
+
+    assert {:timeout, _} =
+             :tailwind_nif.run(
+               ~w(-i slow.css -o slow.out.css),
+               %{cd: dir, timeout: 100},
+               &collect/3,
+               []
+             )
+
+    assert System.monotonic_time(:millisecond) - start < 2_000
+
+    capture_io(fn ->
+      assert :tailwind_nif.run(~w(-i slow.css), %{cd: dir, timeout: 0}) == :timeout
+    end)
+
+    # No message of the run comes after the timeout, and the run writes no
+    # output.
+    Process.sleep(1_000)
+    refute_received {:tailwind_nif, _, _, _}
+    refute File.exists?(Path.join(dir, "slow.out.css"))
+
+    # A run that ends before the time gives its status.
+    assert {0, _} = :tailwind_nif.run(~w(-i app.css), %{cd: dir, timeout: 60_000}, &collect/3, [])
+
+    assert_raise ArgumentError, fn ->
+      :tailwind_nif.run(~w(-i app.css), %{cd: dir, timeout: -1})
+    end
+  end
+
+  test "a build stops when its process ends", %{dir: dir} do
+    File.write!(Path.join(dir, "slow.css"), @slow)
+
+    pid =
+      spawn(fn ->
+        :tailwind_nif.run(~w(-i slow.css -o slow.out.css), %{cd: dir}, &collect/3, [])
+      end)
+
+    Process.sleep(100)
+    Process.exit(pid, :kill)
+    # The garbage collector frees the resource of the run, and the build
+    # stops before its output (a full build takes some seconds).
+    Process.sleep(5_000)
+    refute File.exists?(Path.join(dir, "slow.out.css"))
   end
 
   test "load/1 is ok when the NIF is loaded" do

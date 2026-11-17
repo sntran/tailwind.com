@@ -32,7 +32,19 @@ struct TwJs {
     TwJsRelease release;
     void *user;
     int depth;
+    TwJsInterrupted interrupted;
 };
+
+static int interrupt_handler(JSRuntime *rt, void *opaque) {
+    TwJs *js = opaque;
+    (void)rt;
+    return js->interrupted ? js->interrupted() : 0;
+}
+
+void tw_js_set_interrupt(TwJs *js, TwJsInterrupted interrupted) {
+    js->interrupted = interrupted;
+    JS_SetInterruptHandler(js->rt, interrupted ? interrupt_handler : NULL, js);
+}
 
 static char *copy_text(const char *text) {
     size_t n = strlen(text) + 1;

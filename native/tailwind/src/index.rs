@@ -181,6 +181,14 @@ impl Compiler {
         self.design_system.variants.take_error();
         nesting::take_error();
         let output = self.build_css(candidates);
+        // The caller stopped the run (`stop.rs`): the output has a part of
+        // the candidates only. The next build compiles them all again.
+        if crate::stop::requested() {
+            self.compiled = None;
+            self.previous_ast_node_count = 0;
+            self.default_did_change = true;
+            return Err(crate::stop::error());
+        }
         if let Some(error) = nesting::take_error() {
             return Err(error);
         }
@@ -337,6 +345,7 @@ pub fn compile(css: &str, options: CompileOptions) -> Result<Compiler> {
     if let Some(error) = nesting::take_error() {
         return Err(error);
     }
+    crate::stop::check()?;
 
     if !options.test_mode {
         parsed.ast.insert(0, comment(format!("! tailwindcss v{version} | MIT License | https://tailwindcss.com ")));

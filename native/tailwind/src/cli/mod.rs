@@ -620,9 +620,13 @@ fn parse_options(parsed: &Parsed, style: &Style) -> std::result::Result<Options,
 }
 
 /// Scan, build and write. The result is the CSS before the optimizer.
+/// A run that its caller stops (`stop.rs`) ends at a check, with no output.
 fn build_once(build: &mut Build, options: &Options, previous: &mut Previous) -> Result<()> {
+    crate::stop::check()?;
     let candidates = build.scanner.scan();
+    crate::stop::check()?;
     let css = build.compiler.try_build(&candidates)?;
+    crate::stop::check()?;
     let compiler = &build.compiler;
     write(&css, &|| Ok(source_maps::to_source_map(&compiler.build_source_map()?)), options, previous)?;
     Ok(())

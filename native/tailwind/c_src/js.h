@@ -36,6 +36,12 @@ typedef void (*TwJsRelease)(void *user, char *text);
 TwJs *tw_js_new(size_t memory_limit, size_t stack_limit, TwJsHost host, TwJsRelease release, void *user);
 void tw_js_free(TwJs *js);
 void tw_js_free_text(char *text);
+/* The engine calls `interrupted` from time to time while JavaScript runs
+ * (each 10,000 instructions or so). When it returns a value that is not
+ * 0, the engine stops the script with an exception that the script
+ * cannot catch ("InternalError: interrupted"). */
+typedef int (*TwJsInterrupted)(void);
+void tw_js_set_interrupt(TwJs *js, TwJsInterrupted interrupted);
 /* `process.platform` of Node.js for the system that runs the program:
  * "linux", "darwin", "win32", "freebsd", "openbsd", "netbsd" or "wasi".
  * The text is static. */

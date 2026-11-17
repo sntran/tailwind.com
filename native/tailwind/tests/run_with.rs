@@ -136,6 +136,58 @@ fn a_watch_builds_again_and_stops_when_the_caller_asks() {
     assert_eq!(status, 0, "{stderr}");
 }
 
+/// A stylesheet whose build takes some seconds: 400,000 candidates.
+const SLOW: &str = "@import \"tailwindcss\" source(none);\n@source inline(\"{,hover:,focus:,md:,lg:}{p,m,px,py,mx,my,w,h}-{0..10000}\");\n";
+
+#[test]
+fn a_build_stops_soon_when_the_caller_asks() {
+    let dir = project("stop", "");
+    std::fs::write(dir.join("app.css"), SLOW).unwrap();
+    for delay in [0, 50, 300] {
+        let stop = Arc::new(AtomicBool::new(false));
+        let build = {
+            let (dir, stop) = (dir.clone(), stop.clone());
+            std::thread::spawn(move || {
+                let (stdout, stderr) = (Buffer::default(), Buffer::default());
+                let argv = args(&["-i", "app.css", "-o", "out.css"]);
+                let status = run_with(argv, context(&dir, &[], &stdout, &stderr, stop));
+                (status, stderr.text())
+            })
+        };
+        std::thread::sleep(Duration::from_millis(delay));
+        let start = Instant::now();
+        stop.store(true, Ordering::SeqCst);
+        let (status, stderr) = build.join().unwrap();
+        assert_eq!(status, 1, "{stderr}");
+        assert!(stderr.contains(tailwind::stop::MESSAGE), "{stderr}");
+        assert!(start.elapsed() < Duration::from_millis(500), "the stop after {delay} ms took {:?}", start.elapsed());
+        assert!(!dir.join("out.css").exists());
+    }
+}
+
+#[test]
+fn a_plugin_with_an_endless_loop_stops() {
+    let dir = project("stop-plugin", "<p class=\"flex\"></p>\n");
+    std::fs::write(dir.join("app.css"), "@import \"tailwindcss\";\n@plugin \"./loop.js\";\n").unwrap();
+    std::fs::write(dir.join("loop.js"), "module.exports = function () { for (;;) {} }\n").unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let build = {
+        let (dir, stop) = (dir.clone(), stop.clone());
+        std::thread::spawn(move || {
+            let (stdout, stderr) = (Buffer::default(), Buffer::default());
+            let status = run_with(args(&["-i", "app.css", "-o", "out.css"]), context(&dir, &[], &stdout, &stderr, stop));
+            (status, stderr.text())
+        })
+    };
+    std::thread::sleep(Duration::from_millis(300));
+    let start = Instant::now();
+    stop.store(true, Ordering::SeqCst);
+    let (status, stderr) = build.join().unwrap();
+    assert_eq!(status, 1, "{stderr}");
+    assert!(start.elapsed() < Duration::from_millis(500), "{:?}", start.elapsed());
+    assert!(!dir.join("out.css").exists());
+}
+
 /// A store with a package of each version that has only `package.json`:
 /// enough for a stylesheet that imports no file of Tailwind CSS.
 fn store(name: &str, versions: &[&str]) -> PathBuf {

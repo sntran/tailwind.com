@@ -26,6 +26,7 @@ pub mod property_order;
 pub mod script;
 pub mod selector_parser;
 pub mod sort;
+pub mod stop;
 pub mod switches;
 pub mod source_maps;
 pub mod theme;

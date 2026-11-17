@@ -19,6 +19,7 @@ extern "C" {
     fn tw_js_new(memory_limit: usize, stack_limit: usize, host: HostFn, release: ReleaseFn, user: *mut c_void) -> *mut TwJs;
     fn tw_js_free(js: *mut TwJs);
     fn tw_js_free_text(text: *mut c_char);
+    fn tw_js_set_interrupt(js: *mut TwJs, interrupted: Option<unsafe extern "C" fn() -> c_int>);
     fn tw_js_eval(
         js: *mut TwJs,
         source: *const c_char,
@@ -91,6 +92,12 @@ unsafe fn tw_js_memory_used(_js: *mut TwJs) -> usize {
 unsafe fn tw_js_platform() -> *const c_char {
     // As QuickJS in wasm32-wasip1.
     c"wasi".as_ptr()
+}
+
+/// The interrupt handler of the C engine: the run of this thread stops.
+#[cfg(not(tw_host_js))]
+unsafe extern "C" fn interrupted() -> c_int {
+    c_int::from(crate::stop::requested())
 }
 
 /// Memory for the text that the host gives to the program.
@@ -205,6 +212,13 @@ impl Engine {
             drop(unsafe { Box::from_raw(host) });
             return Err(JsError { name: None, message: "The JavaScript engine has no memory.".to_string(), stack: None });
         }
+        // A script stops when the caller of the run stops it (`stop.rs`):
+        // a plugin with an endless loop also stops.
+        #[cfg(not(tw_host_js))]
+        // SAFETY: `raw` is a new engine.
+        unsafe {
+            tw_js_set_interrupt(raw, Some(interrupted))
+        };
         Ok(Self { raw, host })
     }
 
@@ -611,6 +625,25 @@ mod tests {
         // The error of V8, as the official program gives it.
         assert_eq!(error.name.as_deref(), Some("RangeError"));
         assert_eq!(error.message, "Maximum call stack size exceeded");
+    }
+
+    #[test]
+    fn an_endless_loop_stops_when_the_run_stops() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        let flag = Arc::new(AtomicBool::new(false));
+        let _stop = crate::stop::watch(flag.clone());
+        let js = no_host();
+        let setter = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            flag.store(true, Ordering::SeqCst);
+        });
+        let start = std::time::Instant::now();
+        // The script cannot catch the exception.
+        let error = js.eval("for (;;) { try { for (;;) {} } catch {} }", "test.js").unwrap_err();
+        setter.join().unwrap();
+        assert!(error.message.contains("interrupted"), "{}", error.message);
+        assert!(start.elapsed() < std::time::Duration::from_secs(5));
     }
 
     #[test]

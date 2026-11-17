@@ -11,15 +11,16 @@
 //! {tailwind_nif, Id, exit, Status}
 //! ```
 //!
-//! When the last reference to the resource goes (the process that keeps it
-//! ends), the run stops: a watch ends at its next tick, as the program
-//! does at the end of its standard input.
+//! The run stops when the last reference to the resource goes (the
+//! process that keeps it ends), or at `nif_stop/1`: a watch ends at its
+//! next tick, and a build at its next check (`stop.rs` of the crate
+//! `tailwind`). After the stop, the thread sends no more messages.
 
 use rustler::{Encoder, LocalPid, OwnedBinary, OwnedEnv, ResourceArc};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tailwind::cli::context::Context;
 
 mod atoms {
@@ -31,9 +32,33 @@ mod atoms {
     }
 }
 
+/// The state of a run for the thread and for the resource.
+struct Shared {
+    /// The program reads it: the run stops when it is true.
+    stop: Arc<AtomicBool>,
+    /// A message goes out only with this lock, and only when `stop` is
+    /// false. So after `stop`, no message comes.
+    gate: Mutex<()>,
+}
+
+impl Shared {
+    fn stop(&self) {
+        let _gate = self.gate.lock();
+        self.stop.store(true, Ordering::SeqCst);
+    }
+
+    /// Send a message, when the run did not stop.
+    fn send(&self, env: &mut OwnedEnv, pid: &LocalPid, message: impl FnOnce(rustler::Env) -> rustler::Term) {
+        let _gate = self.gate.lock();
+        if !self.stop.load(Ordering::SeqCst) {
+            let _ = env.send_and_clear(pid, message);
+        }
+    }
+}
+
 /// A run of the program. Its drop stops the run.
 struct Run {
-    stop: Arc<AtomicBool>,
+    shared: Arc<Shared>,
 }
 
 #[rustler::resource_impl]
@@ -41,7 +66,7 @@ impl rustler::Resource for Run {}
 
 impl Drop for Run {
     fn drop(&mut self) {
-        self.stop.store(true, Ordering::SeqCst);
+        self.shared.stop();
     }
 }
 
@@ -52,6 +77,7 @@ struct Messages {
     id: u64,
     stream: rustler::Atom,
     env: OwnedEnv,
+    shared: Arc<Shared>,
 }
 
 impl Write for Messages {
@@ -60,7 +86,7 @@ impl Write for Messages {
             return Ok(0);
         }
         let (id, stream) = (self.id, self.stream);
-        let _ = self.env.send_and_clear(&self.pid, |env| {
+        self.shared.send(&mut self.env, &self.pid, |env| {
             let mut binary = OwnedBinary::new(bytes.len());
             binary.as_mut_slice().copy_from_slice(bytes);
             (atoms::tailwind_nif(), id, stream, binary.release(env)).encode(env)
@@ -85,8 +111,8 @@ fn nif_start(
     id: u64,
     terminal: bool,
 ) -> rustler::NifResult<ResourceArc<Run>> {
-    let stop = Arc::new(AtomicBool::new(false));
-    let run = ResourceArc::new(Run { stop: stop.clone() });
+    let shared = Arc::new(Shared { stop: Arc::new(AtomicBool::new(false)), gate: Mutex::new(()) });
+    let run = ResourceArc::new(Run { shared: shared.clone() });
     std::thread::Builder::new()
         .name("tailwind".into())
         // The stack of the program: the compiler and Lightning CSS go deep
@@ -98,6 +124,7 @@ fn nif_start(
                 id,
                 stream,
                 env: OwnedEnv::new(),
+                shared: shared.clone(),
             };
             let context = Context {
                 cwd: PathBuf::from(cwd),
@@ -105,7 +132,7 @@ fn nif_start(
                 stdout: Box::new(stream(atoms::stdout())),
                 stderr: Box::new(stream(atoms::stderr())),
                 terminal,
-                stop,
+                stop: shared.stop.clone(),
             };
             // A panic must not stop the VM: it is the status 101, as for a
             // panic of the program.
@@ -113,12 +140,18 @@ fn nif_start(
                 tailwind::cli::run_with(argv, context)
             }))
             .unwrap_or(101);
-            let _ = OwnedEnv::new().send_and_clear(&pid, |env| {
-                (atoms::tailwind_nif(), id, atoms::exit(), status).encode(env)
-            });
+            shared.send(&mut OwnedEnv::new(), &pid, |env| (atoms::tailwind_nif(), id, atoms::exit(), status).encode(env));
         })
         .map_err(|error| rustler::Error::Term(Box::new(error.to_string())))?;
     Ok(run)
+}
+
+/// Stop a run: a build stops at its next check, and a watch at its next
+/// tick. After this call, the process gets no more message of the run.
+#[rustler::nif]
+fn nif_stop(run: ResourceArc<Run>) -> rustler::Atom {
+    run.shared.stop();
+    rustler::types::atom::ok()
 }
 
 /// The version of the program and of the Tailwind CSS of its compiler.
