@@ -193,6 +193,11 @@ The run is not a process, and these are different from a port:
   resource of the run, and when the garbage collector frees it, the
   watch stops at its next tick. This is also true for `--watch=always`.
 - A panic of the program does not stop the VM: the exit status is 101.
+- An input that nests too deep does not stop the VM. The thread of a run
+  has a stack of 256 MiB (the system uses only the pages that the run
+  touches), and the parsers have limits: deeper input gives the error
+  `RangeError: Maximum call stack size exceeded` of the official program
+  (`native/tailwind/src/nesting.rs`).
 - The standard output and the standard error are two streams (`run/4`).
   `run/2` writes the two to the group leader, as a port with
   `stderr_to_stdout`.

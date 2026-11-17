@@ -164,8 +164,20 @@ const SPECIAL: [bool; 256] = {
     table
 };
 
-/// Parse a CSS value.
+/// Parse a CSS value. A function deeper than `nesting::MAX_FUNCTIONS`
+/// marks the run (`nesting::exceed`), and its text stays in a word.
 pub fn parse(input: &str) -> Vec<ValueAstNode> {
+    parse_to_depth(input, crate::nesting::MAX_FUNCTIONS)
+}
+
+/// Parse a CSS value with no limit of depth, for a step that reads the
+/// tree with no recursion: the step must also drop the tree with no
+/// recursion (`utils/variables.rs`).
+pub fn parse_deep(input: &str) -> Vec<ValueAstNode> {
+    parse_to_depth(input, usize::MAX)
+}
+
+fn parse_to_depth(input: &str, max_depth: usize) -> Vec<ValueAstNode> {
     let input: Cow<'_, str> =
         if input.contains("\r\n") { Cow::Owned(input.replace("\r\n", "\n")) } else { Cow::Borrowed(input) };
     let input: &str = &input;
@@ -178,6 +190,8 @@ pub fn parse(input: &str) -> Vec<ValueAstNode> {
     // is the same.
     let mut stack: Vec<ValueFunctionNode> = Vec::new();
     let mut buffer = String::new();
+    // The open parentheses after `max_depth`: they are text of the buffer.
+    let mut flat = 0usize;
 
     macro_rules! push {
         ($node:expr) => {{
@@ -261,8 +275,23 @@ pub fn parse(input: &str) -> Vec<ValueAstNode> {
                 i = end + 1;
             }
 
+            OPEN_PAREN if flat > 0 || stack.len() >= max_depth => {
+                if flat == 0 {
+                    crate::nesting::exceed();
+                }
+                flat += 1;
+                buffer.push('(');
+                i += 1;
+            }
+
             OPEN_PAREN => {
                 stack.push(ValueFunctionNode { value: std::mem::take(&mut buffer), nodes: Vec::new() });
+                i += 1;
+            }
+
+            CLOSE_PAREN if flat > 0 => {
+                flat -= 1;
+                buffer.push(')');
                 i += 1;
             }
 

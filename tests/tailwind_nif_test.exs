@@ -78,6 +78,27 @@ defmodule TailwindNifTest do
     assert output =~ "Done in "
   end
 
+  test "an input that nests too deep is an error, and the VM goes on", %{dir: dir} do
+    # 20,000 nested rules: before, the stack of the run overflowed, and
+    # the VM stopped.
+    File.write!(
+      Path.join(dir, "deep.css"),
+      String.duplicate(".a {", 20_000) <> "color: red;" <> String.duplicate("}", 20_000)
+    )
+
+    env = [{"NO_COLOR", "1"}]
+    {1, output} = :tailwind_nif.run(~w(-i deep.css), %{cd: dir, env: env}, &collect/3, [])
+    assert text(output, :stderr) =~ "RangeError: Maximum call stack size exceeded"
+
+    # 200,000 nested `var()`: the official program compiles it.
+    value = String.duplicate("var(--x, ", 200_000) <> "1px" <> String.duplicate(")", 200_000)
+    File.write!(Path.join(dir, "var.css"), "@tailwind utilities;\n.a { width: #{value}; }\n")
+    {0, output} = :tailwind_nif.run(~w(-i var.css), %{cd: dir}, &collect/3, [])
+    assert text(output, :stdout) =~ value
+
+    {0, _} = :tailwind_nif.run(~w(-i app.css -o out.css), %{cd: dir}, &collect/3, [])
+  end
+
   test "load/1 is ok when the NIF is loaded" do
     assert :tailwind_nif.load("/no/such/libtailwind_nif") == :ok
   end

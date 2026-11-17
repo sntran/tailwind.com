@@ -31,10 +31,6 @@ mod atoms {
     }
 }
 
-/// The stack of the thread of a run. The compiler goes deep for some
-/// stylesheets, and the main thread of a program has 8 MiB.
-const STACK: usize = 16 << 20;
-
 /// A run of the program. Its drop stops the run.
 struct Run {
     stop: Arc<AtomicBool>,
@@ -93,7 +89,9 @@ fn nif_start(
     let run = ResourceArc::new(Run { stop: stop.clone() });
     std::thread::Builder::new()
         .name("tailwind".into())
-        .stack_size(STACK)
+        // The stack of the program: the compiler and Lightning CSS go deep
+        // for some stylesheets (`nesting.rs` of the crate `tailwind`).
+        .stack_size(tailwind::nesting::STACK_SIZE)
         .spawn(move || {
             let stream = |stream| Messages {
                 pid,

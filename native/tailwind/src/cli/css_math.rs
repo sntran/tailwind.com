@@ -27,7 +27,7 @@
 use crate::ast::{AstNode, AtRule, Declaration, Loc};
 use crate::utils::segment::segment;
 
-use super::css_mixins::{ident_end, is_ident_char, matching_paren, string_end};
+use super::css_mixins::{ident_end, is_ident_char, matching_paren, nesting_depth, string_end, MAX_VALUE_DEPTH};
 
 /// The kinds of functions to lower.
 #[derive(Debug, Default, Clone, Copy)]
@@ -92,7 +92,10 @@ impl MathLowering {
             match &mut nodes[index] {
                 // In `@keyframes`, a helper property and a nested rule are
                 // not valid: the value stays.
-                AstNode::Declaration(declaration) if in_style && !in_keyframes => {
+                // A deeper value stays: see `MAX_VALUE_DEPTH`.
+                AstNode::Declaration(declaration)
+                    if in_style && !in_keyframes && declaration.value.as_deref().is_some_and(|value| nesting_depth(value) <= MAX_VALUE_DEPTH) =>
+                {
                     if let Some(value) = declaration.value.clone() {
                         if let Some(lowered) = self.lower_value(&value) {
                             let loc = declaration.loc.clone();

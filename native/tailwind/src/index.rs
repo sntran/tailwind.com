@@ -28,6 +28,7 @@ use crate::compat::{apply_compatibility_hooks, CompatOptions};
 use crate::compile::compile_candidates;
 use crate::css_functions::substitute_functions;
 use crate::css_parser;
+use crate::nesting;
 use crate::design_system::{build_design_system, DesignSystem};
 use crate::optimize::optimize_ast;
 use crate::source_maps::{create_source_map, DecodedSourceMap, SourceLocation};
@@ -169,6 +170,7 @@ impl Compiler {
         let output = self.build_css(candidates);
         self.design_system.take_js_error();
         self.design_system.variants.take_error();
+        nesting::take_error();
         output
     }
 
@@ -177,7 +179,11 @@ impl Compiler {
     pub fn try_build(&mut self, candidates: &[String]) -> Result<String> {
         let _version = version::enter(self.version);
         self.design_system.variants.take_error();
+        nesting::take_error();
         let output = self.build_css(candidates);
+        if let Some(error) = nesting::take_error() {
+            return Err(error);
+        }
         if let Some(error) = self.design_system.take_js_error() {
             return Err(error);
         }
@@ -323,8 +329,14 @@ fn node_at_mut<'a>(tree: &'a mut [AstNode], path: &[usize]) -> Option<&'a mut As
 pub fn compile(css: &str, options: CompileOptions) -> Result<Compiler> {
     let version = options.version.unwrap_or(Version::NATIVE);
     let _version = version::enter(version);
+    // A value or a selector deeper than a limit gives the error of the
+    // official program for a deep input (`nesting.rs`).
+    nesting::take_error();
     let ast = css_parser::parse_with_source(css, options.from.as_deref())?;
-    let mut parsed = parse_css(ast, &options)?;
+    let mut parsed = parse_css(ast, &options).map_err(|error| nesting::take_error().unwrap_or(error))?;
+    if let Some(error) = nesting::take_error() {
+        return Err(error);
+    }
 
     if !options.test_mode {
         parsed.ast.insert(0, comment(format!("! tailwindcss v{version} | MIT License | https://tailwindcss.com ")));
@@ -389,7 +401,12 @@ fn find_utilities(nodes: &mut [AstNode], path: &mut Vec<usize>) -> Option<Vec<us
 
 /// The design system of a stylesheet (`__unstable__loadDesignSystem`).
 pub fn load_design_system(css: &str, options: CompileOptions) -> Result<DesignSystem> {
-    Ok(parse_css(css_parser::parse_with_source(css, options.from.as_deref())?, &options)?.design_system)
+    nesting::take_error();
+    let design_system = parse_css(css_parser::parse_with_source(css, options.from.as_deref())?, &options)?.design_system;
+    match nesting::take_error() {
+        Some(error) => Err(error),
+        None => Ok(design_system),
+    }
 }
 
 /// `parseThemeOptions`
