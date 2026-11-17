@@ -483,11 +483,17 @@ mod decode_arbitrary_value_tests {
         ("round(to-zero,1+2,1+3)", "round(to-zero, 1 + 2, 1 + 3)"),
         ("env((safe-area-inset-bottom))", "env((safe-area-inset-bottom))"),
         ("atan(1 + -infinity)", "atan(1 + -infinity)"),
+        // The pull request 20615 of Tailwind CSS (a fix of this program):
+        // the text of a string and an escape stay.
+        ("'(min(1,2))'", "'(min(1,2))'"),
+        ("\"(calc(1px+2px))\"", "\"(calc(1px+2px))\""),
+        ("calc(1+2)_'min(1,2)'", "calc(1 + 2) 'min(1,2)'"),
+        ("calc(var(--a\\'b)+1px)", "calc(var(--a\\'b) + 1px)"),
     ];
 
     #[test]
     fn adds_spaces_around_math_operators() {
-        assert_eq!(MATH_TABLE.len(), 53);
+        assert_eq!(MATH_TABLE.len(), 57);
         for (input, output) in MATH_TABLE {
             assert_eq!(decode_arbitrary_value(input), *output, "{input}");
         }

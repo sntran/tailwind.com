@@ -30,10 +30,11 @@ fn byte_from_end(text: &str, offset: usize) -> Option<u8> {
     bytes.len().checked_sub(offset).map(|i| bytes[i])
 }
 
-/// A fix of this program (docs/COMPATIBILITY.md, "Fixes"): a quoted string
-/// goes to the result as it is. Upstream formats a math function in a
-/// string: `content-['(min(1,2))']` gave `'(min(1, 2))'`. `start` is the
-/// index of the quote; the result is the index after the string.
+/// A fix of this program (docs/COMPATIBILITY.md, "Fixes"), as the pull
+/// request 20615 of Tailwind CSS: a quoted string goes to the result as it
+/// is. Upstream formats a math function in a string:
+/// `content-['(min(1,2))']` gave `'(min(1, 2))'`. `start` is the index of
+/// the quote; the result is the index after the string.
 fn copy_string(input: &str, start: usize, result: &mut String) -> usize {
     let bytes = input.as_bytes();
     let quote = bytes[start];
@@ -51,6 +52,14 @@ fn copy_string(input: &str, start: usize, result: &mut String) -> usize {
     let end = i.min(bytes.len());
     result.push_str(&input[start..end]);
     end
+}
+
+/// The escape at `start` (a backslash and the character after it) goes to
+/// the result as it is. The result is the index after it.
+fn copy_escape(input: &str, start: usize, result: &mut String) -> usize {
+    let next = input[start + 1..].chars().next().map_or(0, char::len_utf8);
+    result.push_str(&input[start..start + 1 + next]);
+    start + 1 + next
 }
 
 #[inline]
@@ -95,6 +104,11 @@ fn add_whitespace_around_each_operator(input: &str) -> String {
             continue;
         }
 
+        // An escape and a string go to the result as they are.
+        if c == b'\\' {
+            i = copy_escape(input, i, &mut result);
+            continue;
+        }
         if c == b'\'' || c == b'"' {
             i = copy_string(input, i, &mut result);
             continue;
@@ -212,13 +226,6 @@ pub fn add_whitespace_around_math_operators(input: &str) -> Cow<'_, str> {
             continue;
         }
 
-        if c == b'\'' || c == b'"' {
-            last_value_pos = value_pos;
-            value_pos = None;
-            i = copy_string(input, i, &mut result);
-            continue;
-        }
-
         // A number with a unit, such as `123px`, is not a function name.
         let is_unit = if more_units { c == b'%' || c.is_ascii_alphabetic() } else { c.is_ascii_lowercase() };
         if c.is_ascii_digit() || (value_pos.is_some() && is_unit) {
@@ -226,6 +233,16 @@ pub fn add_whitespace_around_math_operators(input: &str) -> Cow<'_, str> {
         } else {
             last_value_pos = value_pos;
             value_pos = None;
+        }
+
+        // An escape and a string go to the result as they are.
+        if c == b'\\' {
+            i = copy_escape(input, i, &mut result);
+            continue;
+        }
+        if c == b'\'' || c == b'"' {
+            i = copy_string(input, i, &mut result);
+            continue;
         }
 
         let in_math = formattable.last().copied().unwrap_or(false);
