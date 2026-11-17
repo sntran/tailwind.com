@@ -52,6 +52,16 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   `cli` is `program`, `optimize` and `js`. `tailwind-browser.wasm` has
   `program`, `lower` and `host-js`.
 
+### Fixed
+
+- As Tailwind CSS 4.0.0 to 4.3.1, the program does not scan its input
+  file when no source of the stylesheet has it, as the official program
+  of these versions. Before, `var(--x)` in the input file kept the theme
+  variable `--x` in the output, also when only the value of a theme
+  variable with no use had it. The official program scans its input
+  file from 4.3.2: the new switch `INPUT_FILE_IS_A_SOURCE`. The output
+  of 4.3.2 to 4.3.5 does not change.
+
 ## 0.4.0 - 2026-11-17
 
 The optimizer lowers new CSS (functions, mixins, `if()`, `@when`, the

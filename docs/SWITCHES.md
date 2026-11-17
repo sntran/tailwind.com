@@ -31,7 +31,7 @@ nothing wrong: that version is only slower.
 | 4.3.4 | Rust compiler | 3 |
 | 4.3.3 | Rust compiler | 19 more |
 | 4.3.2 | Rust compiler | 6 more |
-| 4.3.1 | Rust compiler | 3 more |
+| 4.3.1 | Rust compiler | 4 more |
 | 4.3.0 | Rust compiler | 8 more |
 | 4.2.4 | Rust compiler | 8 more |
 | 4.2.3 | Rust compiler | 0 more |
@@ -76,7 +76,7 @@ nothing wrong: that version is only slower.
 | 4.0.1 | Rust compiler | 7 more |
 | 4.0.0 | Rust compiler | 6 more |
 
-All the 195 switches of Tailwind CSS 4.0.1 to 4.3.5 are there. Each of
+All the 196 switches of Tailwind CSS 4.0.1 to 4.3.5 are there. Each of
 these versions uses the Rust compiler also for a stylesheet with
 `@plugin` or `@config`: see "The plugin layer" below.
 
@@ -201,7 +201,8 @@ CSS in its plugin layer needs no switch and no work: the list marks it
 ## The changes of Tailwind CSS, release by release
 
 This list comes from the source of Tailwind CSS: each change between two
-releases that can change the result of `compile` and `build`.
+releases that can change the result of `compile` and `build`, and one
+change of the command line program (`INPUT_FILE_IS_A_SOURCE`, 4.3.2).
 Kind: `form` (a valid input gives another text), `fix` (the old behavior
 was a fault), `feature` (a new input works), `data` (a constant or a
 table). Effort: `S` (one condition or one constant), `M` (one function in
@@ -258,13 +259,27 @@ Data, from the package: the new `--font-sans` stack (`theme.css`,
 values are also in `tailwindcss/colors` and `tailwindcss/defaultTheme` of
 the plugin layer: the plugin layer of each version has its own values.
 
-### 4.3.2 (3 switches, all there)
+### 4.3.2 (4 switches, all there)
 
 | Switch | Kind | Effort | How often | What was before |
 |---|---|---|---|---|
 | `AUTO_TRACKS_BARE_SPACING` | feature | S | rare | `auto-rows-12` gave nothing |
 | `SPACING_FN_IS_LENGTH` (also in the plugin layer) | fix | S | edge | `text-[--spacing(2)]` was a color |
 | `ALPHA_FN_IS_COLOR` (also in the plugin layer) | fix | S | edge | `--alpha(…)` was not a color for the type of a value |
+| `INPUT_FILE_IS_A_SOURCE` (in the command line program) | form | S | rare | The program scanned its input file only when a source of the stylesheet had it. So `var(--x)` in the input did not keep the theme variable `--x`: with `source(none)`, `--duration` of `--animate-x: x var(--duration)` was not in the output when no class used `animate-x` |
+
+`INPUT_FILE_IS_A_SOURCE` is the one switch that is not in the compiler.
+The command line program of 4.3.2 adds its input file to the sources of
+the scanner (a fix of the watch: the input file in an ignored directory
+did not start a build). The scanner takes only the CSS variables from a
+CSS file, and a CSS variable as a candidate keeps its theme variable.
+The rule of the compiler did not change: a theme variable that only the
+value of a theme variable with no use has is not in the output, and a
+candidate `--x` keeps `--x` (the two cases `4.3.2 the input file is a
+source` of `switches.jsonl`, with the results of 4.3.0 to 4.3.5). The
+code is in `cli/mod.rs`, for the two engines. The records of the
+command line program are the cases `input-variables` and
+`input-variables-4.3.1` of `tests/upstream/cli`.
 
 ### 4.3.1 (8 switches, all there; 2 changes in the plugin layer)
 
@@ -280,6 +295,11 @@ the plugin layer: the plugin layer of each version has its own values.
 | `NOT_CONTAINER_VALUE_PARSER` | fix | M | rare | `not-*` on `@container style(…)` gave a condition that is not valid |
 | addbase-variant-eager (JS) | fix | M | rare | Only in 4.3.1: `@variant` in `addBase` was replaced when the plugin loaded |
 | plugin-selector-whitespace (JS) | form | L | rare | Selectors of plugins kept their text: `&>*`, not `& > *` |
+
+No switch: from 4.3.1, the command line program does not scan its own
+program file. This program does not scan its own file in each version:
+its file is not the file of the official program, so the candidates in
+it are not the same in any case.
 
 ### 4.3.0 (8 switches, all there)
 
@@ -366,7 +386,8 @@ No switch: the new function `candidatesToAst` and the file `cartesian.ts`
 are for the editor tools and the canonical form of candidates. The
 check of `source(…)` against the directory of its file, and its new
 message, are in the code of the command line (`cli/mod.rs`). That code
-has no switches: it gives the result of 4.1.18 for each version.
+has no switch for this check: it gives the result of 4.1.18 for each
+version.
 
 ### 4.1.17 (no switch)
 
@@ -637,7 +658,7 @@ variants `scripting`, `scripting-none` and `scripting-initial` were in
 no release. The `polyfills` option of `compile` is new: before 4.1.0,
 the compiler had no fallbacks to switch off. A source of `@source` has
 the new field `negated`, which only the command line uses (`cli/mod.rs`,
-with no switches). The scanner and the optimizer follow no version:
+with no switch for it). The scanner and the optimizer follow no version:
 `node_modules` and `.gitignore`, symbolic links, Razor files, and the
 new targets of Lightning CSS.
 
@@ -938,24 +959,24 @@ an empty part). The suggestions are for the editor tools.
 
 ## What the list shows
 
-- **56 changes** in the eleven releases from 4.2.0 to 4.3.5. 5 of them
+- **57 changes** in the eleven releases from 4.2.0 to 4.3.5. 5 of them
   are only in the JavaScript of the plugin layer and need no switch. So
-  there are **51 switches** for these releases.
+  there are **52 switches** for these releases.
 - **84 more switches** for the twenty releases from 4.1.0 to 4.2.0: 12
   for 4.2.0, 57 for 4.1.1 to 4.1.18, and 15 for 4.1.0.
 - **23 more switches** for the nine releases from 4.0.9 to 4.0.17 (three
   of them have no change of the compiler).
 - **37 more switches** for the eight releases from 4.0.1 to 4.0.8. All
-  the 195 switches are there: the Rust compiler serves each version of
+  the 196 switches are there: the Rust compiler serves each version of
   Tailwind CSS 4, from 4.0.0 to 4.3.5.
-- **Most of the changes are fixes** of faults in rare inputs. 9 change
+- **Most of the changes are fixes** of faults in rare inputs. 10 change
   the form of valid output, 6 are new features, 4 are constants, and 1
   has no visible change.
 - **7 change the output of a normal project** (the rows with "each
   build" or "common"). Each other one needs an input that few projects
   have.
-- **Most are one condition or one constant.** Of the 51 switches of 4.2
-  and 4.3, 44 are one condition, one constant or one small helper, and 7
+- **Most are one condition or one constant.** Of the 52 switches of 4.2
+  and 4.3, 45 are one condition, one constant or one small helper, and 7
   keep a
   function in two forms (the declaration with `!important`, the custom
   property at the end of the input, the brackets of an arbitrary value,

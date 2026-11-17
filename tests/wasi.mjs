@@ -85,6 +85,15 @@ for (const name of names) {
       if (index > 0) env[line.slice(0, index)] = line.slice(index + 1).trim().replaceAll('<project>/', '/').replaceAll('<project>', '/')
     }
   }
+  // A case for another version of Tailwind CSS needs the package of that
+  // version: skip it when the program does not have that version.
+  if (env.TAILWINDCSS_VERSION) {
+    const check = spawnSync(process.execPath, ['--no-warnings', fileURLToPath(import.meta.url), '--child', wasm, project, JSON.stringify(env), '--version'])
+    if (check.status !== 0) {
+      console.log(`wasi.mjs: ${name}: skipped: the program has no Tailwind CSS ${env.TAILWINDCSS_VERSION}`)
+      continue
+    }
+  }
   const result = spawnSync(
     process.execPath,
     ['--no-warnings', fileURLToPath(import.meta.url), '--child', wasm, project, JSON.stringify(env), ...args],

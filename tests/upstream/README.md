@@ -152,6 +152,7 @@ Cases for the official CLI. Each case is a directory `cli/NAME/`:
   with no color codes, except the header, the empty lines and the line `Done in ...`. `tools/run-cli.mjs` writes it.
   The record runs with `NODE_NO_WARNINGS=1`, so a warning of Node.js itself is not in the file.
 - `env.txt`: optional. The environment variables for the CLI, one `NAME=VALUE` for each line. `<project>` is the path of the project.
+  With `TAILWINDCSS_VERSION`, `tools/run-cli.mjs` runs the official CLI of that version (see the script).
 - `project.txt`: optional, in place of `project/`. The name of another case: the two cases use one project.
 
 The CLI does not run with `NODE_ENV=test`. Thus `stdout.css` starts with the license banner comment.
@@ -178,6 +179,8 @@ The CLI does not run with `NODE_ENV=test`. Thus `stdout.css` starts with the lic
 | `warning-value-type` | `@utility` with `--value()` and `--modifier()` arguments that are not data types of a bare value: three warnings on stderr. |
 | `warning-optimize` | `--minify` with a pseudo-class that the optimizer does not know: one warning with the lines around it. The pseudo-classes of Vue and Angular (`:deep`, `:slotted`, `:global`, `::ng-deep`, `:host-context`) give no warning. |
 | `warning-optimize-many` | `--optimize` with three such rules: each warning has a number (`Issue #1:`). |
+| `input-variables` | `source(none)` and `var(--duration)` only in the value of a theme variable with no use. The CLI also scans its input file, so `--duration` is in the output. |
+| `input-variables-4.3.1` | The same project as Tailwind CSS 4.3.1 (`env.txt`): that CLI does not scan its input file, so `--duration` is not in the output. |
 
 Some projects contain a `.gitignore` file and files that it ignores (for example `cli/auto-detect/project/ignored/`).
 Git also obeys these nested `.gitignore` files. Use `git add -f tests/upstream/cli` to add the ignored files.

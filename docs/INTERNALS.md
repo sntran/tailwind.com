@@ -617,7 +617,7 @@ and C code of the loader and of the warnings. `tailwind.wasm` has one
 copy: 8.6 MB before, and 8.95 MB then.
 
 The versions of Tailwind CSS came next. Each copy is 0.49 MB larger:
-0.15 MB for the script engine, and 0.34 MB for the 195 switches and the
+0.15 MB for the script engine, and 0.34 MB for the 196 switches and the
 plugin layer of the 47 older versions (half of it is the 170 KB of
 patches). With the packages in the ZIP directory, the file has 20.3 MB
 now, and `tailwind.wasm` 9.4 MB. The sizes in this section are in

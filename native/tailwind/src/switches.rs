@@ -185,6 +185,14 @@ pub const SPACING_FN_IS_LENGTH: Switch = Switch::since(4, 3, 2, "--spacing(…) 
 /// arbitrary value. Before: it was not.
 pub const ALPHA_FN_IS_COLOR: Switch = Switch::since(4, 3, 2, "--alpha(…) is a color");
 
+/// The command line program also scans its input file. The scanner takes
+/// only the CSS variables from a CSS file, so `var(--x)` in the input
+/// keeps the theme variable `--x`, also in the value of a theme variable
+/// with no use. Before: the program scanned the input file only when a
+/// source of the stylesheet had it. This switch is in the command line
+/// program (`cli/mod.rs`), and not in the compiler.
+pub const INPUT_FILE_IS_A_SOURCE: Switch = Switch::since(4, 3, 2, "the command line program scans its input file");
+
 // --- 4.3.1 ----------------------------------------------------------------
 
 /// `--spacing(0)` is zero and `--spacing(1)` is the value of `--spacing`.
@@ -1180,6 +1188,7 @@ pub const ALL: &[&Switch] = &[
     &AUTO_TRACKS_BARE_SPACING,
     &SPACING_FN_IS_LENGTH,
     &ALPHA_FN_IS_COLOR,
+    &INPUT_FILE_IS_A_SOURCE,
     &SPACING_FN_FOLD,
     &SPACE_ZERO,
     &MASK_ANGLE_FOLD,

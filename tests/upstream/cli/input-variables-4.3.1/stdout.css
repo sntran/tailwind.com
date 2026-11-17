@@ -1,0 +1,12 @@
+/*! tailwindcss v4.3.1 | MIT License | https://tailwindcss.com */
+@layer theme {
+  :root, :host {
+    --spacing: 0.25rem;
+  }
+}
+@layer utilities {
+  .p-6 {
+    padding: calc(var(--spacing) * 6);
+  }
+}
+
