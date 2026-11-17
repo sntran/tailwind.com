@@ -4,7 +4,7 @@
 // "browser"). A local server gives the files at the paths of jsDelivr:
 // "/npm/tailwind.com@0.0.0" is the default file, with no redirect.
 //
-// Usage: node tests/npm-browser.mjs [--wasm FILE] [--small FILE] [--official FILE]
+// Usage: node tests/npm-browser.mjs [--wasm FILE] [--small FILE] [--official FILE] [--cases DIR]
 //
 //   --wasm FILE      the module (default build/tailwind.wasm)
 //   --small FILE     the module with no JavaScript engine and no optimizer
@@ -13,6 +13,12 @@
 //                    (@tailwindcss/browser, dist/index.global.js): the
 //                    page script must give the same CSS. With no file, no
 //                    comparison.
+//   --cases DIR      the recorded cases with JavaScript (default
+//                    tests/upstream/cli-js): each one must give the output
+//                    of the official program with tailwind-small.wasm, its
+//                    plugins in the JavaScript engine of Chromium
+//                    (js/engine.mjs). The cases with --minify are not for
+//                    the small program.
 //
 // It needs Playwright with Chromium.
 import assert from 'node:assert/strict'
@@ -28,12 +34,13 @@ import { runWasm } from '../js/node.mjs'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
 
-const opts = { wasm: path.join(root, 'build/tailwind.wasm'), small: null, official: null }
+const opts = { wasm: path.join(root, 'build/tailwind.wasm'), small: null, official: null, cases: path.join(root, 'tests/upstream/cli-js') }
 const args = process.argv.slice(2)
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--wasm') opts.wasm = path.resolve(args[++i])
   else if (args[i] === '--small') opts.small = path.resolve(args[++i])
   else if (args[i] === '--official') opts.official = path.resolve(args[++i])
+  else if (args[i] === '--cases') opts.cases = path.resolve(args[++i])
   else throw new Error(`npm-browser.mjs: unknown argument ${args[i]}`)
 }
 opts.small ??= path.join(path.dirname(opts.wasm), 'tailwind-small.wasm')
@@ -110,6 +117,18 @@ const pages = {
 @import "./extra.css";
 </style></head>
 <body><p id="extra" class="extra-check mt-2">x</p></body></html>`,
+  // A recorded case: window.run(args, files, input, env) with the small
+  // program.
+  '/cases.html': `<!doctype html><meta charset="utf-8"><script type="module">
+import { runWasm } from '${prefix}/js/browser.mjs'
+window.run = (args, files, input, env) => {
+  for (const [name, value] of Object.entries(files)) {
+    if (typeof value !== 'string') files[name] = Uint8Array.from(atob(value.base64), (c) => c.charCodeAt(0))
+  }
+  return runWasm(args, { files, input, env: { NO_COLOR: '1', ...env }, wasm: '${prefix}/runtime/tailwind-small.wasm' })
+}
+window.ready = true
+</script>`,
   // The API of the condition "browser", in a module and in a Web Worker.
   '/api.html': `<!doctype html><meta charset="utf-8"><script type="module">
 import { runWasm } from '${prefix}/js/browser.mjs'
@@ -133,6 +152,10 @@ const server = http.createServer((request, response) => {
   else if (url === `${prefix}/runtime/tailwind.wasm`) [body, downloads['tailwind.wasm']] = [fs.readFileSync(opts.wasm), downloads['tailwind.wasm'] + 1]
   else if (url === `${prefix}/runtime/tailwind-small.wasm`) [body, downloads['tailwind-small.wasm']] = [fs.readFileSync(opts.small), downloads['tailwind-small.wasm'] + 1]
   else if (url.startsWith(`${prefix}/js/`)) body = fs.readFileSync(path.join(root, 'js', path.basename(url)))
+  // The JavaScript files of the program for tailwind-small.wasm.
+  else if (/^\/runtime\/(compat|typescript|plugins\/[a-z-]+)\.js$/.test(url.slice(prefix.length)) && url.startsWith(prefix)) {
+    ;[body, type] = [fs.readFileSync(path.join(root, 'native/tailwind/assets', url.slice(prefix.length + '/runtime/'.length))), types['.js']]
+  }
   else if (url === '/official.js' && opts.official) body = fs.readFileSync(opts.official)
   else if (url === '/compare.html') body = pages[url](new URL(request.url, 'http://localhost').searchParams.get('script'))
   else if (typeof pages[url] === 'string') body = pages[url]
@@ -147,6 +170,14 @@ const server = http.createServer((request, response) => {
 })
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
 const base = `http://127.0.0.1:${server.address().port}`
+
+function listFiles(dir, prefix = '') {
+  if (!fs.existsSync(dir)) return []
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const name = prefix + entry.name
+    return entry.isDirectory() ? listFiles(path.join(dir, entry.name), name + '/') : [name]
+  })
+}
 
 const require = createRequire(import.meta.url)
 const { chromium } = require('playwright')
@@ -247,6 +278,10 @@ try {
     assets['/theme/brand.css'] = '@theme { --color-brand: #00ff00; }\n'
     await tab.evaluate(() => (document.querySelector('link').href = '/assets/app.css?v=2'))
     await settle(tab, () => getComputedStyle(document.getElementById('box')).backgroundColor === 'rgb(0, 255, 0)')
+    // The plugins ran in the JavaScript engine of the browser: no full
+    // program, and the realm of each build is gone.
+    assert.equal(downloads['tailwind.wasm'], 0)
+    assert.equal(await tab.evaluate(() => document.querySelectorAll('iframe[data-tailwind-com]').length), 0)
     await tab.close()
   })
 
@@ -271,6 +306,62 @@ try {
     assert.equal(worker.status, 0, worker.stderr)
     assert.ok(worker.stdout.includes('.underline {'), worker.stdout.slice(-300))
     await tab.close()
+  })
+
+  await check('the recorded cases with JavaScript: plugins in the JavaScript engine of the browser', async () => {
+    const tab = await browser.newPage()
+    tab.on('pageerror', (e) => messages.push(`cases.html: ${e}`))
+    await tab.goto(`${base}/cases.html`)
+    await tab.waitForFunction(() => window.ready === true)
+    const failures = []
+    let count = 0
+    for (const name of fs.readdirSync(opts.cases).sort()) {
+      const dir = path.join(opts.cases, name)
+      if (!fs.existsSync(path.join(dir, 'args.txt'))) continue
+      const args = fs.readFileSync(path.join(dir, 'args.txt'), 'utf8').split('\n').filter((line) => line !== '')
+      if (args.some((arg) => arg === '--minify' || arg === '-m' || arg === '--optimize' || arg.startsWith('--map'))) continue
+      // The project: text as text, other bytes as Base64.
+      const shared = path.join(dir, 'project.txt')
+      const source = fs.existsSync(shared) ? path.join(opts.cases, fs.readFileSync(shared, 'utf8').trim(), 'project') : path.join(dir, 'project')
+      const files = {}
+      for (const file of listFiles(source)) {
+        const bytes = fs.readFileSync(path.join(source, file))
+        try {
+          files[file] = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+        } catch {
+          files[file] = { base64: bytes.toString('base64') }
+        }
+      }
+      const env = {}
+      if (fs.existsSync(path.join(dir, 'env.txt'))) {
+        for (const line of fs.readFileSync(path.join(dir, 'env.txt'), 'utf8').split('\n')) {
+          const index = line.indexOf('=')
+          if (index > 0) env[line.slice(0, index)] = line.slice(index + 1).trim().replaceAll('<project>/', '/').replaceAll('<project>', '/')
+        }
+      }
+      const stdin = path.join(dir, 'stdin.txt')
+      const input = fs.existsSync(stdin) ? fs.readFileSync(stdin, 'utf8') : ''
+      const result = await tab.evaluate(([args, files, input, env]) => window.run(args, files, input, env), [args, files, input, env])
+      count++
+      const status = Number(fs.readFileSync(path.join(dir, 'exit.txt'), 'utf8'))
+      const expected = fs.readFileSync(path.join(dir, 'stdout.css'), 'utf8').replaceAll('/PROJECT/', '/').replaceAll('PROJECT/', '')
+      // The lines of the error output of the official program, as in
+      // tests/wasi.mjs.
+      const contains = path.join(dir, 'stderr-contains.txt')
+      let lines = []
+      if (fs.existsSync(contains)) lines = fs.readFileSync(contains, 'utf8').split('\n')
+      else if (fs.existsSync(path.join(dir, 'stderr.txt'))) {
+        lines = fs.readFileSync(path.join(dir, 'stderr.txt'), 'utf8').replace(/\x1b\[[0-9;]*m/g, '').split('\n').filter((line) => line.startsWith('│'))
+      }
+      const missing = lines.map((line) => line.replaceAll('<project>/', '/').replaceAll('<project>', '/')).filter((line) => line !== '' && !result.stderr.includes(line))
+      if (result.status !== status || result.stdout !== expected || missing.length > 0) {
+        failures.push(`${name}: status ${result.status} (${status}), output ${result.stdout === expected ? 'same' : 'different'}${missing.length ? `, no "${missing[0]}"` : ''}\n${result.stderr.split('\n').slice(0, 6).join('\n')}`)
+      }
+    }
+    await tab.close()
+    assert.ok(count > 90, `${count} cases`)
+    assert.equal(failures.length, 0, `${failures.length} of ${count} cases failed:\n${failures.join('\n')}`)
+    console.log(`npm-browser.mjs: ${count} recorded cases with JavaScript: the same output`)
   })
 
   if (opts.official) {

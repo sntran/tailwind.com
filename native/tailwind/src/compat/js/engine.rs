@@ -14,6 +14,7 @@ struct TwJs {
 type HostFn = unsafe extern "C" fn(user: *mut c_void, op: *const c_char, text: *const c_char, is_error: *mut c_int) -> *mut c_char;
 type ReleaseFn = unsafe extern "C" fn(user: *mut c_void, text: *mut c_char);
 
+#[cfg(not(tw_host_js))]
 extern "C" {
     fn tw_js_new(memory_limit: usize, stack_limit: usize, host: HostFn, release: ReleaseFn, user: *mut c_void) -> *mut TwJs;
     fn tw_js_free(js: *mut TwJs);
@@ -31,6 +32,110 @@ extern "C" {
     fn tw_js_run_jobs(js: *mut TwJs, out: *mut *mut c_char, stack: *mut *mut c_char) -> c_int;
     fn tw_js_memory_used(js: *mut TwJs) -> usize;
     fn tw_js_platform() -> *const c_char;
+}
+
+// The engine of the host (the feature `host-js`): the JavaScript engine of
+// a browser, through the imports of the module "tailwind_js"
+// (js/engine.mjs). The host gives the text of `out` and `stack` from
+// `tw_host_alloc`, and calls the host function of the engine through
+// `tw_host_call` and `tw_host_release`. `tw_js_call_async` is the only
+// import that can suspend the program (JS Promise Integration): the
+// plugin layer waits for its promises there.
+#[cfg(tw_host_js)]
+#[link(wasm_import_module = "tailwind_js")]
+extern "C" {
+    fn tw_js_new(memory_limit: usize, stack_limit: usize, host: HostFn, release: ReleaseFn, user: *mut c_void) -> *mut TwJs;
+    fn tw_js_free(js: *mut TwJs);
+    fn tw_js_eval(
+        js: *mut TwJs,
+        source: *const c_char,
+        length: usize,
+        filename: *const c_char,
+        is_module: c_int,
+        out: *mut *mut c_char,
+        stack: *mut *mut c_char,
+    ) -> c_int;
+    fn tw_js_call(js: *mut TwJs, name: *const c_char, text: *const c_char, out: *mut *mut c_char, stack: *mut *mut c_char) -> c_int;
+    fn tw_js_call_async(js: *mut TwJs, name: *const c_char, text: *const c_char, out: *mut *mut c_char, stack: *mut *mut c_char) -> c_int;
+}
+
+#[cfg(tw_host_js)]
+extern "C" {
+    fn malloc(size: usize) -> *mut c_void;
+    fn free(pointer: *mut c_void);
+}
+
+#[cfg(tw_host_js)]
+unsafe fn tw_js_free_text(text: *mut c_char) {
+    // SAFETY: the host gives text from `tw_host_alloc`.
+    unsafe { free(text.cast()) }
+}
+
+/// The promise jobs of the host run in its event loop, not here.
+#[cfg(tw_host_js)]
+unsafe fn tw_js_run_jobs(_js: *mut TwJs, out: *mut *mut c_char, stack: *mut *mut c_char) -> c_int {
+    // SAFETY: the pointers are valid.
+    unsafe {
+        *out = std::ptr::null_mut();
+        *stack = std::ptr::null_mut();
+    }
+    0
+}
+
+#[cfg(tw_host_js)]
+unsafe fn tw_js_memory_used(_js: *mut TwJs) -> usize {
+    0
+}
+
+#[cfg(tw_host_js)]
+unsafe fn tw_js_platform() -> *const c_char {
+    // As QuickJS in wasm32-wasip1.
+    c"wasi".as_ptr()
+}
+
+/// Memory for the text that the host gives to the program.
+#[cfg(tw_host_js)]
+#[no_mangle]
+pub extern "C" fn tw_host_alloc(size: usize) -> *mut c_char {
+    // SAFETY: malloc of the C library of WASI.
+    unsafe { malloc(size).cast() }
+}
+
+/// Give back memory of `tw_host_alloc`.
+///
+/// # Safety
+///
+/// `pointer` comes from `tw_host_alloc`, and nothing uses it after.
+#[cfg(tw_host_js)]
+#[no_mangle]
+pub unsafe extern "C" fn tw_host_free(pointer: *mut c_char) {
+    // SAFETY: as said.
+    unsafe { free(pointer.cast()) }
+}
+
+/// The host function of an engine, for the host.
+///
+/// # Safety
+///
+/// `user` is the `user` of `tw_js_new`, and `op` and `text` are text with a
+/// NUL at its end.
+#[cfg(tw_host_js)]
+#[no_mangle]
+pub unsafe extern "C" fn tw_host_call(user: *mut c_void, op: *const c_char, text: *const c_char, is_error: *mut c_int) -> *mut c_char {
+    // SAFETY: as for the C engine.
+    unsafe { host_trampoline(user, op, text, is_error) }
+}
+
+/// Give back the text of `tw_host_call`.
+///
+/// # Safety
+///
+/// `text` comes from `tw_host_call`, and nothing uses it after.
+#[cfg(tw_host_js)]
+#[no_mangle]
+pub unsafe extern "C" fn tw_host_release(user: *mut c_void, text: *mut c_char) {
+    // SAFETY: as for the C engine.
+    unsafe { release_trampoline(user, text) }
 }
 
 /// `process.platform` of Node.js for the system that runs the program.
@@ -143,6 +248,23 @@ impl Engine {
         // SAFETY: as in `eval_as`.
         let status = unsafe { tw_js_call(self.raw, name.as_ptr(), text.as_ptr(), &mut out, &mut stack) };
         finish(status, out, stack)
+    }
+
+    /// Call the global function `name`, as `call`, when the function can
+    /// wait for promises. In the engine of the host, the program waits
+    /// (JS Promise Integration).
+    pub fn call_async(&self, name: &str, text: &str) -> Result<Option<String>, JsError> {
+        #[cfg(not(tw_host_js))]
+        return self.call(name, text);
+        #[cfg(tw_host_js)]
+        {
+            let name = c_string(name);
+            let text = c_string(text);
+            let (mut out, mut stack) = (std::ptr::null_mut(), std::ptr::null_mut());
+            // SAFETY: as in `eval_as`.
+            let status = unsafe { tw_js_call_async(self.raw, name.as_ptr(), text.as_ptr(), &mut out, &mut stack) };
+            finish(status, out, stack)
+        }
     }
 
     /// Run the pending jobs (promises) until none is left.

@@ -26,13 +26,16 @@ build without JavaScript: the feature `cli` has the features `program`,
 
 The feature `program` alone is the program with no optimizer and no
 JavaScript engine. `--minify` and `--optimize` give an error there, and
-`@plugin` and `@config` too. `make wasm` builds it as
+`@plugin` and `@config` too. With the feature `host-js`, `@plugin` and
+`@config` run in the JavaScript engine of the host: a browser with JS
+Promise Integration (`js/engine.mjs`, see "The engine of a browser" in
+`INTERNALS.md`). `make wasm` builds the two features as
 `build/tailwind-small.wasm`, for a page in the browser (`js/page.js`):
-3.25 MB, or 0.73 MB with brotli, and the full `tailwind.wasm` is 9.5 MB,
+3.45 MB, or 0.77 MB with brotli, and the full `tailwind.wasm` is 9.5 MB,
 or 1.78 MB with brotli. For the same input, the two give the same CSS.
 
 ```sh
-cargo build --release --target wasm32-wasip1 -p tailwind --no-default-features --features program
+cargo build --release --target wasm32-wasip1 -p tailwind --no-default-features --features program,host-js
 ```
 
 This is the same program as `tailwind.com`, for one system. Use it for

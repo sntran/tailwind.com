@@ -25,7 +25,11 @@ use std::rc::{Rc, Weak};
 
 /// The runtime of the engine: the loader of modules and the parts of
 /// Node.js (`js/script-entry.ts`). It has no code of Tailwind CSS.
+#[cfg(not(tw_host_js))]
 const SCRIPT_JS: &str = include_str!("../assets/script.js");
+/// The engine of the host has no script engine: no runtime for it.
+#[cfg(tw_host_js)]
+const SCRIPT_JS: &str = "throw new Error('This program has no script engine.')";
 
 /// The files of one npm package `tailwindcss`.
 pub trait Package {

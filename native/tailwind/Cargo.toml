@@ -61,6 +61,11 @@ optimize = ["dep:lightningcss", "dep:parcel_sourcemap"]
 # compiles the C files. For wasm32-wasip1 it needs WASI_SDK_PATH: with no
 # wasi-sdk, the program has no JavaScript.
 js = ["dep:serde_json", "dep:cc"]
+# `@plugin` and `@config` in the JavaScript engine of the host: for
+# wasm32-wasip1 in a browser. The functions of the engine are imports of
+# the module "tailwind_js" (js/engine.mjs gives them), and the plugin
+# layer waits for its promises with JS Promise Integration. No C code.
+host-js = ["dep:serde_json"]
 # The build of tailwind.com (scripts/build.sh): the file events of
 # c_src/watch.c are linked into the program. scripts/build.sh compiles the
 # C files of the feature `js` with cosmocc, and build.rs compiles nothing.

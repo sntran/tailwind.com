@@ -209,8 +209,12 @@ The input CSS can also be in the page, as for the Play CDN:
   `@tailwindcss/aspect-ratio`.
 - After each build, the document gets the event `tailwind.com:build`.
 - The program for a page has no JavaScript engine and no optimizer:
-  about 0.75 MB with compression (`tailwind-small.wasm`). A page with
-  `@plugin` or `@config` gets the full program, about 1.8 MB.
+  about 0.77 MB with compression (`tailwind-small.wasm`). The plugins of
+  `@plugin` and `@config` run in the JavaScript engine of the browser,
+  with JS Promise Integration: also ES modules and TypeScript files, but
+  not a module with a top-level `await`. The plugin layer of Tailwind CSS
+  adds about 45 KB. A browser with no JS Promise Integration gets the
+  full program for them, about 1.8 MB.
 - The first build waits for the end of the HTML, and the page stays
   hidden until its first CSS (at most 3 seconds), so it does not show
   with no style. The last CSS of each page stays in `localStorage`: the

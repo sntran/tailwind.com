@@ -635,6 +635,10 @@ impl JsRuntime {
 
 /// Run `applyCompatibilityHooks` of Tailwind CSS on the tree: load the
 /// modules of `@plugin` and `@config`, and register what they define.
+/// The function of the plugin layer for `applyCompatibilityHooks`. The
+/// engine of the host has no `__await`: there, the function is async.
+const COMPAT: &str = if cfg!(tw_host_js) { "__tw_compat_async" } else { "__tw_compat" };
+
 pub fn apply_compatibility_hooks(
     design_system: &mut DesignSystem,
     ast: &mut Vec<AstNode>,
@@ -655,7 +659,7 @@ pub fn apply_compatibility_hooks(
 
     let pointer: *mut DesignSystem = design_system;
     let result =
-        runtime.scope(Access::Setup(pointer), || runtime.engine.call("__tw_compat", &argument)).map_err(|error| runtime.error_from(error))?;
+        runtime.scope(Access::Setup(pointer), || runtime.engine.call_async(COMPAT, &argument)).map_err(|error| runtime.error_from(error))?;
 
     let value: Value = serde_json::from_str(&result.unwrap_or_default()).map_err(|error| Error::new(error.to_string()))?;
     *ast = ast_from_json(value.get("ast").unwrap_or(&Value::Null), &runtime.locs).map_err(Error::new)?;

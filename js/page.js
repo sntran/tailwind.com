@@ -39,8 +39,10 @@
 // - The first build waits for the end of the HTML, so that it has all the
 //   classes. The downloads start at once.
 // - The program is tailwind-small.wasm: no JavaScript engine and no
-//   optimizer, about a third of the size. A page with @plugin or @config
-//   gets the full tailwind.wasm, which has the JavaScript engine.
+//   optimizer, about a third of the size. For @plugin and @config, the
+//   plugins run in the JavaScript engine of the browser (js/engine.mjs),
+//   with JS Promise Integration. A browser with no JS Promise Integration
+//   gets the full tailwind.wasm for them.
 // - The last CSS of each page stays in localStorage. On the next load, it
 //   styles the page at once, and the build replaces it. With no such CSS
 //   and the script in <head>, the page stays hidden until the first CSS
@@ -83,7 +85,8 @@
   const js = found ? new URL(`${found[1]}/js/`, source) : new URL('./', source);
 
   // The program for a page: no JavaScript engine and no optimizer, about a
-  // third of the size. The full program only for @plugin and @config.
+  // third of the size. The full program only for @plugin and @config in a
+  // browser with no JS Promise Integration.
   const small = new URL('../runtime/tailwind-small.wasm', js).href;
   const full = new URL('../runtime/tailwind.wasm', js).href;
   const head = document.head ?? document.documentElement;
@@ -99,6 +102,8 @@
     head.append(link);
   }
   preload('modulepreload', new URL('wasi.mjs', js).href);
+  preload('modulepreload', new URL('engine.mjs', js).href);
+  const promiseIntegration = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
   preload('preload', small, 'fetch');
   const loading = import(new URL('browser.mjs', js).href);
   loading.catch(() => {});
@@ -292,7 +297,7 @@
       input: `${css}@source ${quote(`./${CLASSES}`)};\n`,
       files: { ...files, [CLASSES]: [...classes].join('\n') },
       env: { NO_COLOR: '1' },
-      wasm: /@(?:plugin|config)\b/.test(key) ? full : small,
+      wasm: !promiseIntegration && /@(?:plugin|config)\b/.test(key) ? full : small,
     });
     // The program writes its version and its time to stderr. Show only the
     // other lines: the warnings and the errors.
@@ -340,7 +345,8 @@
     for (const record of records) {
       if (record.type === 'attributes') return schedule();
       for (const node of record.addedNodes) {
-        if (node !== output && node.nodeType === Node.ELEMENT_NODE) return schedule();
+        // The realm of the JavaScript engine is a hidden <iframe>.
+        if (node !== output && node.nodeType === Node.ELEMENT_NODE && !node.hasAttribute('data-tailwind-com')) return schedule();
       }
       for (const node of record.removedNodes) {
         if (node.nodeType === Node.ELEMENT_NODE && node.matches(`${LINKS}, ${STYLES}`)) return schedule();

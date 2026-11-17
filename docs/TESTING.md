@@ -395,7 +395,14 @@ server with the paths of jsDelivr:
   shows with the first CSS. A reload: the CSS of the last build styles
   the page while the HTML is parsed.
 - A page with no `@plugin` gets only `tailwind-small.wasm`, and its CSS
-  is the same as the CSS of the browser build of Tailwind CSS.
+  is the same as the CSS of the browser build of Tailwind CSS. A page
+  with plugins gets only `tailwind-small.wasm` too: its plugins run in
+  the JavaScript engine of Chromium.
+- `--cases DIR` (default `tests/upstream/cli-js`): each recorded case
+  with JavaScript (plugins, configs, ES modules, TypeScript, errors) runs
+  with `tailwind-small.wasm` and `runWasm` in Chromium, and must give the
+  output and the status of the official program, and the lines of its
+  error output. The cases with `--minify` are not for the small program.
 - With `--official FILE`: on a page with `@theme`, `@utility`, `@apply`
   and variants, the CSS of `js/page.js` is the same, byte for byte, as
   the CSS of the browser build of Tailwind CSS (`@tailwindcss/browser` of

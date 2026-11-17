@@ -28,8 +28,16 @@ out=$root/runtime
 mkdir -p "$out"
 cp "$wasm" "$out/tailwind.wasm"
 # The program with no JavaScript engine and no optimizer, for a page
-# (js/page.js): the file next to TAILWIND_WASM.
+# (js/page.js): the file next to TAILWIND_WASM. Its plugins run in the
+# JavaScript engine of the browser (js/engine.mjs), with the JavaScript
+# files of the program: the plugin layer, the TypeScript transform and the
+# three plugins of the standalone program.
 cp "$(dirname "$wasm")/tailwind-small.wasm" "$out/tailwind-small.wasm"
+assets=$root/native/tailwind/assets
+rm -rf "$out/plugins"
+mkdir -p "$out/plugins"
+cp "$assets/compat.js" "$assets/typescript.js" "$out/"
+cp "$assets"/plugins/*.js "$out/plugins/"
 printf '{"version": "%s", "tag": "%s", "tailwindcss": "%s", "sha256": "%s"}\n' \
     "$version" "$tag" "$TAILWINDCSS_VERSION" "$sha" > "$out/release.json"
 echo "$0: wrote $out (package $version, release $tag, Tailwind CSS $TAILWINDCSS_VERSION)"

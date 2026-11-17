@@ -30,10 +30,18 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   most 3 seconds). The last CSS of each page stays in `localStorage`, so
   the next load is styled at once. The downloads start at once.
 - `tailwind-small.wasm`: the program with no JavaScript engine and no
-  optimizer (the Cargo feature `program`), 0.73 MB with brotli, and the
-  full program is 1.78 MB. The page script uses it, and gets the full
-  program only for `@plugin` and `@config`. With a network of 20 Mbps,
-  the first visit shows the styled page in about 0.5 s.
+  optimizer (the Cargo features `program` and `host-js`), 0.77 MB with
+  brotli, and the full program is 1.78 MB. The page script uses it. With
+  a network of 20 Mbps, the first visit shows the styled page in about
+  0.5 s.
+- With `tailwind-small.wasm`, the plugins of `@plugin` and `@config` run
+  in the JavaScript engine of the browser, with JS Promise Integration
+  (`js/engine.mjs`): the program has no QuickJS, and the npm package has
+  the plugin layer as a file. The 99 recorded cases with JavaScript give
+  the output of the official program in Chromium. A browser with no JS
+  Promise Integration gets the full program for them. The plugin layer
+  has `__tw_compat_async`, and the TypeScript transform can also change
+  an ES module to CommonJS.
 
 ## 0.4.0 - 2026-11-17
 

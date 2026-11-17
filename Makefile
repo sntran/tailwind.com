@@ -34,7 +34,7 @@ wasm:
 	cargo build --release --target wasm32-wasip1
 	mkdir -p $(BUILD)
 	cp target/wasm32-wasip1/release/tailwind.wasm $(BUILD)/tailwind.wasm
-	CARGO_TARGET_DIR=target/small cargo build --release --target wasm32-wasip1 -p tailwind --no-default-features --features program
+	CARGO_TARGET_DIR=target/small cargo build --release --target wasm32-wasip1 -p tailwind --no-default-features --features program,host-js
 	cp target/small/wasm32-wasip1/release/tailwind.wasm $(BUILD)/tailwind-small.wasm
 
 test: test-rust test-cli tlc test-mix

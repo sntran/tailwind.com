@@ -11,17 +11,27 @@ use std::cell::RefCell;
 
 /// The TypeScript transform (Sucrase). The engine evaluates it at the
 /// first TypeScript module (see `js/typescript.ts`).
+#[cfg(not(tw_host_js))]
 const TYPESCRIPT_JS: &str = include_str!("../../../assets/typescript.js");
 
 /// The plugins that the standalone program of Tailwind CSS has in its
 /// file, each one as one CommonJS file (see `js/modules.ts`).
+#[cfg(not(tw_host_js))]
 const PLUGINS: [(&str, &str); 3] = [
     ("@tailwindcss/forms", include_str!("../../../assets/plugins/forms.js")),
     ("@tailwindcss/typography", include_str!("../../../assets/plugins/typography.js")),
     ("@tailwindcss/aspect-ratio", include_str!("../../../assets/plugins/aspect-ratio.js")),
 ];
 
+/// The engine of the host has these files itself (js/engine.mjs): they are
+/// not in the program.
+#[cfg(tw_host_js)]
+pub(crate) fn asset(_name: &str) -> Option<&'static str> {
+    None
+}
+
 /// A JavaScript file of the program, by its name.
+#[cfg(not(tw_host_js))]
 pub(crate) fn asset(name: &str) -> Option<&'static str> {
     if name == "typescript" {
         return Some(TYPESCRIPT_JS);

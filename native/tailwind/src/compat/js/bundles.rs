@@ -15,8 +15,13 @@ use crate::patch::{self, Entry, Patch};
 use crate::version::Version;
 use std::borrow::Cow;
 
-/// The plugin layer of the version of the port.
+/// The plugin layer of the version of the port. The engine of the host has
+/// it itself (js/engine.mjs): the program evaluates an empty file with the
+/// name `tailwindcss/compat.js`, and the host evaluates its copy.
+#[cfg(not(tw_host_js))]
 const COMPAT_JS: &str = include_str!("../../../assets/compat.js");
+#[cfg(tw_host_js)]
+const COMPAT_JS: &str = "";
 
 /// The name of the file in a patch.
 const FILE: &str = "compat.js";
@@ -28,6 +33,10 @@ include!(concat!(env!("OUT_DIR"), "/compat_patches.rs"));
 pub fn compat_js(version: Version) -> Option<Cow<'static, str>> {
     if version == Version::NATIVE {
         return Some(Cow::Borrowed(COMPAT_JS));
+    }
+    // The engine of the host has only the version of the port.
+    if cfg!(tw_host_js) {
+        return None;
     }
     String::from_utf8(bytes(&version.to_string(), 0)?).ok().map(Cow::Owned)
 }
