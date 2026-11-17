@@ -82,7 +82,9 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   nested rules or more than 10,000 nested functions in a value or a
   selector. The official program (Node.js 22) gives this error for 1,737
   nested rules. A deep `var()` works, as in the official program. The
-  program and the NIF run on a thread with a stack of 256 MiB.
+  program and the NIF run on a thread with a stack of 256 MiB. The
+  script engine gives the same error: QuickJS says `InternalError: stack
+  overflow`, and the program gives the text of V8.
 - `--minify` and `--optimize` with an input deeper than 10,000 levels:
   Lightning CSS gives its warning "Overflowed the maximum nesting depth"
   for a declaration, as for the official program, and a selector or an

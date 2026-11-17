@@ -331,6 +331,12 @@ fn finish(status: c_int, out: *mut c_char, stack: *mut c_char) -> Result<Option<
             None => (None, None),
         };
         let message = out.unwrap_or_else(|| "JavaScript exception".to_string());
+        // A recursion that is too deep: QuickJS gives `InternalError: stack
+        // overflow`, and V8 (the official program) gives `RangeError:
+        // Maximum call stack size exceeded`.
+        if name.as_deref() == Some("InternalError") && message == "stack overflow" {
+            return Err(JsError { name: Some("RangeError".to_string()), message: "Maximum call stack size exceeded".to_string(), stack });
+        }
         Err(JsError { name, message: v8_message(&message), stack })
     }
 }
@@ -602,7 +608,9 @@ mod tests {
     fn stops_at_the_stack_limit() {
         let js = Engine::new(Limits { memory: 0, stack: 256 * 1024 }, Box::new(|_, _| Ok(None))).unwrap();
         let error = js.eval("function f() { return f() + 1 }\nf()", "test.js").unwrap_err();
-        assert!(error.message.contains("stack overflow"), "{}", error.message);
+        // The error of V8, as the official program gives it.
+        assert_eq!(error.name.as_deref(), Some("RangeError"));
+        assert_eq!(error.message, "Maximum call stack size exceeded");
     }
 
     #[test]
