@@ -33,11 +33,11 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
 - `mix format` sorts the classes of HEEx templates (`.heex` files and
   `~H`), as the official Prettier plugin of Tailwind CSS does, with the
   theme, plugins and version of the project: the plugin
-  `Tailwind.Formatter`, before `Phoenix.LiveView.HTMLFormatter`. An
-  Erlang project uses `tailwind_sorter`, and other tools use
-  `tailwind.com --sort-classes`. See `docs/FORMATTER.md`.
-- A run of the NIF can have a standard input: `tailwind_nif:start/2`,
-  `input/2` and `close/1`.
+  `Tailwind.Formatter`, before `Phoenix.LiveView.HTMLFormatter`. The
+  order comes from a normal build of the profile, so the program has no
+  new option. See `docs/FORMATTER.md`.
+- The library crate has the order of classes of a design system:
+  `DesignSystem::get_class_order`, as `getClassOrder` of Tailwind CSS.
 
 ### Fixed
 

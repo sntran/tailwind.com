@@ -343,7 +343,7 @@ runs it in the browser, with a small WASI host in JavaScript
 | [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) | The time, the memory and the size, against the official programs. |
 | [`docs/SITE.md`](docs/SITE.md) | The site on GitHub Pages: `tailwind.wasm` in the browser, with each version. |
 | [`docs/MIXINS.md`](docs/MIXINS.md) | CSS functions, mixins, conditions, tree counting and math (`@function`, `@mixin`, `if()`, `@when`, `sibling-index()`, `round()`, `progress()`): the optimizer lowers them for the browsers of Tailwind CSS. |
-| [`docs/FORMATTER.md`](docs/FORMATTER.md) | The sort of classes of templates, as the Prettier plugin of Tailwind CSS: `mix format`, `tailwind_sorter` and `--sort-classes`. |
+| [`docs/FORMATTER.md`](docs/FORMATTER.md) | The sort of classes of HEEx templates with `mix format`, as the Prettier plugin of Tailwind CSS does. |
 | [`docs/NIF.md`](docs/NIF.md) | The program as a NIF in the Erlang VM, for a builder such as the builder of BEAM.com. |
 | [`docs/SYNC.md`](docs/SYNC.md) | Move to a new version of Tailwind CSS. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What comes next. |

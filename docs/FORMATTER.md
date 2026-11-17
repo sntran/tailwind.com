@@ -1,24 +1,25 @@
 # The sort of classes
 
-`tailwind.com` sorts the classes of templates as the official Prettier
-plugin of Tailwind CSS (`prettier-plugin-tailwindcss`) sorts them:
+`mix format` can sort the classes of HEEx templates as the official
+Prettier plugin of Tailwind CSS (`prettier-plugin-tailwindcss`) sorts
+them:
 
 - **The order:** the order of the rules of Tailwind CSS in the output. A
-  class that is not a class of Tailwind CSS comes first, and `...` (or
-  `…`) comes last.
+  class with no rule of Tailwind CSS (`group`, `peer`, a class of the
+  CSS of the project) comes first, and `...` (or `…`) comes last.
 - **The design system of the project:** its theme, its utilities and
-  variants, its plugins, its prefix, and its version of Tailwind CSS. A
-  project on Tailwind CSS 4.1.0 gets the order of 4.1.0.
+  variants, its plugins (daisyUI), its prefix, and its version of
+  Tailwind CSS.
 - **The whitespace:** one space between the classes, and none at the
   start or at the end.
 - **The duplicates:** a class of Tailwind CSS that is there two times
   goes. A class that is not a class of Tailwind CSS stays.
 
-The sort does not change the CSS: the compiler sorts the rules itself,
-and `class="p-4 flex"` gives the same CSS as `class="flex p-4"`. The sort
-changes only the templates.
+The sort changes only the templates. The CSS stays the same: the
+compiler sorts the rules itself, and `class="p-4 flex"` gives the same
+CSS as `class="flex p-4"`.
 
-## Phoenix: `mix format`
+## Phoenix
 
 `Tailwind.Formatter` is a plugin of `mix format`. In `.formatter.exs`,
 put it before `Phoenix.LiveView.HTMLFormatter`:
@@ -36,18 +37,18 @@ Then `mix format` sorts the classes of the `.heex` files and of the
 `~H` sigils:
 
 ```heex
-<div class="p-4 shadow flex bg-brand rounded-lg hover:bg-white items-center">
+<div class="p-4 shadow flex bg-brand rounded-lg hover:bg-white items-center group card">
   <span class={["font-bold text-lg", @active && "underline text-red-500"]}>{@title}</span>
-  <p class={"mt-2 #{@size} text-sm text-gray-600 block"}>Body</p>
+  <p class={"mt-2 #{@size} text-sm text-gray-600 block group-hover:underline"}>Body</p>
 </div>
 ```
 
 becomes
 
 ```heex
-<div class="flex items-center rounded-lg bg-brand p-4 shadow hover:bg-white">
+<div class="group card flex items-center rounded-lg bg-brand p-4 shadow hover:bg-white">
   <span class={["text-lg font-bold", @active && "text-red-500 underline"]}>{@title}</span>
-  <p class={"mt-2 #{@size} block text-sm text-gray-600"}>Body</p>
+  <p class={"mt-2 #{@size} block text-sm text-gray-600 group-hover:underline"}>Body</p>
 </div>
 ```
 
@@ -68,76 +69,69 @@ The options are in the key `:tailwind` of `.formatter.exs`:
 
 | Option | Default | What |
 |---|---|---|
-| `:profile` | the only profile | The profile of the configuration of `:tailwind`: its `--input`, `--cwd`, `cd` and `env`. With more than one profile, give it. |
+| `:profile` | the only profile | The profile of the configuration of `:tailwind`: its `--input`, `--cwd`, `cd`, `env` and the version. With more than one profile, give it. |
 | `:attributes` | `["class"]` | The names of the attributes to sort, for example `["class", "input_class"]`. |
 | `:preserve_whitespace` | `false` | Keep the whitespace between the classes. |
 | `:preserve_duplicates` | `false` | Keep a second copy of a class. |
 
-The plugin needs `tailwind.com` (`mix tailwind.install`) or the NIF. It
-starts `tailwind.com --sort-classes` one time for a run of `mix format`,
-and that run loads the design system one time, with the plugins of the
-stylesheet. Each file is then one request. In a test project with
-Phoenix LiveView, `mix format` with the two plugins took 0.7 s.
+## How the plugin gets the order
 
-## Erlang: `tailwind_sorter`
+The plugin uses no option of the program that the official program does
+not have:
 
-`tailwind_sorter` is a `gen_server` for a profile of the configuration:
+1. It builds the CSS of the profile one time for a run of `mix format`:
+   `tailwind.com --input=… --cwd=… --output=TEMPORARY_FILE`, with the
+   `cd`, the `env` and the version of the profile, as `mix tailwind`
+   does (as a NIF when the project has one). The other arguments of the
+   profile, as `--minify` and `--watch`, are not for this build.
+2. It reads each style rule of the layer `utilities` of the CSS, at any
+   depth (the `@media` of a variant is around the rule). The class of a
+   rule is the longest class of its selector: the selector of
+   `group-hover:underline` also has `.group`, but
+   `.group-hover\:underline` has the text of `.group` and more.
+3. The place of a class is the place of its first rule. This is the
+   order of `getClassOrder` of Tailwind CSS, which the Prettier plugin
+   uses.
+4. In Elixir, the plugin sorts each value as `sortClasses`,
+   `sortClassList` and the sort of a template literal of the Prettier
+   plugin do.
 
-```erlang
-{ok, Sorter} = tailwind_sorter:start_link(default),
-#{<<"attributes">> := [<<"flex p-4">>]} =
-    tailwind_sorter:sort(Sorter, #{<<"attributes">> => [<<"p-4 flex">>]}).
-```
+The order stays for 10 seconds: one run of `mix format` builds one time,
+and an editor that formats again later gets the new classes.
 
-It runs the program as a NIF when `tailwind:nif()` is true, else as a
-port. More than one process can call one sorter: it answers in the
-sequence of the calls.
+**The limit:** the build sees the files of the `@source` of the
+stylesheet, as they are on the disk. A class that the build does not see
+(in a file that is not a source, or in an editor buffer that is not
+saved) has no place, and comes first. Such a class also has no CSS in
+the program until the build sees it.
 
-## The program: `--sort-classes`
-
-```sh
-tailwind.com --sort-classes -i assets/css/app.css
-```
-
-The program loads the design system of the input, and then reads one
-request on each line of its standard input, and writes one answer on
-each line of its standard output, until the end of the input. A request
-is a JSON object, and each part is optional:
-
-```json
-{"attributes": ["py-3 p-1 px-3"],
- "templates": [["px-3 ", " p-1 m-2"]],
- "lists": [["py-3", "p-1", "p-1"]],
- "preserveWhitespace": false,
- "preserveDuplicates": false}
-```
-
-| Part | What | In the plugin |
-|---|---|---|
-| `attributes` | The values of `class` attributes. | `sortClassAttributes` of its sorter API (`prettier-plugin-tailwindcss/sorter`) |
-| `templates` | For each string with interpolations, its fixed parts: `"px-3 #{@a} p-1"` has `"px-3 "` and `" p-1"`. | `sortTemplateLiteral` |
-| `lists` | Lists of classes. | `sortClassLists` of its sorter API |
-
-The answer has the same parts, sorted:
-
-```json
-{"attributes":["p-1 px-3 py-3"],"templates":[["px-3 "," m-2 p-1"]],"lists":[["p-1","py-3"]]}
-```
-
-A request that is not valid gets `{"error": "…"}`. The sort needs the
-Rust compiler: with the script engine (`TAILWIND_COM_ENGINE=script`),
-the program gives an error.
+In a Mix project with Phoenix LiveView and no plugin of Tailwind CSS,
+`mix format` with `Tailwind.Formatter` and
+`Phoenix.LiveView.HTMLFormatter` took about 0.95 s, and 0.75 s without
+`Tailwind.Formatter`. The build of a Phoenix 1.8 project with daisyUI
+takes about 120 ms, and the read of its CSS (78 KB) in Elixir about 3
+ms.
 
 ## The tests
 
-- `native/tailwind/tests/class_order.rs` compares the order of each class
-  (`getClassOrder` of the design system) with the record of the official
-  compiler: 250 lists on four stylesheets
-  (`tests/upstream/tools/gen-class-order.mjs`).
-- The same file compares the sort with the record of the real Prettier
-  plugin 0.8.1: 486 values of `class` attributes (with each option), 120
-  lists and 80 template literals
-  (`tests/upstream/tools/gen-class-sort.mjs`).
-- `tests/tailwind_formatter_test.exs` tests the plugin of `mix format`,
-  and `tests/tailwind_sorter_test.exs` the `gen_server`, with the program
-  and, in the job `nif` of CI, with the NIF.
+`tests/tailwind_formatter_test.exs`, with the program and, in the job
+`nif` of CI, with the NIF:
+
+- The order of a build against the record of the official compiler
+  (`native/tailwind/tests/fixtures/class_order.json`, from
+  `tests/upstream/tools/gen-class-order.mjs`): each list of a stylesheet
+  that builds has the same sort, except the lists with `[--:1]` or
+  `w-(--)`, two candidates that the scanner does not extract from a
+  file.
+- The sort against the record of the real Prettier plugin 0.8.1
+  (`native/tailwind/tests/fixtures/class_sort.json`, from
+  `tests/upstream/tools/gen-class-sort.mjs`): 486 values of `class`
+  attributes (with each option), 120 lists and 80 template literals have
+  the same result.
+- The forms of the templates, a `~H` sigil through the formatter of
+  `mix format`, and a build that fails.
+
+The library crate also has the order of a design system:
+`DesignSystem::get_class_order` (`native/tailwind/src/sort.rs`, the port
+of `sort.ts`), with a test against the same record
+(`native/tailwind/tests/class_order.rs`).
