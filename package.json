@@ -1,7 +1,7 @@
 {
   "name": "tailwind.com",
   "version": "0.4.0",
-  "description": "Tailwind CSS in one executable file, with no Node.js at run time: npx tailwind.com, and the same compiler as WebAssembly",
+  "description": "Tailwind CSS in one executable file, with no Node.js at run time: npx tailwind.com, and the same compiler as WebAssembly, also in the browser",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -15,8 +15,13 @@
   "bin": {
     "tailwind.com": "js/tailwind.com.mjs"
   },
+  "jsdelivr": "./js/page.js",
+  "unpkg": "./js/page.js",
   "exports": {
-    ".": "./js/node.mjs",
+    ".": {
+      "browser": "./js/browser.mjs",
+      "default": "./js/node.mjs"
+    },
     "./tailwind.wasm": "./runtime/tailwind.wasm",
     "./package.json": "./package.json"
   },

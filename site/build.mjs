@@ -14,7 +14,7 @@
 //   --out DIR        the site (default build/site)
 //
 // tailwind.wasm also builds the CSS of the page, in Node.js, with the WASI
-// host of the page (wasi.mjs).
+// host of the page (js/wasi.mjs, the host of the npm package in a browser).
 //
 // The site has:
 //   index.html, app.mjs, worker.mjs, wasi.mjs, diff.mjs  the page
@@ -32,7 +32,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { examples } from './examples.mjs'
 import { programs } from './releases.mjs'
-import { Files, run } from './wasi.mjs'
+import { Files, run } from '../js/wasi.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
@@ -183,7 +183,8 @@ walkStore(store, '')
 
 fs.rmSync(opts.out, { recursive: true, force: true })
 fs.mkdirSync(opts.out, { recursive: true })
-for (const name of ['index.html', 'app.mjs', 'worker.mjs', 'wasi.mjs', 'diff.mjs']) fs.copyFileSync(path.join(here, name), path.join(opts.out, name))
+for (const name of ['index.html', 'app.mjs', 'worker.mjs', 'diff.mjs']) fs.copyFileSync(path.join(here, name), path.join(opts.out, name))
+fs.copyFileSync(path.join(root, 'js/wasi.mjs'), path.join(opts.out, 'wasi.mjs'))
 fs.copyFileSync(opts.wasm, path.join(opts.out, 'tailwind.wasm'))
 fs.writeFileSync(path.join(opts.out, 'packages.bin'), pack(store))
 const data = { upstream, versions, examples, releases: await releases(), programs: programs(opts.out, opts.releases) }

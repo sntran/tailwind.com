@@ -160,6 +160,43 @@ const { status, stdout, stderr } = await runWasm(['-i', 'app.css'], { cwd: 'proj
 `import wasm from 'tailwind.com/tailwind.wasm'` gives the module itself,
 for another WASI host.
 
+### In the browser
+
+On a page, the package works as the Play CDN of Tailwind CSS: it builds
+the CSS of the page from its classes, and builds again when they change.
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.4"></script>
+<style type="text/tailwindcss">
+  @plugin "@tailwindcss/typography";
+  @theme { --color-brand: #0d9488; }
+</style>
+```
+
+- The CSS is the same as the CSS of the browser build of Tailwind CSS
+  (`@tailwindcss/browser`). A test in CI compares the two.
+- The plugins in the program work with `@plugin`:
+  `@tailwindcss/typography`, `@tailwindcss/forms` and
+  `@tailwindcss/aspect-ratio`.
+- After each build, the document gets the event `tailwind.com:build`.
+- The program is large: about 2 MB with compression, at the first load.
+  A build takes about 15 ms. Use it for development, prototypes and
+  editors, not for a production site.
+
+In a bundler (Vite, webpack, esbuild) and in a Web Worker, the condition
+`browser` of the package gives `runWasm` with the files in memory:
+
+```js
+import { runWasm } from 'tailwind.com';
+
+const { status, stdout } = await runWasm(['-i', 'app.css', '--minify'], {
+  files: { 'app.css': '@import "tailwindcss";', 'index.html': html },
+});
+```
+
+With no `-o`, the CSS is in `stdout`. A bundler copies `tailwind.wasm`
+with the files of the site; the option `wasm` gives another URL.
+
 Each release also publishes the package to GitHub Packages, with the
 name `@sntran/tailwind.com` (registry `https://npm.pkg.github.com`), and
 holds the package file itself.
@@ -329,7 +366,8 @@ The release job publishes it to crates.io.
 WASI file system. It has the same JavaScript engine for `@plugin` and
 `@config`, with TypeScript and the three plugins in the file. The site
 runs it in the browser, with a small WASI host in JavaScript
-(`site/wasi.mjs`, [`docs/SITE.md`](docs/SITE.md)).
+(`js/wasi.mjs`, [`docs/SITE.md`](docs/SITE.md)). The npm package uses
+the same host in the browser.
 
 ## Documentation
 

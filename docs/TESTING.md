@@ -369,11 +369,26 @@ first run of the recorded projects found the other one: the sort (see
 ## The site
 
 `tests/site/browser.mjs` runs `tailwind.wasm` in Chromium with the WASI
-host of the site (`site/wasi.mjs`), and compares each result with
+host of the site (`js/wasi.mjs`), and compares each result with
 `node:wasi` on a real directory. `tests/site/page.mjs` opens the page of
 `site/build.mjs` in Chromium, with each example and each recorded case.
 The job `site` of `.github/workflows/build.yml` runs the two tests. See
 [`SITE.md`](SITE.md).
+
+`tests/npm-browser.mjs` runs the npm package in Chromium, from a local
+server with the paths of jsDelivr:
+
+- `js/page.js`, the default file on a CDN: the first build, a new
+  element, a new class, a change of the stylesheet, and a change with no
+  new class (no build). A class that goes from the page stays in the CSS.
+- With `--official FILE`: on a page with `@theme`, `@utility`, `@apply`
+  and variants, the CSS of `js/page.js` is the same, byte for byte, as
+  the CSS of the browser build of Tailwind CSS (`@tailwindcss/browser` of
+  the version of `UPSTREAM`).
+- `js/browser.mjs`, the condition `browser`: `runWasm` in a module and in
+  a Web Worker, and the URL of `tailwind.wasm` from the URLs of the CDNs.
+
+The job `site` runs it.
 
 ## Benchmarks
 

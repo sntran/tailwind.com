@@ -43,6 +43,16 @@ CSS, and `mix format` sorts the classes of HEEx templates.
 - The library crate has the order of classes of a design system:
   `DesignSystem::get_class_order`, as `getClassOrder` of Tailwind CSS.
 
+- The npm package works in the browser. On a CDN, its default file works
+  as the Play CDN of Tailwind CSS:
+  `<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.4"></script>`
+  with `<style type="text/tailwindcss">` builds the CSS of the page, and
+  builds again when its classes change. The CSS is the same as the CSS
+  of `@tailwindcss/browser`, and the plugins in the program work. In a
+  bundler or a Web Worker, the condition `browser` of `package.json`
+  gives `runWasm` with the files in memory. The WASI host of the site is
+  now `js/wasi.mjs`.
+
 ### Fixed
 
 - `@apply --m(a, b)`, a mixin with a space in its arguments, is a mixin.

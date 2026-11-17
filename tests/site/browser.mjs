@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // tailwind.wasm in Chromium, with the WASI host of the site
-// (site/wasi.mjs) and its file system in memory. Each scenario of
+// (js/wasi.mjs) and its file system in memory. Each scenario of
 // tests/site/scenarios.mjs runs in the browser and in Node.js (node:wasi
 // on a real directory), and the two results must be the same.
 //
@@ -86,7 +86,7 @@ for (const rel of walk(opts.packages)) packages[rel] = fs.readFileSync(path.join
 
 const page = `<!doctype html><meta charset="utf-8"><title>tailwind.wasm</title>
 <script type="module">
-import { Files, run } from '/site/wasi.mjs'
+import { Files, run } from '/js/wasi.mjs'
 import { project, scenarios } from '/tests/site/scenarios.mjs'
 window.test = async (runs) => {
   const times = {}
@@ -125,7 +125,7 @@ const server = http.createServer((request, response) => {
   if (url === '/') body = page
   else if (url === '/tailwind.wasm') body = fs.readFileSync(opts.wasm)
   else if (url === '/packages.json') body = JSON.stringify(packages)
-  else if (url === '/site/wasi.mjs' || url === '/tests/site/scenarios.mjs') body = fs.readFileSync(path.join(root, url))
+  else if (url === '/js/wasi.mjs' || url === '/tests/site/scenarios.mjs') body = fs.readFileSync(path.join(root, url))
   if (body === undefined) {
     response.writeHead(404).end()
     return
