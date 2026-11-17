@@ -17,11 +17,17 @@
 // - A <link rel="stylesheet" type="text/tailwindcss">: the browser does
 //   not apply a stylesheet of this type. The script gets the file, and the
 //   files of its @import, @reference, @plugin and @config with a path
-//   ("./", "../" or "/"). The files go in memory at the path of their URL,
-//   so the paths in the CSS find them as on the disk. A change of the
-//   attribute href (a live reload) gets the files again.
-// - A <style type="text/tailwindcss">: its text. With no @import in the
-//   input, `@import "tailwindcss";` comes first.
+//   ("./", "../" or "/"), and the files that a JavaScript or TypeScript
+//   file of a plugin imports with a path. A path with no extension tries
+//   the extensions, as Node.js does. The files go in memory at the path of
+//   their URL, so the paths in the CSS find them as on the disk.
+// - A <style type="text/tailwindcss">: its text, as a file in the
+//   directory of the page. Its paths find the files from the URL of the
+//   page. With no <link> and no @import, `@import "tailwindcss";` comes
+//   first.
+// - Each second, while the page is visible, the script gets the files of
+//   this site again (a server with ETag or Last-Modified answers 304), and
+//   builds again when one changes. A change of href gets the new files.
 // - The classes are the classes of each element of the page. A class that
 //   goes from the page stays in the CSS, as in the browser build.
 // - The output CSS goes in a <style> after the first such <link>, so it
@@ -48,8 +54,15 @@
   const STYLES = `style[type="${TYPE}"]`;
   // The file of the classes of the page, in the root of the project.
   const CLASSES = 'tailwind.com.classes.html';
-  // The references to other files in a CSS file.
-  const REFERENCE = /@(?:import|reference|plugin|config)\s+(?:url\(\s*)?(["'])(.*?)\1/g;
+  // The references to other files in a CSS file, and in a JavaScript file.
+  const CSS_REFERENCE = /@(?:import|reference|plugin|config)\s+(?:url\(\s*)?(["'])(.*?)\1/g;
+  const JS_REFERENCE = /(?:\bfrom|\bimport|\brequire\s*\(|\bimport\s*\()\s*(["'])((?:\.{1,2})?\/[^"']*)\1/g;
+  const JS = /\.[cm]?[jt]s$/i;
+  // The files that a path with no extension can be, as Node.js resolves
+  // it: a CSS reference, then a reference of JavaScript.
+  const CSS_FILES = ['.css', '/index.css'];
+  const JS_FILES = ['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '/index.js', '/index.cjs', '/index.mjs', '/index.ts'];
+  const POLL_MS = 1000;
 
   const script = document.currentScript;
   const source = new URL(script?.src || location.href);
@@ -60,56 +73,130 @@
 
   const output = document.createElement('style');
   const classes = new Set();
-  // The files of the links: { key, paths, files }.
-  let linked = { key: null, paths: [], files: {} };
+  // The text of each file that the script got, by URL.
+  const texts = new Map();
+  // The URL of the file of a reference with no extension, by the URL of
+  // the reference.
+  const resolved = new Map();
+  // The URLs of the files of the last build.
+  let used = new Set();
+  // One more for each change of a file.
+  let version = 0;
   let input = null;
   let api = null;
   let queue = Promise.resolve();
   let pending = false;
 
   // The path of a URL in the project: the path of the URL.
-  const pathOf = (url) => decodeURIComponent(url.pathname);
+  const pathOf = (url) => decodeURIComponent(new URL(url).pathname);
   const quote = (text) => `"${text.replace(/[\\"]/g, '\\$&')}"`;
 
-  // Get a file and, for CSS, the files of its references with a path.
-  async function load(url, files) {
-    const path = pathOf(url);
-    if (path.slice(1) in files) return;
-    files[path.slice(1)] = '';
+  async function get(url) {
     const response = await fetch(url, { cache: 'no-cache' });
-    if (!response.ok) throw new Error(`${url.href}: ${response.status} ${response.statusText}`);
-    const text = await response.text();
-    files[path.slice(1)] = text;
-    if (!/\.css$/i.test(path)) return;
+    // A server for a single page can give its HTML for each path.
+    if (!response.ok || response.headers.get('content-type')?.startsWith('text/html')) return null;
+    return response.text();
+  }
+
+  // The URL of the file of a reference: the URL itself when it has an
+  // extension, else the first file that is there, as Node.js resolves it.
+  async function resolve(url, kind) {
+    const path = new URL(url).pathname;
+    if (/\.[^./]+$/.test(path)) return url;
+    if (!resolved.has(url)) {
+      for (const suffix of kind === 'css' ? CSS_FILES : JS_FILES) {
+        const candidate = new URL(url);
+        candidate.pathname = path.replace(/\/$/, '') + suffix;
+        const text = await get(candidate.href);
+        if (text !== null) {
+          texts.set(candidate.href, text);
+          resolved.set(url, candidate.href);
+          break;
+        }
+      }
+    }
+    if (!resolved.has(url)) throw new Error(`${url}: no such file`);
+    return resolved.get(url);
+  }
+
+  // Put a file and the files of its references in `files`.
+  async function load(url, kind, files) {
+    url = await resolve(url, kind);
+    const path = pathOf(url).slice(1);
+    if (path in files) return;
+    files[path] = '';
+    used.add(url);
+    if (!texts.has(url)) {
+      const text = await get(url);
+      if (text === null) throw new Error(`${url}: no such file`);
+      texts.set(url, text);
+    }
+    files[path] = texts.get(url);
+    await references(files[path], url, path, files);
+  }
+
+  // Load the files of the references of a text with a path.
+  async function references(text, url, path, files) {
     const loads = [];
-    for (const [, , target] of text.matchAll(REFERENCE)) {
-      if (/^(\.{1,2})?\//.test(target)) loads.push(load(new URL(target, url), files));
+    if (/\.css$/i.test(path)) {
+      for (const [whole, , target] of text.matchAll(CSS_REFERENCE)) {
+        const kind = /^@(?:import|reference)/.test(whole) ? 'css' : 'js';
+        if (/^(\.{1,2})?\//.test(target)) loads.push(load(new URL(target, url).href, kind, files));
+      }
+    } else if (JS.test(path)) {
+      for (const [, , target] of text.matchAll(JS_REFERENCE)) loads.push(load(new URL(target, url).href, 'js', files));
     }
     await Promise.all(loads);
   }
 
-  // The files of the links of the page. They load again when the list of
-  // the URLs changes.
-  async function links() {
-    const urls = [...document.querySelectorAll(LINKS)].map((link) => new URL(link.getAttribute('href'), document.baseURI));
-    const key = urls.map((url) => url.href).join('\n');
-    if (key !== linked.key) {
-      const files = {};
-      await Promise.all(urls.map((url) => load(url, files)));
-      linked = { key, paths: urls.map(pathOf), files };
+  // The files of the project and the input CSS: an @import of each link,
+  // then of the text of each <style>, as a file in the directory of the
+  // page.
+  async function project() {
+    used = new Set();
+    const files = {};
+    const imports = [];
+    for (const link of document.querySelectorAll(LINKS)) {
+      const url = new URL(link.getAttribute('href'), document.baseURI).href;
+      await load(url, 'css', files);
+      imports.push(pathOf(await resolve(url, 'css')));
     }
-    return linked;
+    let text = '';
+    for (const [i, style] of [...document.querySelectorAll(STYLES)].entries()) {
+      watchStyle(style);
+      const url = new URL(`tailwind.com.style.${i}.css`, document.baseURI).href;
+      const path = pathOf(url);
+      files[path.slice(1)] = style.textContent;
+      text += style.textContent;
+      await references(style.textContent, url, path, files);
+      imports.push(path);
+    }
+    let css = imports.map((path) => `@import ${quote(`.${path}`)};\n`).join('');
+    if (!document.querySelector(LINKS) && !text.includes('@import')) css = `@import "tailwindcss";\n${css}`;
+    // Forget the files that the page does not use now.
+    for (const url of texts.keys()) if (!used.has(url)) texts.delete(url);
+    return { css, files };
   }
 
-  // The input CSS: an @import of each link, then the text of each <style>.
-  function stylesheet(paths) {
-    let css = paths.map((path) => `@import ${quote(`.${path}`)};\n`).join('');
-    for (const style of document.querySelectorAll(STYLES)) {
-      watchStyle(style);
-      css += `${style.textContent}\n`;
+  // Get the files of this site again. A change builds again.
+  async function poll() {
+    if (document.visibilityState === 'visible') {
+      for (const url of [...texts.keys()]) {
+        if (new URL(url).origin !== location.origin) continue;
+        const text = await get(url).catch(() => null);
+        if (text !== null && texts.has(url) && text !== texts.get(url)) {
+          texts.set(url, text);
+          version++;
+        }
+      }
+      if (version !== polled) {
+        polled = version;
+        schedule();
+      }
     }
-    return css.includes('@import') ? css : `@import "tailwindcss";\n${css}`;
+    setTimeout(poll, POLL_MS);
   }
+  let polled = 0;
 
   // Add the classes of the page. The result is true when a class is new.
   function collect() {
@@ -138,12 +225,12 @@
 
   async function build() {
     api ??= await import(new URL('browser.mjs', js).href);
-    const { key, paths, files } = await links();
-    const css = stylesheet(paths);
+    const { css, files } = await project();
     const added = collect();
     place();
-    if (`${key}\n${css}` === input && !added) return;
-    input = `${key}\n${css}`;
+    const key = `${version}\n${css}\n${JSON.stringify(files)}`;
+    if (key === input && !added) return;
+    input = key;
     // The classes go in a file of the project. The scanner finds them
     // there, as in a template of a project on the disk.
     const result = await api.runWasm(['-i', '-'], {
@@ -203,4 +290,5 @@
   });
 
   schedule();
+  setTimeout(poll, POLL_MS);
 })();

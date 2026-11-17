@@ -382,11 +382,15 @@ server with the paths of jsDelivr:
   element, a new class, a change of the stylesheet, and a change with no
   new class (no build). A class that goes from the page stays in the CSS.
 - `js/page.js` with `<link rel="stylesheet" type="text/tailwindcss">`:
-  the file, a relative `@import`, an `@import` from the root, and a
-  plugin. The browser does not apply the file, and the output has the
+  the file, a relative `@import`, an `@import` from the root, a plugin of
+  the program, and a plugin file with no extension that imports a file.
+  The server gives HTML for each other path, as a server for a single
+  page. The browser does not apply the file, and the output has the
   place of the link in the cascade. The CSS is the same, byte for byte,
   as the output of the program for the same files on the disk. A change
-  of `href` builds again with the new files.
+  of a file on the server builds again, and a change of `href` too.
+- `js/page.js` with a path in a `<style type="text/tailwindcss">`: the
+  file comes from the URL of the page.
 - With `--official FILE`: on a page with `@theme`, `@utility`, `@apply`
   and variants, the CSS of `js/page.js` is the same, byte for byte, as
   the CSS of the browser build of Tailwind CSS (`@tailwindcss/browser` of

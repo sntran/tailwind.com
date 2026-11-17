@@ -49,8 +49,9 @@ CSS, and `mix format` sorts the classes of HEEx templates.
   builds the CSS of the page, and builds again when its classes change.
   The input CSS can be a file,
   `<link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">`
-  (with the files of its `@import`), so a page goes to a build on the
-  disk with a small change. It can also be a
+  (with the files of its `@import`, and of its plugins), so a page goes
+  to a build on the disk with a small change. A change of a file on the
+  server builds again. It can also be a
   `<style type="text/tailwindcss">`, as for the Play CDN. The CSS is the
   same as the output of a build of the same files, or as the CSS of
   `@tailwindcss/browser`. The plugins in the program work. In a bundler

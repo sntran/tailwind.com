@@ -55,12 +55,18 @@ const assets = {
 @import "./components.css";
 @import "/theme/brand.css";
 @plugin "@tailwindcss/typography";
+@plugin "./plugins/ring";
 .after-check { color: rgb(1, 2, 3); }
 `,
+  // A plugin with no extension, which imports a file with a path.
+  '/assets/plugins/ring.js': "const { width } = require('./width')\nmodule.exports = function ({ addUtilities }) { addUtilities({ '.ring-brand': { 'outline-width': width } }) }\n",
+  '/assets/plugins/width.js': "module.exports = { width: '3px' }\n",
+  // A file of a <style> with a path, from the page /docs/style.html.
+  '/docs/extra.css': '.extra-check { color: rgb(7, 8, 9); }\n',
   '/assets/components.css': '.card { @apply rounded-lg p-6 shadow-md; }\n',
   '/theme/brand.css': '@theme { --color-brand: #0d9488; }\n',
 }
-const linkBody = '<div id="box" class="card flex bg-brand hover:underline"><article class="prose">Text</article></div><p class="after-check" id="after">z</p>'
+const linkBody = '<div id="box" class="card flex bg-brand hover:underline ring-brand"><article class="prose">Text</article></div><p class="after-check" id="after">z</p>'
 
 const pages = {
   // A file with the input CSS, as for a build on the disk. The <style>
@@ -88,6 +94,14 @@ const pages = {
 </style></head>
 <body><div class="flex items-center gap-4 bg-brand/50 p-4 hover:underline md:grid-cols-2 tab-4 [mask-type:luminance] dark:text-white">x</div>
 <p class="text-[length:var(--size)] -mt-2 lg:hover:bg-red-500 space-y-2 *:p-1 group-hover:opacity-50 group">y</p></body></html>`,
+  // A <style> with a path: from the URL of the page.
+  '/docs/style.html': `<!doctype html><html><head><meta charset="utf-8">
+<script src="${prefix}"></script>
+<style type="text/tailwindcss">
+@import "tailwindcss";
+@import "./extra.css";
+</style></head>
+<body><p id="extra" class="extra-check mt-2">x</p></body></html>`,
   // The API of the condition "browser", in a module and in a Web Worker.
   '/api.html': `<!doctype html><meta charset="utf-8"><script type="module">
 import { runWasm } from '${prefix}/js/browser.mjs'
@@ -113,7 +127,9 @@ const server = http.createServer((request, response) => {
   else if (url === '/official.js' && opts.official) body = fs.readFileSync(opts.official)
   else if (url === '/compare.html') body = pages[url](new URL(request.url, 'http://localhost').searchParams.get('script'))
   else if (typeof pages[url] === 'string') body = pages[url]
-  else if (assets[url] !== undefined) [body, type] = [assets[url], 'text/css']
+  else if (assets[url] !== undefined) [body, type] = [assets[url], url.endsWith('.js') ? 'text/javascript' : 'text/css']
+  // A server for a single page gives its HTML for each other path.
+  else if (url.startsWith('/assets/')) [body, type] = ['<!doctype html><title>App</title>', 'text/html']
   if (body === undefined) {
     response.writeHead(404).end()
     return
@@ -190,6 +206,7 @@ try {
     assert.equal(await tab.evaluate(() => document.querySelector('link').nextElementSibling.textContent.includes('.card {')), true)
     assert.equal(await tab.evaluate(() => getComputedStyle(document.getElementById('after')).color), 'rgb(4, 5, 6)')
     assert.equal(await tab.evaluate(() => getComputedStyle(document.getElementById('box')).paddingTop), '24px')
+    assert.equal(await tab.evaluate(() => getComputedStyle(document.getElementById('box')).outlineWidth), '3px')
 
     // The same files and classes on the disk, with the program.
     const css = await tab.evaluate(() => document.querySelector('link').nextElementSibling.textContent)
@@ -207,10 +224,22 @@ try {
       fs.rmSync(dir, { recursive: true, force: true })
     }
 
-    // A live reload: the file changes, and then the href.
+    // A file changes on the server, with no change of the page.
     assets['/theme/brand.css'] = '@theme { --color-brand: #ff0000; }\n'
-    await tab.evaluate(() => (document.querySelector('link').href = '/assets/app.css?v=2'))
     await settle(tab, () => getComputedStyle(document.getElementById('box')).backgroundColor === 'rgb(255, 0, 0)')
+    // A live reload: a change of href.
+    assets['/theme/brand.css'] = '@theme { --color-brand: #00ff00; }\n'
+    await tab.evaluate(() => (document.querySelector('link').href = '/assets/app.css?v=2'))
+    await settle(tab, () => getComputedStyle(document.getElementById('box')).backgroundColor === 'rgb(0, 255, 0)')
+    await tab.close()
+  })
+
+  await check('the page script with a path in a <style>: from the URL of the page', async () => {
+    const tab = await browser.newPage()
+    tab.on('pageerror', (e) => messages.push(`style.html: ${e}`))
+    await tab.goto(`${base}/docs/style.html`)
+    await settle(tab, () => getComputedStyle(document.getElementById('extra')).marginTop === '8px')
+    assert.equal(await tab.evaluate(() => getComputedStyle(document.getElementById('extra')).color), 'rgb(7, 8, 9)')
     await tab.close()
   })
 
