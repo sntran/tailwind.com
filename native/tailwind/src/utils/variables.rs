@@ -12,33 +12,29 @@ pub fn extract_used_variables(raw: &str) -> Vec<String> {
     if !raw.contains("var(") {
         return variables;
     }
-    find_var_functions(value_parser::parse(raw), &mut variables);
-    variables
-}
-
-fn find_var_functions(ast: Vec<ValueAstNode>, variables: &mut Vec<String>) {
-    for node in ast {
-        if let ValueAstNode::Function(function) = node {
-            if function.value == "var" {
-                collect_words(function.nodes, variables);
-            } else {
-                find_var_functions(function.nodes, variables);
+    // Upstream walks the tree with no recursion, and thus reads a value
+    // of any depth. This loop does the same: each level of the tree is an
+    // iterator on the stack, and the tree drops one level at a time.
+    // The flag is true in `var(…)`: there, each word that starts with
+    // `--` is a variable, at all depths.
+    let mut stack: Vec<(std::vec::IntoIter<ValueAstNode>, bool)> = vec![(value_parser::parse_deep(raw).into_iter(), false)];
+    while let Some((nodes, in_var)) = stack.last_mut() {
+        let in_var = *in_var;
+        match nodes.next() {
+            None => {
+                stack.pop();
             }
-        }
-    }
-}
-
-/// Collect each word that starts with `--`, at all depths.
-fn collect_words(ast: Vec<ValueAstNode>, variables: &mut Vec<String>) {
-    for node in ast {
-        match node {
-            ValueAstNode::Word(word) => {
-                if word.value.starts_with("--") {
+            Some(ValueAstNode::Word(word)) => {
+                if in_var && word.value.starts_with("--") {
                     variables.push(word.value);
                 }
             }
-            ValueAstNode::Function(function) => collect_words(function.nodes, variables),
-            ValueAstNode::Separator(_) => {}
+            Some(ValueAstNode::Function(function)) => {
+                let in_var = in_var || function.value == "var";
+                stack.push((function.nodes.into_iter(), in_var));
+            }
+            Some(ValueAstNode::Separator(_)) => {}
         }
     }
+    variables
 }

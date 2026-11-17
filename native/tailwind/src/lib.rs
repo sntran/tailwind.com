@@ -18,6 +18,7 @@ pub mod css_parser;
 pub mod design_system;
 pub mod hash;
 pub mod index;
+pub mod nesting;
 pub mod optimize;
 pub mod patch;
 pub mod property_order;
@@ -76,6 +77,9 @@ impl std::error::Error for Error {}
 
 impl From<css_parser::CssSyntaxError> for Error {
     fn from(e: css_parser::CssSyntaxError) -> Self {
+        if e.too_deep {
+            return nesting::error();
+        }
         Error { message: e.message, name: std::borrow::Cow::Borrowed("CssSyntaxError"), causes: Vec::new() }
     }
 }

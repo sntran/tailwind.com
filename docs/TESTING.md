@@ -17,6 +17,7 @@ and for the tools that make them again). The tests need no Node.js.
 | `tests/plugin_suite.rs` | The 296 `compile` calls of the unit tests of Tailwind CSS that load a JavaScript plugin or config, with each module as source text (`plugin-suite.jsonl.gz`): the CSS of each build, the error message, the features and the sources. |
 | `tests/js_plugins.rs` | `@plugin` and `@config` with a file system in memory: CommonJS and ES modules, TypeScript modules, `require` and `import` between them, cycles, JSON, packages, `imports` of a `package.json`, `import()` in a CommonJS file, the modules of the program, the three plugins in the program, `fs` and `path`, the errors and their `cause` chain, an exception in a build. The JSON of 10,983 candidates against `parseCandidate` of Tailwind CSS. The Rust code and the JavaScript code for `theme(…)` and the legacy utilities give the same output. |
 | `tests/node_api.rs` | The parts of Node.js that a module gets, against the record of Node.js 22 (`tests/fixtures/node_api.json`): 124 values for `Buffer`, `URL`, `URLSearchParams`, `TextEncoder`, `TextDecoder`, the timers, `structuredClone`, `process`, `os`, `url`, `util`, `assert`, `fs`, `module`. The resolver against `require.resolve` and `import.meta.resolve` of Node.js: 80 names, each one for `require` and for `import`. The three rules: each call that writes a file, opens a connection or starts a process throws the error of its rule. `import.meta`, the timers at the end of a module, and the format of `console.log`. |
+| `tests/nesting.rs` | The limits of nesting (`src/nesting.rs`): the error of the official program for 2,001 nested rules and for a value with 10,001 nested functions, no stack overflow for 200,000 levels, a `var()` in `var()` 200,000 times as in the official program, and the input of Lightning CSS deeper than 10,000 levels: the warning of Lightning CSS for a declaration, an error for a selector or an at-rule. |
 | `tests/warnings.rs`, `tests/optimize_warnings.rs` | The warnings for `--value(…)` of `@utility`. The warnings of the optimizer against the record of the official program (`tests/fixtures/optimize_warnings.json`): the code and the exact text with its color codes, for 13 inputs, plain and minified. |
 | `tests/nodes.rs` | For each of 75,082 candidates: the rules before the last pass, the order of their properties and the count of declarations. |
 | `tests/css_utility.rs` | `@utility`: 222 stylesheets with 35,044 candidates. |
@@ -73,16 +74,17 @@ The crate uses `proptest`:
 
 ## The program
 
-`tests/cli.sh PROGRAM` runs the program on 22 small projects, and
+`tests/cli.sh PROGRAM` runs the program on 24 small projects, and
 compares the output and the exit status with the record of the official
 program (`tests/upstream/cli`): automatic source detection with
 `.gitignore`, `source(none)`, `@source`, `@source not`,
 `@source inline()`, imports, `@theme`, `@utility`, `@variant`, `@apply`,
 `@reference`, the functions, a prefix, `--minify`, `--optimize`, `--cwd`,
-a Phoenix project, two errors, three projects with warnings (the
-optimizer with one warning and with three, and `--value(…)` of
-`@utility`), and the CSS variables of the input file as 4.3.5 and as
-4.3.1 (`INPUT_FILE_IS_A_SOURCE` of [`SWITCHES.md`](SWITCHES.md)).
+a Phoenix project, three errors (one for 2,001 nested rules), four
+projects with warnings (the optimizer with one warning, with three, and
+with two values deeper than the limit of Lightning CSS, and
+`--value(…)` of `@utility`), and the CSS variables of the input file as
+4.3.5 and as 4.3.1 (`INPUT_FILE_IS_A_SOURCE` of [`SWITCHES.md`](SWITCHES.md)).
 
 A case can have more files than the output and the exit status:
 

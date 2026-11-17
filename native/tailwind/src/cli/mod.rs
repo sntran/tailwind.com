@@ -490,8 +490,7 @@ fn write(
                 &options.optimizer_file,
                 options.minify,
                 map.as_ref().map(|map| map.raw.as_str()),
-            )
-            .map_err(Error::new)?;
+            )?;
             // The optimizer recovers from an error in the CSS, and gives
             // a warning: the official program prints it.
             if let Some(warnings) = &optimized.warnings {
@@ -888,6 +887,7 @@ pub unsafe extern "C" fn tailwind_main(argc: std::os::raw::c_int, argv: *const *
         let arg = unsafe { std::ffi::CStr::from_ptr(*argv.add(i)) };
         args.push(arg.to_string_lossy().into_owned());
     }
-    // A panic must not cross into C.
-    std::panic::catch_unwind(|| run(args)).unwrap_or(101)
+    // A panic must not cross into C. The run has a thread with a large
+    // stack, as in `main.rs` (`nesting.rs`).
+    std::panic::catch_unwind(|| crate::nesting::with_stack(|| run(args))).unwrap_or(101)
 }

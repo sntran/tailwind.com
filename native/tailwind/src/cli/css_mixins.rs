@@ -346,6 +346,8 @@ struct Lowering {
     next_id: usize,
     /// Lower `if()`.
     ifs: bool,
+    /// The number of calls of `scan` in the current stack.
+    depth: usize,
 }
 
 impl Lowering {
@@ -549,7 +551,7 @@ impl Lowering {
                 AstNode::Declaration(declaration) if in_style => {
                     if let Some(value) = &declaration.value {
                         let calls = !self.functions.is_empty() && value.contains("--") && value.contains('(');
-                        if calls || (self.ifs && value.contains("if(")) {
+                        if (calls || (self.ifs && value.contains("if("))) && nesting_depth(value) <= MAX_VALUE_DEPTH {
                             let variants = self.scan(value, &Env::Root, true);
                             if variants.len() > 1 || variants[0].text.as_deref() != Some(value.as_str()) {
                                 // An empty value (an `if()` with no true
@@ -853,6 +855,18 @@ impl Lowering {
     /// its value, and with `calls`, each call of a known function gets its
     /// result. The text of a value from the scope is not read again.
     fn scan(&mut self, text: &str, env: &Env, calls: bool) -> Vec<Variant> {
+        // A text of a function or a mixin can nest deeper than the values
+        // of `lower_calls`: there, the deeper text stays.
+        if self.depth >= MAX_VALUE_DEPTH {
+            return vec![plain(text)];
+        }
+        self.depth += 1;
+        let variants = self.scan_text(text, env, calls);
+        self.depth -= 1;
+        variants
+    }
+
+    fn scan_text(&mut self, text: &str, env: &Env, calls: bool) -> Vec<Variant> {
         let mut parts: Vec<Vec<Variant>> = Vec::new();
         let mut literal = String::new();
         let bytes = text.as_bytes();
@@ -1208,6 +1222,10 @@ enum Condition {
 /// Parse a condition: `media()`, `supports()` and, for `if()`, `style()`
 /// and `else`, with `not`, `and`, `or` and parentheses. `None`: not valid.
 fn parse_condition(text: &str, in_if: bool) -> Option<Condition> {
+    // The parser is recursive.
+    if nesting_depth(text) > MAX_VALUE_DEPTH {
+        return None;
+    }
     let (condition, rest) = parse_expression(text, in_if)?;
     rest.trim().is_empty().then_some(condition)
 }
@@ -1671,6 +1689,37 @@ pub(super) fn string_end(text: &str, start: usize) -> usize {
         }
     }
     text.len()
+}
+
+/// Lightning CSS reads a value with more nested functions or brackets as
+/// a list of tokens, and gives the warning "Overflowed the maximum nesting
+/// depth". The lowering does not change such a value: Lightning CSS then
+/// gives its warning, as for the official program. The limit also keeps
+/// the recursion of the lowering small.
+pub(super) const MAX_VALUE_DEPTH: usize = 500;
+
+/// The largest number of nested brackets (`(`, `[` and `{`) in a text.
+pub(super) fn nesting_depth(text: &str) -> usize {
+    let bytes = text.as_bytes();
+    let (mut depth, mut max) = (0usize, 0usize);
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' | b'\'' => {
+                index = string_end(text, index);
+                continue;
+            }
+            b'\\' => index += 1,
+            b'(' | b'[' | b'{' => {
+                depth += 1;
+                max = max.max(depth);
+            }
+            b')' | b']' | b'}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        index += 1;
+    }
+    max
 }
 
 /// The index of the `)` for the `(` at `open`.

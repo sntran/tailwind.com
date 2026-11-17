@@ -362,10 +362,13 @@ fn append(target: &mut Vec<SelectorAstNode>, node: SelectorAstNode) {
 pub fn parse(input: &str) -> Vec<SelectorAstNode> {
     let input: Cow<'_, str> =
         if input.contains("\r\n") { Cow::Owned(input.replace("\r\n", "\n")) } else { Cow::Borrowed(input) };
-    parse_normalized(&input)
+    parse_normalized(&input, 0)
 }
 
-fn parse_normalized(input: &str) -> Vec<SelectorAstNode> {
+/// Parse a selector in `depth` functions. A function deeper than
+/// `nesting::MAX_FUNCTIONS` marks the run (`nesting::exceed`), and its
+/// contents are one value node.
+fn parse_normalized(input: &str, depth: usize) -> Vec<SelectorAstNode> {
     let bytes = input.as_bytes();
     let len = bytes.len();
 
@@ -423,9 +426,14 @@ fn parse_normalized(input: &str) -> Vec<SelectorAstNode> {
             OPEN_PAREN => {
                 let name = std::mem::take(&mut buffer);
                 // Before 4.3.4, the two `any` forms were plain text.
-                if matches!(name.as_str(), ":not" | ":where" | ":has" | ":is")
-                    || (matches!(name.as_str(), ":-moz-any" | ":-webkit-any") && crate::switches::MOZ_ANY_NESTING.on())
-                {
+                let nests = matches!(name.as_str(), ":not" | ":where" | ":has" | ":is")
+                    || (matches!(name.as_str(), ":-moz-any" | ":-webkit-any") && crate::switches::MOZ_ANY_NESTING.on());
+                let nth = name == ":nth-child" || name == ":nth-last-child";
+                let deep = depth + stack.len() >= crate::nesting::MAX_FUNCTIONS;
+                if deep && (nests || nth) {
+                    crate::nesting::exceed();
+                }
+                if nests && !deep {
                     stack.push(std::mem::replace(&mut frame, Frame { name, ..Frame::default() }));
                     i += 1;
                     continue;
@@ -457,7 +465,7 @@ fn parse_normalized(input: &str) -> Vec<SelectorAstNode> {
                 let mut nodes = Vec::new();
                 // `:nth-child(2n + 1 of .foo, .bar)`: the part after `of` is
                 // a selector list.
-                let of = if name == ":nth-child" || name == ":nth-last-child" {
+                let of = if nth && !deep {
                     contents.find("of ")
                 } else {
                     None
@@ -465,7 +473,7 @@ fn parse_normalized(input: &str) -> Vec<SelectorAstNode> {
                 match of {
                     Some(idx) => {
                         nodes.push(value(&contents[..idx + 3]));
-                        nodes.extend(parse_normalized(&contents[idx + 3..]));
+                        nodes.extend(parse_normalized(&contents[idx + 3..], depth + stack.len() + 1));
                     }
                     None => nodes.push(value(contents)),
                 }

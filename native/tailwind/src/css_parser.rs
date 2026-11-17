@@ -39,6 +39,10 @@ pub struct CssSyntaxError {
     pub message: String,
     /// The location of the error, when the parser has a source.
     pub loc: Option<SourceLocation>,
+    /// The input nests deeper than `nesting::MAX_BLOCKS`. This is not a
+    /// syntax error: the error of the program is the `RangeError` of the
+    /// official program (`nesting::error`).
+    pub too_deep: bool,
 }
 
 impl CssSyntaxError {
@@ -50,7 +54,11 @@ impl CssSyntaxError {
             let file = loc.source.file.as_deref().unwrap_or("null");
             message = format!("{}:{}:{}: {}", file, start.line, start.column + 1, message);
         }
-        CssSyntaxError { message, loc }
+        CssSyntaxError { message, loc, too_deep: false }
+    }
+
+    fn too_deep() -> Self {
+        CssSyntaxError { message: crate::nesting::MESSAGE.to_string(), loc: None, too_deep: true }
     }
 }
 
@@ -373,6 +381,11 @@ pub fn parse_with_source(input: &str, from: Option<&str>) -> Result<Vec<AstNode>
             }
             // The start of a block.
             else if current == OPEN_CURLY && closing_bracket_stack.last() != Some(&CLOSE_PAREN) {
+                // The steps after the parser are recursive: a deeper tree
+                // could overflow the stack (`nesting.rs`).
+                if stack.len() >= crate::nesting::MAX_BLOCKS {
+                    return Err(CssSyntaxError::too_deep());
+                }
                 closing_bracket_stack.push(CLOSE_CURLY);
                 stack.push(track(source, rule(js_trim(&buffer), Vec::new()), buffer_start, i));
                 buffer.clear();

@@ -75,6 +75,22 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   from its program when no memory near the program is free. On macOS 27
   arm64, the load failed with "no free memory near the program for
   9764864 bytes" (#27). An older `beam.com` loads the object as before.
+- A stylesheet that nests too deep does not overflow the stack. Before,
+  the program stopped with a crash (SIGSEGV), and the NIF stopped the
+  Erlang VM. Now the program gives the error of the official program,
+  `RangeError: Maximum call stack size exceeded`, for more than 2,000
+  nested rules or more than 10,000 nested functions in a value or a
+  selector. The official program (Node.js 22) gives this error for 1,737
+  nested rules. A deep `var()` works, as in the official program. The
+  program and the NIF run on a thread with a stack of 256 MiB.
+- `--minify` and `--optimize` with an input deeper than 10,000 levels:
+  Lightning CSS gives its warning "Overflowed the maximum nesting depth"
+  for a declaration, as for the official program, and a selector or an
+  at-rule is an error. Before, the program stopped with a crash, as the
+  official program does for a deep `calc()`. The lowering of `if()`,
+  `@function` and the math functions does not change a value with more
+  than 500 nested functions: Lightning CSS gives its warning for it, as
+  for the official program.
 
 ## 0.4.0 - 2026-11-17
 
