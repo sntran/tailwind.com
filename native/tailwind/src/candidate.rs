@@ -674,3 +674,315 @@ fn decode_valid_arbitrary_value(raw: &str) -> Option<String> {
         None
     }
 }
+
+// The print functions of `candidate.ts`: a candidate and a variant as text.
+
+/// `printCandidate`: the text of a candidate, with the prefix of the theme.
+pub fn print_candidate(design_system: &DesignSystem, candidate: &Candidate) -> String {
+    let mut parts: Vec<String> = Vec::new();
+
+    for variant in candidate.variants() {
+        parts.insert(0, print_variant(variant));
+    }
+
+    // The prefix.
+    if let Some(prefix) = design_system.theme.prefix.as_deref().filter(|p| !p.is_empty()) {
+        parts.insert(0, prefix.to_string());
+    }
+
+    let mut base = String::new();
+    match candidate {
+        Candidate::Static(c) => base.push_str(&c.root),
+        Candidate::Functional(c) => {
+            base.push_str(&c.root);
+            match &c.value {
+                Some(UtilityValue::Arbitrary { data_type, value }) => {
+                    let is_var_value = is_var(value);
+                    let value = if is_var_value { js_slice(value, 4, -1) } else { value.as_str() };
+                    let (open, close) = if is_var_value { ('(', ')') } else { ('[', ']') };
+                    base.push('-');
+                    base.push(open);
+                    if let Some(data_type) = data_type.as_deref().filter(|t| !t.is_empty()) {
+                        base.push_str(data_type);
+                        base.push(':');
+                    }
+                    base.push_str(&print_arbitrary_value(value));
+                    base.push(close);
+                }
+                Some(UtilityValue::Named { value, .. }) => {
+                    base.push('-');
+                    base.push_str(value);
+                }
+                None => {}
+            }
+        }
+        Candidate::Arbitrary(c) => {
+            base.push('[');
+            base.push_str(&c.property);
+            base.push(':');
+            base.push_str(&print_arbitrary_value(&c.value));
+            base.push(']');
+        }
+    }
+
+    // The modifier.
+    match candidate {
+        Candidate::Arbitrary(c) => base.push_str(&print_modifier(c.modifier.as_ref())),
+        Candidate::Functional(c) => base.push_str(&print_modifier(c.modifier.as_ref())),
+        Candidate::Static(_) => {}
+    }
+
+    if candidate.important() {
+        base.push('!');
+    }
+
+    parts.push(base);
+    parts.join(":")
+}
+
+/// `printModifier`: the text of a modifier, with its `/`.
+pub fn print_modifier(modifier: Option<&CandidateModifier>) -> String {
+    let Some(modifier) = modifier else { return String::new() };
+
+    match modifier.kind {
+        ValueKind::Arbitrary => {
+            let is_var_value = is_var(&modifier.value);
+            let value = if is_var_value { js_slice(&modifier.value, 4, -1) } else { modifier.value.as_str() };
+            let (open, close) = if is_var_value { ('(', ')') } else { ('[', ']') };
+            format!("/{open}{}{close}", print_arbitrary_value(value))
+        }
+        ValueKind::Named => format!("/{}", modifier.value),
+    }
+}
+
+/// `printVariant`: the text of a variant.
+pub fn print_variant(variant: &Variant) -> String {
+    match variant {
+        Variant::Static { root } => root.clone(),
+        Variant::Arbitrary { selector, .. } => {
+            format!("[{}]", print_arbitrary_value(&simplify_arbitrary_variant(selector)))
+        }
+        Variant::Functional { root, value, modifier } => {
+            let mut base = root.clone();
+            // `@` is a special case: `@lg`, not `@-lg`.
+            let dash = if root != "@" { "-" } else { "" };
+            if let Some(value) = value {
+                match value.kind {
+                    ValueKind::Arbitrary => {
+                        let is_var_value = is_var(&value.value);
+                        let text = if is_var_value { js_slice(&value.value, 4, -1) } else { value.value.as_str() };
+                        let (open, close) = if is_var_value { ('(', ')') } else { ('[', ']') };
+                        base.push_str(&format!("{dash}{open}{}{close}", print_arbitrary_value(text)));
+                    }
+                    ValueKind::Named => {
+                        base.push_str(dash);
+                        base.push_str(&value.value);
+                    }
+                }
+            }
+            base.push_str(&print_modifier(modifier.as_ref()));
+            base
+        }
+        Variant::Compound { root, modifier, variant } => {
+            let mut base = root.clone();
+            base.push('-');
+            base.push_str(&print_variant(variant));
+            base.push_str(&print_modifier(modifier.as_ref()));
+            base
+        }
+    }
+}
+
+/// `value.slice(start, end)` of JavaScript, with a negative `end` from the
+/// end of the text, in UTF-16 code units for ASCII text. The values here
+/// start with `var(` and end with `)`, so the bounds are on ASCII bytes.
+fn js_slice(value: &str, start: usize, end_from_end: isize) -> &str {
+    let end = (value.len() as isize + end_from_end).max(0) as usize;
+    if start >= end {
+        return "";
+    }
+    &value[start..end]
+}
+
+thread_local! {
+    static PRINT_ARBITRARY_VALUE_CACHE: std::cell::RefCell<crate::hash::HashMap<String, String>> = Default::default();
+    static IS_VAR_CACHE: std::cell::RefCell<crate::hash::HashMap<String, bool>> = Default::default();
+}
+
+/// A separator that `print_arbitrary_value` removes. The walk puts this
+/// mark before the text of such a node, and a second walk removes the
+/// marked nodes. The checks of the walk read the text with no mark
+/// (`unmarked`), as upstream keeps the nodes to remove in a set.
+const DROP_MARK: char = '\u{0}';
+
+fn unmarked(value: &str) -> &str {
+    value.strip_prefix(DROP_MARK).unwrap_or(value)
+}
+
+fn mark(node: &mut crate::value_parser::ValueAstNode) {
+    if !node.value().starts_with(DROP_MARK) {
+        node.value_mut().insert(0, DROP_MARK);
+    }
+}
+
+/// `printArbitraryValue`: an arbitrary value with no whitespace that is
+/// not necessary, and with `_` for each space.
+pub fn print_arbitrary_value(input: &str) -> String {
+    if let Some(found) = PRINT_ARBITRARY_VALUE_CACHE.with(|cache| cache.borrow().get(input).cloned()) {
+        return found;
+    }
+    let result = print_arbitrary_value_uncached(input);
+    PRINT_ARBITRARY_VALUE_CACHE.with(|cache| cache.borrow_mut().insert(input.to_string(), result.clone()));
+    result
+}
+
+fn print_arbitrary_value_uncached(input: &str) -> String {
+    use crate::value_parser::{self as vp, ValueAstNode};
+    use crate::walk::{walk_siblings, WalkAction};
+
+    let mut ast = vp::parse(input);
+    let mut dropped = false;
+
+    // Selectors (`~`, `>`) and math operators (`+`, `-`, `*`, `/`).
+    let is_symbol = |value: &str| matches!(unmarked(value), "~" | ">" | "+" | "-" | "*" | "/");
+
+    walk_siblings(
+        &mut ast,
+        |siblings, ctx| {
+            let idx = ctx.index;
+            let last = siblings.len() - 1;
+            match &siblings[idx] {
+                // An operator, for example in `calc(…)`.
+                ValueAstNode::Word(node) if is_symbol(&node.value) => {
+                    // a + b: a space before and after the operator.
+                    let space = |node: Option<&ValueAstNode>| matches!(node, Some(ValueAstNode::Separator(s)) if unmarked(&s.value) == " ");
+                    if idx == 0 || !space(siblings.get(idx - 1)) || !space(siblings.get(idx + 1)) {
+                        return WalkAction::Continue;
+                    }
+                    if idx >= 2 && is_symbol(siblings[idx - 2].value()) {
+                        return WalkAction::Continue;
+                    }
+                    if siblings.get(idx + 2).is_some_and(|next| is_symbol(next.value())) {
+                        return WalkAction::Continue;
+                    }
+                    mark(&mut siblings[idx - 1]);
+                    mark(&mut siblings[idx + 1]);
+                    dropped = true;
+                }
+                // Whitespace at the start and at the end.
+                ValueAstNode::Separator(node) if !node.value.is_empty() && js_trim(unmarked(&node.value)).is_empty() => {
+                    if idx == 0 || idx == last {
+                        mark(&mut siblings[idx]);
+                        dropped = true;
+                    }
+                }
+                // No whitespace around `,`: `min(1px , 2px)` is `min(1px,2px)`.
+                ValueAstNode::Separator(node) if js_trim(&node.value) == "," => {
+                    *siblings[idx].value_mut() = ",".to_string();
+                }
+                // A custom function that starts with `--` after a symbol
+                // goes in parentheses: `calc(100%---spacing(2))` is
+                // `calc(100%-(--spacing(2)))`.
+                ValueAstNode::Function(node) if node.value.starts_with("--") => {
+                    // The first argument needs no parentheses.
+                    if idx == 0 {
+                        return WalkAction::Continue;
+                    }
+                    // After a `,`, the value is easy to read.
+                    if matches!(&siblings[idx - 1], ValueAstNode::Separator(s) if unmarked(&s.value) == ",") {
+                        return WalkAction::Continue;
+                    }
+                    // In a list with no symbols, no parentheses.
+                    if idx >= 2 && !is_symbol(siblings[idx - 2].value()) {
+                        return WalkAction::Continue;
+                    }
+                    let node = siblings[idx].clone();
+                    return WalkAction::ReplaceSkip(vec![vp::fun("", vec![node])]);
+                }
+                _ => {}
+            }
+            WalkAction::Continue
+        },
+        |_, _| WalkAction::Continue,
+    );
+
+    if dropped {
+        crate::walk::walk(&mut ast, |node, _| {
+            if node.is_separator() && node.value().starts_with(DROP_MARK) {
+                WalkAction::ReplaceSkip(vec![])
+            } else {
+                WalkAction::Continue
+            }
+        });
+    }
+
+    recursively_escape_underscores(&mut ast);
+
+    vp::to_css(&ast)
+}
+
+/// `simplifyArbitraryVariant`: `&:is(…)` is the selector in `is(…)`.
+fn simplify_arbitrary_variant(input: &str) -> String {
+    use crate::value_parser::{self as vp, ValueAstNode};
+    let ast = vp::parse(input);
+    if let [ValueAstNode::Word(amp), ValueAstNode::Separator(colon), ValueAstNode::Function(is)] = ast.as_slice() {
+        if amp.value == "&" && colon.value == ":" && is.value == "is" {
+            return vp::to_css(&is.nodes);
+        }
+    }
+    input.to_string()
+}
+
+/// `recursivelyEscapeUnderscores`.
+fn recursively_escape_underscores(ast: &mut [crate::value_parser::ValueAstNode]) {
+    use crate::value_parser::ValueAstNode;
+    for node in ast {
+        match node {
+            ValueAstNode::Function(node) => {
+                // No change of underscores in `url()`, but a change in the
+                // name of the function.
+                if node.value == "url" || node.value.ends_with("_url") {
+                    node.value = escape_underscore(&node.value);
+                    continue;
+                }
+                node.value = escape_underscore(&node.value);
+                recursively_escape_underscores(&mut node.nodes);
+            }
+            ValueAstNode::Separator(node) => node.value = escape_underscore(&node.value),
+            ValueAstNode::Word(node) => {
+                // A dashed ident (`--my-var`) keeps its underscores.
+                if !node.value.starts_with("--") {
+                    node.value = escape_underscore(&node.value);
+                }
+            }
+        }
+    }
+}
+
+/// `isVar`: the value is one `var(…)` function.
+fn is_var(value: &str) -> bool {
+    if let Some(found) = IS_VAR_CACHE.with(|cache| cache.borrow().get(value).copied()) {
+        return found;
+    }
+    let ast = crate::value_parser::parse(value);
+    let result = matches!(ast.as_slice(), [crate::value_parser::ValueAstNode::Function(f)] if f.value == "var");
+    IS_VAR_CACHE.with(|cache| cache.borrow_mut().insert(value.to_string(), result));
+    result
+}
+
+/// `escapeUnderscore`: `_` is `\_`, and a space is `_`.
+fn escape_underscore(value: &str) -> String {
+    value.replace('_', "\\_").replace(' ', "_")
+}
+
+impl DesignSystem {
+    /// `printCandidate` of the design system.
+    pub fn print_candidate(&self, candidate: &Candidate) -> String {
+        print_candidate(self, candidate)
+    }
+
+    /// `printVariant` of the design system.
+    pub fn print_variant(&self, variant: &Variant) -> String {
+        print_variant(variant)
+    }
+}
