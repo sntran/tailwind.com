@@ -223,6 +223,40 @@ impl JsRuntime {
         self.this.upgrade().expect("the runtime is alive")
     }
 
+    /// The suggestions of a utility of a plugin (`SuggestionGroup[]`), or
+    /// the completions of a variant of a plugin (`string[]`), as JSON.
+    fn suggestion_value(&self, id: i64, design_system: &DesignSystem) -> Value {
+        match self.call(design_system, "__tw_suggest", &json!({ "id": id })) {
+            Ok(Some(text)) => serde_json::from_str(&text).unwrap_or(Value::Null),
+            Ok(None) => Value::Null,
+            Err(message) => {
+                self.set_error(message);
+                Value::Null
+            }
+        }
+    }
+
+    /// The suggestions of a utility of a plugin.
+    fn suggestions(&self, id: i64, design_system: &DesignSystem) -> Vec<crate::utilities::SuggestionGroup> {
+        let Value::Array(groups) = self.suggestion_value(id, design_system) else { return Vec::new() };
+        groups
+            .iter()
+            .map(|group| crate::utilities::SuggestionGroup {
+                supports_negative: group.get("supportsNegative").and_then(Value::as_bool).unwrap_or(false),
+                values: match group.get("values") {
+                    Some(Value::Array(values)) => values.iter().map(|v| v.as_str().map(String::from)).collect(),
+                    _ => Vec::new(),
+                },
+                modifiers: text_list(group.get("modifiers")),
+            })
+            .collect()
+    }
+
+    /// The completions of a variant of a plugin.
+    fn completions(&self, id: i64, design_system: &DesignSystem) -> Vec<String> {
+        text_list(Some(&self.suggestion_value(id, design_system)))
+    }
+
     /// The compile function of a utility of a plugin.
     fn compile_utility(&self, id: i64, candidate: Value, design_system: &DesignSystem) -> Compiled {
         let result = self.call(design_system, "__tw_utility", &json!({ "id": id, "candidate": candidate }));
@@ -428,6 +462,15 @@ impl JsRuntime {
                     Ok(None)
                 })
             }
+            "utilities.suggest" => {
+                let name = field(arg, "name")?.to_string();
+                let id = number(arg.get("id")).ok_or("No function.")?;
+                let runtime = self.this();
+                self.with_mut(|ds| {
+                    ds.utilities.suggest(name, move |ds| runtime.suggestions(id, ds));
+                    Ok(None)
+                })
+            }
             "utilities.has" => {
                 let name = field(arg, "name")?;
                 let kind = if field(arg, "kind")? == "static" { UtilityKind::Static } else { UtilityKind::Functional };
@@ -435,6 +478,15 @@ impl JsRuntime {
             }
 
             // The variants.
+            "variants.suggest" => {
+                let name = field(arg, "name")?.to_string();
+                let id = number(arg.get("id")).ok_or("No function.")?;
+                let runtime = self.this();
+                self.with_mut(|ds| {
+                    ds.variants.suggest(name, move |ds| runtime.completions(id, ds));
+                    Ok(None)
+                })
+            }
             "variants.static" | "variants.functional" | "variants.compound" => {
                 let name = field(arg, "name")?.to_string();
                 let id = number(arg.get("id")).ok_or("No function.")?;

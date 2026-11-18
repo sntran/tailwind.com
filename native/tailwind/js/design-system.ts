@@ -71,8 +71,11 @@ function createUtilities() {
     has(name: string, kind: 'static' | 'functional'): boolean {
       return host('utilities.has', { name, kind })
     },
-    // Suggestions are for editors. The host does not keep them.
-    suggest(_name: string, _fn: Function) {},
+    // The suggestions for the class list. The function stays here, and the
+    // host calls it only for the class list.
+    suggest(name: string, fn: Function) {
+      host('utilities.suggest', { name, id: register(fn) })
+    },
   }
 }
 
@@ -125,7 +128,10 @@ function createVariants() {
     compoundsWith(parent: string, child: any): boolean {
       return host('variants.compoundsWith', { parent, child })
     },
-    suggest(_name: string, _fn: Function) {},
+    // The completions for the class list, as for the utilities.
+    suggest(name: string, fn: Function) {
+      host('variants.suggest', { name, id: register(fn) })
+    },
 
     // `compat/screens-config.ts` reads each variant and changes its order.
     get variants() {

@@ -19,6 +19,7 @@ pub mod css_parser;
 pub mod design_system;
 pub mod hash;
 pub mod index;
+pub mod intellisense;
 pub mod nesting;
 pub mod optimize;
 pub mod patch;

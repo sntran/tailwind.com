@@ -9,6 +9,7 @@ mod part1;
 mod part2;
 mod part3;
 mod part4;
+mod suggestions;
 
 use crate::ast::{at_rule, decl, AstNode};
 use crate::candidate::{CandidateModifier, FunctionalCandidate, StaticCandidate, UtilityValue, ValueKind};
@@ -97,7 +98,23 @@ pub struct Utility {
 #[derive(Default)]
 pub struct Utilities {
     utilities: IndexMap<String, Vec<Utility>>,
+    /// The suggestions of each utility for the editor tools, as functions
+    /// of the theme: the groups of all the functions, in sequence.
+    completions: crate::hash::HashMap<String, Vec<SuggestFn>>,
 }
+
+/// A group of suggestions: `SuggestionGroup` of `utilities.ts`. A value
+/// `None` is the utility with no value.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SuggestionGroup {
+    pub supports_negative: bool,
+    pub values: Vec<Option<String>>,
+    pub modifiers: Vec<String>,
+}
+
+/// The suggestions of a utility, as a function of the design system.
+/// Upstream calls the function only for the class list.
+pub type SuggestFn = Rc<dyn Fn(&DesignSystem) -> Vec<SuggestionGroup>>;
 
 impl Utilities {
     pub fn new() -> Self {
@@ -158,6 +175,22 @@ impl Utilities {
         self.utilities.get(name).map_or(&[], |v| v.as_slice())
     }
 
+    /// `getCompletions`: the suggestions of a utility. A static utility
+    /// with no suggestions has one group with no values.
+    pub fn get_completions(&self, name: &str, design_system: &DesignSystem) -> Vec<SuggestionGroup> {
+        match self.completions.get(name) {
+            Some(functions) => functions.iter().flat_map(|f| f(design_system)).collect(),
+            None if self.has(name, UtilityKind::Static) => vec![SuggestionGroup::default()],
+            None => Vec::new(),
+        }
+    }
+
+    /// `suggest` of the registry: add groups of suggestions to a utility,
+    /// after its other groups.
+    pub fn suggest(&mut self, name: impl Into<String>, groups: impl Fn(&DesignSystem) -> Vec<SuggestionGroup> + 'static) {
+        self.completions.entry(name.into()).or_default().push(Rc::new(groups));
+    }
+
     /// The names of the utilities of one kind.
     pub fn keys(&self, kind: UtilityKind) -> Vec<&str> {
         self.utilities
@@ -166,6 +199,190 @@ impl Utilities {
             .map(|(k, _)| k.as_str())
             .collect()
     }
+}
+
+/// The definition of a group of suggestions: `SuggestionDefinition` of
+/// `utilities.ts`, in its object form. The theme keys give more values and
+/// modifiers. `values` is `None` for no `values` key.
+#[derive(Debug, Clone, Default)]
+pub struct Suggestion {
+    pub supports_negative: bool,
+    pub supports_fractions: bool,
+    pub values: Vec<String>,
+    pub modifiers: Vec<String>,
+    pub value_theme_keys: Vec<&'static str>,
+    pub modifier_theme_keys: Vec<&'static str>,
+    pub has_default_value: bool,
+}
+
+impl Suggestion {
+    pub fn values(mut self, values: &[&str]) -> Self {
+        self.values = values.iter().map(|v| v.to_string()).collect();
+        self
+    }
+    pub fn values_owned(mut self, values: Vec<String>) -> Self {
+        self.values = values;
+        self
+    }
+    pub fn theme_keys(mut self, keys: &[&'static str]) -> Self {
+        self.value_theme_keys = keys.to_vec();
+        self
+    }
+    pub fn modifiers(mut self, modifiers: Vec<String>) -> Self {
+        self.modifiers = modifiers;
+        self
+    }
+    pub fn modifier_theme_keys(mut self, keys: &[&'static str]) -> Self {
+        self.modifier_theme_keys = keys.to_vec();
+        self
+    }
+    pub fn negative(mut self) -> Self {
+        self.supports_negative = true;
+        self
+    }
+    pub fn negative_if(mut self, value: bool) -> Self {
+        self.supports_negative = value;
+        self
+    }
+    pub fn fractions(mut self) -> Self {
+        self.supports_fractions = true;
+        self
+    }
+    pub fn fractions_if(mut self, value: bool) -> Self {
+        self.supports_fractions = value;
+        self
+    }
+    pub fn default_value(mut self) -> Self {
+        self.has_default_value = true;
+        self
+    }
+    pub fn default_value_if(mut self, value: bool) -> Self {
+        self.has_default_value = value;
+        self
+    }
+    /// The colors: `current`, `inherit`, `transparent`, the colors of the
+    /// theme keys, and the opacity modifiers.
+    pub fn color(theme_keys: &[&'static str]) -> Self {
+        Self::default()
+            .values(&["current", "inherit", "transparent"])
+            .theme_keys(theme_keys)
+            .modifier_theme_keys(&["--opacity"])
+            .modifiers(steps(21, 5, ""))
+    }
+}
+
+/// `Array.from({ length }, (_, i) => `${i * step}${unit}`)`.
+pub fn steps(length: usize, step: usize, unit: &str) -> Vec<String> {
+    (0..length).map(|i| format!("{}{unit}", i * step)).collect()
+}
+
+/// `Array.from({ length }, (_, i) => `${i + 1}`)`.
+pub fn one_to(length: usize) -> Vec<String> {
+    (1..=length).map(|i| i.to_string()).collect()
+}
+
+/// `DEFAULT_SPACING_SUGGESTIONS` of `utilities.ts`.
+pub const DEFAULT_SPACING_SUGGESTIONS: &[&str] = &[
+    "0", "0.5", "1", "1.5", "2", "2.5", "3", "3.5", "4", "5", "6", "7", "8", "9", "10", "11", "12", "14", "16", "20", "24",
+    "28", "32", "36", "40", "44", "48", "52", "56", "60", "64", "72", "80", "96",
+];
+
+/// The suggested fractions of `suggest` in `utilities.ts`.
+const SUGGESTED_FRACTIONS: &[&str] = &[
+    "1/2", "1/3", "2/3", "1/4", "2/4", "3/4", "1/5", "2/5", "3/5", "4/5", "1/6", "2/6", "3/6", "4/6", "5/6", "1/12", "2/12",
+    "3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12", "10/12", "11/12",
+];
+
+/// The keys of the theme in some namespaces, with `.` for the `_` of a
+/// legacy numeric key (`LEGACY_NUMERIC_KEY`: `1_5` is `1.5`).
+pub fn resolve_suggestion_keys(theme: &Theme, theme_keys: &[&str]) -> Vec<String> {
+    theme.keys_in_namespaces(theme_keys).into_iter().map(|key| replace_legacy_numeric_key(&key)).collect()
+}
+
+/// `value.replace(/(\d+)_(\d+)/g, '$1.$2')`.
+fn replace_legacy_numeric_key(value: &str) -> String {
+    if !value.contains('_') {
+        return value.to_string();
+    }
+    let bytes = value.as_bytes();
+    let mut result = String::with_capacity(value.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        // A match starts at a digit, has a `_`, and a digit after it.
+        if bytes[i].is_ascii_digit() {
+            let start = i;
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+            if i + 1 < bytes.len() && bytes[i] == b'_' && bytes[i + 1].is_ascii_digit() {
+                result.push_str(&value[start..i]);
+                result.push('.');
+                i += 1;
+                let rest = i;
+                while i < bytes.len() && bytes[i].is_ascii_digit() {
+                    i += 1;
+                }
+                result.push_str(&value[rest..i]);
+            } else {
+                result.push_str(&value[start..i]);
+            }
+            continue;
+        }
+        let c = value[i..].chars().next().unwrap();
+        result.push(c);
+        i += c.len_utf8();
+    }
+    result
+}
+
+/// `suggest` of `createUtilities`: the suggestions of a utility, from
+/// definitions.
+pub fn suggest(utilities: &mut Utilities, class_root: &str, definitions: impl Fn(&Theme) -> Vec<Suggestion> + 'static) {
+    utilities.suggest(class_root, move |design_system| {
+        let theme = &design_system.theme;
+        definitions(theme)
+            .into_iter()
+            .map(|definition| {
+                let mut values: Vec<Option<String>> = definition.values.into_iter().map(Some).collect();
+                values.extend(resolve_suggestion_keys(theme, &definition.value_theme_keys).into_iter().map(Some));
+                let mut modifiers = definition.modifiers;
+                modifiers.extend(resolve_suggestion_keys(theme, &definition.modifier_theme_keys));
+                if definition.supports_fractions {
+                    values.extend(SUGGESTED_FRACTIONS.iter().map(|f| Some(f.to_string())));
+                }
+                if definition.has_default_value {
+                    values.insert(0, None);
+                }
+                SuggestionGroup { supports_negative: definition.supports_negative, values, modifiers }
+            })
+            .collect()
+    });
+}
+
+/// `suggest` with one value: a definition that is a string.
+pub fn suggest_value(utilities: &mut Utilities, class_root: &str, value: &'static str) {
+    utilities.suggest(class_root, move |_| vec![SuggestionGroup { values: vec![Some(value.to_string())], ..Default::default() }]);
+}
+
+/// The keys of an object of JavaScript in the sequence of `Object.keys`:
+/// the keys that are array indexes first, in the order of their numbers,
+/// then the other keys in the sequence of their insertion.
+pub fn js_object_keys<'a>(keys: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
+    let is_index = |key: &str| {
+        !key.is_empty() && key.bytes().all(|b| b.is_ascii_digit()) && (key == "0" || !key.starts_with('0')) && key.len() < 10
+    };
+    let mut indexes = Vec::new();
+    let mut others = Vec::new();
+    for key in keys {
+        if is_index(key) {
+            indexes.push(key);
+        } else {
+            others.push(key);
+        }
+    }
+    indexes.sort_by_key(|key| key.parse::<u64>().unwrap());
+    indexes.extend(others);
+    indexes
 }
 
 /// An `@property` rule. `None` for `syntax` is `"*"`.
@@ -495,10 +712,24 @@ pub fn functional_utility(utilities: &mut Utilities, class_root: &str, mut desc:
             crate::ast::share_identity(nodes);
         }
     }
+    let suggestion = Suggestion::default()
+        .negative_if(desc.supports_negative)
+        .theme_keys(&desc.theme_keys)
+        .default_value_if(matches!(desc.default_value, DefaultValue::Value(_)))
+        .fractions_if(desc.supports_fractions);
+    let static_keys: Vec<String> =
+        js_object_keys(desc.static_values.iter().map(|(k, _)| *k)).into_iter().map(String::from).collect();
     if desc.supports_negative {
         utilities.functional(format!("-{class_root}"), handle_functional_utility(desc.clone(), true));
     }
     utilities.functional(class_root, handle_functional_utility(desc, false));
+
+    suggest(utilities, class_root, move |_| vec![suggestion.clone()]);
+
+    // Also the fixed values, such as `auto`, `none`, `full`.
+    if !static_keys.is_empty() {
+        suggest(utilities, class_root, move |_| vec![Suggestion::default().values_owned(static_keys.clone())]);
+    }
 }
 
 /// Register a functional utility for a color. Such a utility accepts an
@@ -510,6 +741,7 @@ pub fn color_utility(
     handle: impl Fn(&str, &DesignSystem) -> Option<Vec<AstNode>> + 'static,
 ) {
     let theme_keys = theme_keys.to_vec();
+    let suggest_keys = theme_keys.clone();
     utilities.functional(class_root, move |candidate, ds| {
         let value = match candidate.value.as_ref()? {
             UtilityValue::Arbitrary { value, .. } => as_color(value, candidate.modifier.as_ref(), &ds.theme),
@@ -517,6 +749,8 @@ pub fn color_utility(
         }?;
         handle(&value, ds)
     });
+
+    suggest(utilities, class_root, move |_| vec![Suggestion::color(&suggest_keys)]);
 }
 
 /// The options of `spacing_utility`.
@@ -565,6 +799,17 @@ pub fn spacing_utility(
     desc.supports_fractions = options.supports_fractions;
     desc.supports_negative = options.supports_negative;
     functional_utility(utilities, name, desc);
+
+    let theme_keys = theme_keys.to_vec();
+    let (negative, fractions) = (options.supports_negative, options.supports_fractions);
+    suggest(utilities, name, move |theme| {
+        let spacing = theme.get(&["--spacing"]).is_some_and(|v| !v.is_empty());
+        vec![Suggestion::default()
+            .values(if spacing { DEFAULT_SPACING_SUGGESTIONS } else { &[] })
+            .negative_if(negative)
+            .fractions_if(fractions)
+            .theme_keys(&theme_keys)]
+    });
 }
 
 /// All the utilities of Tailwind CSS.
@@ -580,4 +825,5 @@ fn register_all(utilities: &mut Utilities, theme: &Theme) {
     part2::register(utilities, theme);
     part3::register(utilities, theme);
     part4::register(utilities, theme);
+    suggestions::register(utilities);
 }
