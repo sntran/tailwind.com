@@ -12,3 +12,7 @@ pub const SIGNATURE_NONE: SignatureFeatures = 0;
 pub const SIGNATURE_EXPAND_PROPERTIES: SignatureFeatures = 1 << 0;
 /// Change the logical properties into the physical properties.
 pub const SIGNATURE_LOGICAL_TO_PHYSICAL: SignatureFeatures = 1 << 1;
+
+pub mod canonicalize_calc_expressions;
+pub mod constant_fold_declaration;
+pub mod expand_declaration;
