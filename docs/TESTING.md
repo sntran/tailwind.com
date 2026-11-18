@@ -415,6 +415,10 @@ server with the paths of jsDelivr:
   its error output. A case with `--minify` runs with `tailwind.wasm`.
 - `runWasm` with `tailwind-browser.wasm` gives an error for `--minify`,
   and `runWasm` with the URL of `tailwind.wasm` minifies.
+- The package from a path with no package root (as the output of a
+  bundler), the program in another directory with a hash in its name,
+  and the option `runtime`: a build with a plugin gets the JavaScript
+  files of `runtime/` in each case.
 - The page script lowers the new CSS (`@function`, `@mixin`, `if()`,
   `sibling-index()`): the output has none of them, and the computed
   styles of the page are right.

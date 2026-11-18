@@ -23,29 +23,33 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   same as the output of a build of the same files, or as the CSS of
   `@tailwindcss/browser`. The plugins in the program work. In a bundler
   or a Web Worker, the condition `browser` of `package.json` gives
-  `runWasm` with the files in memory. The WASI host of the site is now
+  `runWasm` with the files in memory. Vite and webpack copy the program
+  and the JavaScript files of the plugins; for esbuild, the option
+  `runtime` gives a copy of `runtime/`. The WASI host of the site is now
   `js/wasi.mjs`.
 - The page does not show with no style. The first build waits for the
   end of the HTML, and the page stays hidden until its first CSS (at
   most 3 seconds). The last CSS of each page stays in `localStorage`, so
   the next load is styled at once. The downloads start at once. With a
   network of 20 Mbps, the first visit shows the styled page in about
-  0.5 s.
+  0.6 s (0.8 s with the typography plugin).
 - `tailwind-browser.wasm`: the program for a browser, with no Lightning
   CSS and no QuickJS, 0.80 MB with brotli (`tailwind.wasm` is 1.78 MB).
-  The condition `browser` of the npm package gives it, and the page
-  script uses it. It lowers the new CSS (`@function`, `@mixin`, `if()`,
-  `@when`, the sibling functions and the math functions) with
-  `--optimize`, and the page script gives `--optimize`. Its plugins of `@plugin` and `@config` run in the JavaScript
-  engine of the host, with JS Promise Integration (`js/engine.mjs`): in
-  a page (a hidden iframe for each build), and in Node.js 24 or later (a
-  context of `node:vm`, through `runWasm`). The npm package has the plugin
-  layer, the TypeScript transform and the three plugins as files in
-  `runtime/`. The 101 recorded cases with JavaScript give the output of
-  the official program in Chromium. `--minify` gives an error: the
-  option `wasm` of `runWasm` can give `tailwind.wasm`. The
-  plugin layer has `__tw_compat_async`, and the TypeScript transform can
-  also change an ES module to CommonJS.
+  The release has the two programs. The condition `browser` of the npm
+  package gives it, and the page script uses it. It lowers the new CSS
+  (`@function`, `@mixin`, `if()`, `@when`, the sibling functions and the
+  math functions) with `--optimize`, and the page script gives
+  `--optimize`. Its plugins of `@plugin` and `@config` run in the
+  JavaScript engine of the host, with JS Promise Integration
+  (`js/engine.mjs`): in a page (a hidden iframe for each build), and in
+  Node.js 24 or later (a context of `node:vm`, through `runWasm` with
+  `browserWasmPath`). The npm package has the plugin layer, the
+  TypeScript transform and the three plugins as files in `runtime/`. The
+  101 recorded cases with JavaScript give the output of the official
+  program in Chromium. `--minify` gives an error: the option `wasm` of
+  `runWasm` can give `tailwind.wasm`. The plugin layer has
+  `__tw_compat_async`, and the TypeScript transform can also change an
+  ES module to CommonJS.
 - The Cargo features `program` (the program with no optimizer and no
   JavaScript engine), `lower` (the lowering of the new CSS with no
   Lightning CSS), `optimize` (`lower` and Lightning CSS) and `host-js`:
@@ -58,7 +62,7 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   program and the JavaScript engine of the plugins check the stop, so
   the thread ends soon and frees its memory, also for a plugin with an
   endless loop. After the stop, the process gets no more messages of the
-  run (`docs/NIF.md`, "Stop a run").
+  run (`docs/NIF.md`, "Stop a run", #26).
 
 ### Fixed
 
@@ -68,7 +72,7 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   variable `--x` in the output, also when only the value of a theme
   variable with no use had it. The official program scans its input
   file from 4.3.2: the new switch `INPUT_FILE_IS_A_SOURCE`. The output
-  of 4.3.2 to 4.3.5 does not change.
+  of 4.3.2 to 4.3.5 does not change (#29).
 - The shell header of `tailwind.com` runs only an APE loader with the
   contents of its own loaders: `$TMPDIR/.ape-1.10-HASH` (or
   `~/.ape-1.10-HASH`), with the SHA-256 of the loaders of the file.
@@ -92,7 +96,7 @@ also names its version of Tailwind CSS (see `UPSTREAM`).
   nested rules. A deep `var()` works, as in the official program. The
   program and the NIF run on a thread with a stack of 256 MiB. The
   script engine gives the same error: QuickJS says `InternalError: stack
-  overflow`, and the program gives the text of V8.
+  overflow`, and the program gives the text of V8 (#25).
 - `--minify` and `--optimize` with an input deeper than 10,000 levels:
   Lightning CSS gives its warning "Overflowed the maximum nesting depth"
   for a declaration, as for the official program, and a selector or an
