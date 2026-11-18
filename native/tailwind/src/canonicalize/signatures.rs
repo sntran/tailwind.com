@@ -9,7 +9,7 @@ use super::expand_declaration::expand_declaration;
 use super::{RemKey, Signature, SignatureOptions, SIGNATURE_EXPAND_PROPERTIES};
 use crate::ast::{at_rule, style_rule, AstNode, Loc};
 use crate::candidate::print_arbitrary_value;
-use crate::design_system::{DesignSystem, COMPILE_NONE, COMPILE_RESPECT_IMPORTANT};
+use crate::design_system::{DesignSystem, COMPILE_RESPECT_IMPORTANT};
 use crate::hash::{HashMap, IndexMap, IndexSet};
 use crate::selector_parser::{self as sp, SelectorAstNode};
 use crate::utils::infer_data_type::is_valid_spacing_multiplier;
@@ -66,10 +66,10 @@ pub fn utility_signature(ds: &DesignSystem, options: SignatureOptions, utility: 
     if let Some(found) = ds.canonical.utility_signatures.borrow().get(&key) {
         return found.clone();
     }
-    let signature = match compile_utility_signature_ast(ds, utility, options, None) {
+    let signature = ds.transient_compiles(|| match compile_utility_signature_ast(ds, utility, options, None) {
         Ok(ast) => Signature::Css(crate::to_css::to_css(&ast).into()),
         Err(()) => ds.canonical.new_symbol(),
-    };
+    });
     ds.canonical.utility_signatures.borrow_mut().insert(key, signature.clone());
     signature
 }
@@ -83,7 +83,7 @@ pub fn utility_theme_variables(ds: &DesignSystem, options: SignatureOptions, uti
         return found.clone();
     }
     let mut variables = ThemeVariables::default();
-    let result = compile_utility_signature_ast(ds, utility, options, Some(&mut variables)).ok().map(|mut ast| {
+    let result = ds.transient_compiles(|| compile_utility_signature_ast(ds, utility, options, Some(&mut variables))).ok().map(|mut ast| {
         let mut result = Vec::new();
         walk(&mut ast, |node, _| {
             if let AstNode::Declaration(decl) = node {
@@ -385,6 +385,19 @@ pub fn utility_properties(ds: &DesignSystem, options: SignatureOptions, class_na
         return found.clone();
     }
 
+    let lookup = ds.transient_compiles(|| compute_utility_properties(ds, options, class_name));
+    // The candidates with no declarations (most of the candidates of the
+    // collapse) share one empty value.
+    let lookup = if lookup.is_empty() {
+        ds.canonical.empty_properties.clone()
+    } else {
+        Rc::new(lookup)
+    };
+    ds.canonical.utility_properties.borrow_mut().insert(key, lookup.clone());
+    lookup
+}
+
+fn compute_utility_properties(ds: &DesignSystem, options: SignatureOptions, class_name: &str) -> PropertyValues {
     let mut lookup = PropertyValues::default();
     let class_name = match ds.theme.prefix.as_deref().filter(|p| !p.is_empty()) {
         Some(prefix) if !class_name.starts_with(prefix) => format!("{prefix}:{class_name}"),
@@ -392,7 +405,10 @@ pub fn utility_properties(ds: &DesignSystem, options: SignatureOptions, class_na
     };
     let parsed = ds.parse_candidate(&class_name);
     if let Some(first) = parsed.first() {
-        let mut ast: Vec<AstNode> = ds.compile_ast_nodes(first, COMPILE_NONE).iter().map(|x| x.node.clone()).collect();
+        // The flag of upstream is the default flag of `compileAstNodes`:
+        // `RespectImportant`. So these are the entries of the cache that
+        // the signature made, with no `@theme inline`.
+        let mut ast: Vec<AstNode> = ds.compile_ast_nodes(first, COMPILE_RESPECT_IMPORTANT).iter().map(|x| x.node.clone()).collect();
         // An exception of a plugin: no properties.
         if ds.take_js_error().is_none() {
             canonicalize_ast(ds, &mut ast, options, None);
@@ -408,9 +424,6 @@ pub fn utility_properties(ds: &DesignSystem, options: SignatureOptions, class_na
             });
         }
     }
-
-    let lookup = Rc::new(lookup);
-    ds.canonical.utility_properties.borrow_mut().insert(key, lookup.clone());
     lookup
 }
 
@@ -432,36 +445,43 @@ pub fn pre_computed_utilities(ds: &DesignSystem, options: SignatureOptions) -> R
 
     let mut lookup = Lookup::default();
     for (class_name, modifiers) in ds.get_class_list() {
-        let Signature::Css(signature) = utility_signature(ds, options, &class_name) else { continue };
-
-        // No `-{utility}-0` when `{utility}-0` has the same signature: the
-        // positive value is better.
-        if class_name.starts_with('-') && class_name.ends_with("-0") {
-            if let Signature::Css(positive) = utility_signature(ds, options, &class_name[1..]) {
-                if positive == signature {
-                    continue;
-                }
-            }
-        }
-
-        lookup.entry(signature).or_default().push(class_name.clone());
-        utility_properties(ds, options, &class_name);
-
-        for modifier in modifiers {
-            // A modifier that is a number needs no pre-computed utility.
-            if is_valid_spacing_multiplier(&modifier) {
-                continue;
-            }
-            let with_modifier = format!("{class_name}/{modifier}");
-            let Signature::Css(signature) = utility_signature(ds, options, &with_modifier) else { continue };
-            lookup.entry(signature).or_default().push(with_modifier.clone());
-            utility_properties(ds, options, &with_modifier);
-        }
+        // One scope for the signature and the properties of a class: they
+        // compile the same candidate.
+        ds.transient_compiles(|| pre_compute_class(ds, options, &mut lookup, class_name, modifiers));
     }
 
     let lookup = Rc::new(lookup);
     ds.canonical.pre_computed_utilities.borrow_mut().insert(options, lookup.clone());
     lookup
+}
+
+/// One class of the class list for `pre_computed_utilities`.
+fn pre_compute_class(ds: &DesignSystem, options: SignatureOptions, lookup: &mut Lookup, class_name: String, modifiers: Vec<String>) {
+    let Signature::Css(signature) = utility_signature(ds, options, &class_name) else { return };
+
+    // No `-{utility}-0` when `{utility}-0` has the same signature: the
+    // positive value is better.
+    if class_name.starts_with('-') && class_name.ends_with("-0") {
+        if let Signature::Css(positive) = utility_signature(ds, options, &class_name[1..]) {
+            if positive == signature {
+                return;
+            }
+        }
+    }
+
+    lookup.entry(signature).or_default().push(class_name.clone());
+    utility_properties(ds, options, &class_name);
+
+    for modifier in modifiers {
+        // A modifier that is a number needs no pre-computed utility.
+        if is_valid_spacing_multiplier(&modifier) {
+            continue;
+        }
+        let with_modifier = format!("{class_name}/{modifier}");
+        let Signature::Css(signature) = utility_signature(ds, options, &with_modifier) else { continue };
+        lookup.entry(signature).or_default().push(with_modifier.clone());
+        utility_properties(ds, options, &with_modifier);
+    }
 }
 
 /// `VARIANT_SIGNATURE_KEY`: the signature of a variant: the CSS of the

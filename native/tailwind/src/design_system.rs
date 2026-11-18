@@ -14,6 +14,18 @@ use std::cell::RefCell;
 use crate::hash::{HashMap, HashSet};
 use std::rc::Rc;
 
+/// The entries that `transient_compiles` removes at its end: the keys of
+/// the compiled cache, and the texts of the parse cache. `kept` has the
+/// candidates of the compiled entries that stay: their parse entries
+/// stay too, because the key of a compiled entry is the address of its
+/// candidate.
+#[derive(Default)]
+struct Transient {
+    compiled: Vec<(CompileAstFlags, *const Candidate)>,
+    parsed: Vec<String>,
+    kept: HashSet<*const Candidate>,
+}
+
 /// The flags of `compile_ast_nodes`, as bits.
 pub type CompileAstFlags = u8;
 pub const COMPILE_NONE: CompileAstFlags = 0;
@@ -24,7 +36,9 @@ pub const COMPILE_RESPECT_IMPORTANT: CompileAstFlags = 1 << 0;
 pub type ResolveThemeValueFn = Rc<dyn Fn(&DesignSystem, &str, bool) -> Option<String>>;
 
 /// The rules of each candidate, by the flags and the address of the candidate.
-type CompiledCache = HashMap<(CompileAstFlags, *const Candidate), Rc<Vec<CompiledNode>>>;
+/// Each entry also holds its candidate: while the entry lives, no other
+/// candidate can get the same address.
+type CompiledCache = HashMap<(CompileAstFlags, *const Candidate), (Rc<Candidate>, Rc<Vec<CompiledNode>>)>;
 
 /// The order of each parsed variant, by the address of the variant.
 pub type VariantOrder = HashMap<*const Variant, u32>;
@@ -65,6 +79,8 @@ pub struct DesignSystem {
     variant_order: RefCell<Option<(usize, Rc<VariantOrder>)>>,
     /// The caches of the canonical form of candidates.
     pub(crate) canonical: crate::canonicalize::Storage,
+    /// The entries of `transient_compiles`. `None` out of it.
+    transient: RefCell<Option<Transient>>,
     /// The version of Tailwind CSS that the design system follows: the
     /// version of the thread at its start (`version::enter`). The
     /// functions for the editor tools and the canonical form of
@@ -95,6 +111,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         tracked: RefCell::new(HashSet::default()),
         variant_order: RefCell::new(None),
         canonical: Default::default(),
+        transient: RefCell::new(None),
         version: crate::version::current(),
     }
 }
@@ -107,6 +124,9 @@ impl DesignSystem {
         }
         let parsed: Rc<Vec<Rc<Candidate>>> = Rc::new(parse_candidate(candidate, self).into_iter().map(Rc::new).collect());
         self.parsed_candidates.borrow_mut().insert(candidate.to_string(), parsed.clone());
+        if let Some(transient) = self.transient.borrow_mut().as_mut() {
+            transient.parsed.push(candidate.to_string());
+        }
         parsed
     }
 
@@ -124,10 +144,11 @@ impl DesignSystem {
     /// from `parse_candidate` of this design system.
     pub fn compile_ast_nodes(&self, candidate: &Rc<Candidate>, flags: CompileAstFlags) -> Rc<Vec<CompiledNode>> {
         let key = (flags, Rc::as_ptr(candidate));
-        if let Some(found) = self.compiled.borrow().get(&key) {
+        if let Some((_, found)) = self.compiled.borrow().get(&key) {
             return found.clone();
         }
         let errors_before = self.js_error_count();
+        let inline_reads_before = self.theme.inline_reads();
         let mut compiled = compile_ast_nodes(candidate, self, flags);
 
         // An arbitrary value or property can have a function such as
@@ -154,9 +175,57 @@ impl DesignSystem {
         // Upstream keeps no result when a plugin throws: the next compile
         // of the candidate throws again.
         if self.js_error_count() == errors_before {
-            self.compiled.borrow_mut().insert(key, compiled.clone());
+            self.compiled.borrow_mut().insert(key, (candidate.clone(), compiled.clone()));
+            // In `transient_compiles`: an entry that read no `inline`
+            // option of the theme, in a design system with no plugins,
+            // goes out of the cache at the end. A second compile gives the
+            // same nodes, so no result changes.
+            if let Some(transient) = self.transient.borrow_mut().as_mut() {
+                if self.theme.inline_reads() == inline_reads_before && !self.has_js() {
+                    transient.compiled.push(key);
+                } else {
+                    transient.kept.insert(key.1);
+                }
+            }
         }
         compiled
+    }
+
+    /// Run `f`, and then remove from the cache of the compiled candidates
+    /// the entries of `f` that do not change a result (see
+    /// `compile_ast_nodes`). The canonical form of candidates compiles
+    /// many candidates one time: this keeps its memory small. A call in
+    /// a call of this function adds its entries to the outer call.
+    pub fn transient_compiles<T>(&self, f: impl FnOnce() -> T) -> T {
+        let outer = self.transient.borrow().is_some();
+        if !outer {
+            *self.transient.borrow_mut() = Some(Transient::default());
+        }
+        let result = f();
+        if !outer {
+            let transient = self.transient.borrow_mut().take().unwrap_or_default();
+            let mut compiled = self.compiled.borrow_mut();
+            for key in &transient.compiled {
+                compiled.remove(key);
+            }
+            let mut parsed = self.parsed_candidates.borrow_mut();
+            for text in &transient.parsed {
+                let keep = parsed.get(text).is_some_and(|list| list.iter().any(|c| transient.kept.contains(&Rc::as_ptr(c))));
+                if !keep {
+                    parsed.remove(text);
+                }
+            }
+        }
+        result
+    }
+
+    /// True when the design system has a JavaScript engine of plugins.
+    fn has_js(&self) -> bool {
+        #[cfg(tw_js)]
+        if self.js.is_some() {
+            return true;
+        }
+        false
     }
 
     /// The number of exceptions of plugins since the start.
@@ -211,7 +280,7 @@ impl DesignSystem {
         node: AstNode,
     ) {
         let mut compiled = self.compiled.borrow_mut();
-        let Some(item) = compiled.get_mut(&(flags, candidate)).and_then(|rules| Rc::make_mut(rules).get_mut(rule)) else {
+        let Some(item) = compiled.get_mut(&(flags, candidate)).and_then(|(_, rules)| Rc::make_mut(rules).get_mut(rule)) else {
             return;
         };
         match child {

@@ -123,6 +123,8 @@ pub struct Storage {
     candidates: ByOptions<String, String>,
     variants: ByOptions<*const Variant, Rc<Vec<Variant>>>,
     utilities: ByOptions<String, String>,
+    /// The one empty value of `utility_properties`.
+    empty_properties: Rc<signatures::PropertyValues>,
     /// The normal form of the values of declarations, by `rem` and value.
     normal_values: RefCell<HashMap<(RemKey, String), String>>,
     /// The values with the inlined theme variables, and the variables.
@@ -260,3 +262,4 @@ fn canonicalize_candidate_uncached(ds: &DesignSystem, options: InternalOptions, 
 fn js_slice_from(text: &str, start: usize) -> String {
     text.get(start..).unwrap_or("").to_string()
 }
+

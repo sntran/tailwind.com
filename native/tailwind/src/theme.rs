@@ -63,6 +63,12 @@ pub struct Theme {
     pub prefix: Option<String>,
     values: RefCell<IndexMap<String, ThemeValue>>,
     keyframes: RefCell<Vec<AtRule>>,
+    /// The number of reads of the `inline` option of a value that has it,
+    /// also in `without_inline`. A compile with no such read gives the
+    /// same nodes with and without `without_inline`.
+    inline_reads: std::cell::Cell<u64>,
+    /// The keys whose `inline` option `without_inline` removed.
+    inline_off: RefCell<crate::hash::HashSet<String>>,
 }
 
 impl Theme {
@@ -160,7 +166,9 @@ impl Theme {
                 })
                 .collect()
         };
+        self.inline_off.borrow_mut().extend(restore.iter().cloned());
         let result = f();
+        self.inline_off.borrow_mut().clear();
         let mut values = self.values.borrow_mut();
         for key in restore {
             if let Some(value) = values.get_mut(&key) {
@@ -170,6 +178,19 @@ impl Theme {
         result
     }
 
+    /// The number of reads of the `inline` option of a value that has it
+    /// (`inline_reads`).
+    pub fn inline_reads(&self) -> u64 {
+        self.inline_reads.get()
+    }
+
+    /// Count a read of the options of a value.
+    fn note_options(&self, key: &str, options: ThemeOptions) {
+        if options & INLINE != 0 || (!self.inline_off.borrow().is_empty() && self.inline_off.borrow().contains(key)) {
+            self.inline_reads.set(self.inline_reads.get() + 1);
+        }
+    }
+
     /// The value of the first key that exists.
     pub fn get(&self, theme_keys: &[&str]) -> Option<String> {
         let values = self.values.borrow();
@@ -177,10 +198,19 @@ impl Theme {
     }
 
     pub fn has_default(&self, key: &str) -> bool {
-        self.get_options(key) & DEFAULT == DEFAULT
+        // The `default` option does not depend on the `inline` option.
+        self.get_options_uncounted(key) & DEFAULT == DEFAULT
     }
 
     pub fn get_options(&self, key: &str) -> ThemeOptions {
+        let options = self.get_options_uncounted(key);
+        if options & INLINE != 0 || !self.inline_off.borrow().is_empty() {
+            self.inline_reads.set(self.inline_reads.get() + 1);
+        }
+        options
+    }
+
+    fn get_options_uncounted(&self, key: &str) -> ThemeOptions {
         // Before 4.0.5, the key was the text as it is.
         if !crate::switches::THEME_OPTIONS_KEY_WITH_PREFIX.on() {
             return self.values.borrow().get(key).map_or(NONE, |v| v.options);
@@ -325,6 +355,7 @@ impl Theme {
             let v = values.get(&theme_key)?;
             (v.value.clone(), v.options)
         };
+        self.note_options(&theme_key, value_options);
         if (options | value_options) & INLINE != 0 {
             return Some(value);
         }
@@ -353,6 +384,7 @@ impl Theme {
                 Some(v) => v.clone(),
                 None => continue,
             };
+            self.note_options(&nested_key, nested.options);
             if nested.options & INLINE != 0 {
                 extra.push((name.to_string(), nested.value));
             } else {
@@ -360,6 +392,7 @@ impl Theme {
             }
         }
         let value = self.values.borrow().get(&theme_key).cloned()?;
+        self.note_options(&theme_key, value.options);
         if value.options & INLINE != 0 {
             return Some((value.value, extra));
         }
