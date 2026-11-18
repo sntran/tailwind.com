@@ -7,6 +7,7 @@ pub mod ast;
 pub mod at_import;
 pub mod attribute_selector_parser;
 pub mod candidate;
+pub mod canonicalize;
 #[cfg(feature = "program")]
 pub mod cli;
 pub mod compat;
