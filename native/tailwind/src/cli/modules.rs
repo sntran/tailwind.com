@@ -43,13 +43,18 @@ impl FileSystem {
 /// of the build, and is not there for WASI.)
 pub fn node_path() -> Vec<PathBuf> {
     let Some(paths) = super::context::var("NODE_PATH") else { return Vec::new() };
+    let separator = if windows() { ';' } else { ':' };
+    paths.split(separator).filter(|path| !path.is_empty()).map(PathBuf::from).collect()
+}
+
+/// True when the system at run time is Windows (`process.platform` is
+/// `win32`).
+pub fn windows() -> bool {
     #[cfg(tw_js)]
-    let windows = crate::compat::js::engine::platform() == "win32";
+    return crate::compat::js::engine::platform() == "win32";
     // A build with no JavaScript engine has no C code for this question.
     #[cfg(not(tw_js))]
-    let windows = cfg!(windows);
-    let separator = if windows { ';' } else { ':' };
-    paths.split(separator).filter(|path| !path.is_empty()).map(PathBuf::from).collect()
+    return cfg!(windows);
 }
 
 fn kind(file_type: std::fs::FileType) -> FileKind {

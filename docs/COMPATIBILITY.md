@@ -113,7 +113,11 @@ real standalone program.
   program there.
 - **The watch** uses inotify, kqueue, or `ReadDirectoryChangesW` on
   Windows. The official program uses `@parcel/watcher`. `--poll` is the
-  same.
+  same. A change prints `Done in` when the scan reads a changed source
+  file; the official program prints it for each event of its watcher.
+  With `--poll`, the official program hides the cursor; the native
+  program for Windows (not `tailwind.com`) and the WASI program have no
+  signals, so they keep the cursor.
 - **`canonicalize` as an older version**: the algorithm is the one of
   Tailwind CSS 4.3.5 for each version, with the utilities, the variants
   and the theme of the selected version. The official command is from
@@ -124,26 +128,23 @@ real standalone program.
   lists for 4.2.2: the newer algorithm makes one class of more classes
   in more cases. For a version before 4.2.2, the official program has no
   such command, and this program has it. See
-  [`VERSIONS.md`](VERSIONS.md). The help text of the command has the form
-  of the help of this program.
+  [`VERSIONS.md`](VERSIONS.md).
 - **`localeCompare`**: the canonical form of candidates sorts some texts
   as `localeCompare` of V8 does (`utils/locale_compare.rs`). The order of
   a character that is not ASCII is the order of its code point, not the
   order of ICU.
-- **An invalid `@variant` in a custom variant**: Tailwind CSS throws
-  from `build` when a candidate uses that variant. Here the candidate
-  gives no rule. In `@apply`, the error is the same as upstream.
-- **The warnings before an error**: the warning for a data type that
-  `--value()` of `@utility` cannot have goes to the standard error
-  after the stylesheet compiles. When the same stylesheet has an error,
-  the program prints the error only. The official program prints the
-  warning first.
+- **An invalid `@variant` in a custom variant**: the program gives the
+  error of Tailwind CSS when a candidate uses that variant. In the
+  library, `Compiler::try_build` gives it, and `Compiler::build` gives
+  the CSS without that candidate.
 - **The warnings of Node.js itself** (a line that starts with
   `(node:PID)`, for example for a deprecated function) have another
   form: `util.deprecate` prints `[CODE] DeprecationWarning: MESSAGE`.
 - **`@source inline()` with an endless range** is an error. The official
   compiler runs until it has no more memory.
-- **The help text** has the same options, in another layout.
+- **The help text** is the text of the official program, also its
+  width on a terminal. It does not show `-v, --version`, an option of
+  this program only.
 - **Text that is not valid Unicode** cannot be an input. JavaScript
   strings can hold a lone surrogate.
 - **CSS functions and mixins with the optimizer**: with `--minify` or
