@@ -73,6 +73,34 @@ The options are in the key `:tailwind` of `.formatter.exs`:
 | `:attributes` | `["class"]` | The names of the attributes to sort, for example `["class", "input_class"]`. |
 | `:preserve_whitespace` | `false` | Keep the whitespace between the classes. |
 | `:preserve_duplicates` | `false` | Keep a second copy of a class. |
+| `:canonicalize` | `false` | Give each class list its canonical form, as the command `canonicalize` does: `px-4 py-4` is `p-4`. See below. |
+
+## The canonical form
+
+With `canonicalize: true`, the plugin also gives each class list with no
+interpolation to the command `canonicalize` of the program (as a NIF
+when the project has one), with the `--input` of the profile as `--css`:
+
+```heex
+<div class="py-3 p-1 px-3 w-[16px] h-[16px] bg-[#FFF]">
+```
+
+becomes
+
+```heex
+<div class="size-[16px] bg-white p-3">
+```
+
+The CSS stays the same. The command gives the order of the official
+Prettier plugin, so the sort of the plugin does not change the result.
+`:preserve_whitespace` and `:preserve_duplicates` do not apply to these
+lists. A list with `...` and the fixed parts of a string with
+interpolations get the sort only.
+
+The command follows Tailwind CSS 4.3.5 only. One run of `mix format`
+runs it one time for each file with new class lists, and each run makes
+an index of all the classes first (about 0.7 s). The results stay for 10
+seconds, as the order.
 
 ## How the plugin gets the order
 

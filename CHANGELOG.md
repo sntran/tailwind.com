@@ -6,6 +6,35 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
+## Unreleased
+
+The second command of the official program, `canonicalize`, and the
+canonical form of class lists in `mix format`.
+
+### Added
+
+- The command `canonicalize`, with the same options and the same output
+  as the command of the official program:
+  `tailwind.com canonicalize "py-3 p-1 px-3"` gives `p-3`. It gives the
+  canonical form of each list of classes, sorted as the official
+  Prettier plugin sorts them: one class for more classes when the CSS is
+  the same (`w-[16px] h-[16px]` is `size-[16px]`), bare values
+  (`mt-[1rem]` is `mt-4`), the new names of old classes
+  (`bg-gradient-to-r` is `bg-linear-to-r`), and the new forms of variants
+  (`[&>*]:flex` is `*:flex`). `--css` uses the theme and the plugins of
+  a stylesheet, `--format` gives `text`, `json` or `jsonl`, and
+  `--stream` reads one list from each line of the standard input. A run
+  takes about 0.7 s, and 2.7 s for the official program: the first list
+  makes an index of all the classes. The command follows Tailwind CSS
+  4.3.5 only: with another version, it gives an error.
+- `Tailwind.Formatter` has the option `canonicalize: true`: `mix format`
+  gives each class list of a template its canonical form, with the
+  command `canonicalize`.
+- The Rust crate has the class list of the editor tools
+  (`DesignSystem::get_class_list`), the completions of the variants, and
+  `DesignSystem::canonicalize_candidates`, as `getClassList`,
+  `variants.getCompletions` and `canonicalizeCandidates` of Tailwind CSS.
+
 ## 0.5.0 - 2026-11-18
 
 The npm package works in the browser, as the Play CDN of Tailwind CSS,

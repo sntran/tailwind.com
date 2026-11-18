@@ -28,5 +28,5 @@ The sequence is by value for a Phoenix project.
 
 ## Not planned
 
-- `canonicalize`, the class list and the sort of classes for editors
-  (`canonicalize-candidates.ts`, `intellisense.ts` of Tailwind CSS).
+- The canonical form of candidates of the older versions of Tailwind
+  CSS (`canonicalize` follows the newest version only).

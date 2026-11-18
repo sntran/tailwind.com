@@ -188,7 +188,9 @@ two things needed work:
 
 `String.prototype.localeCompare` of QuickJS compares code units, and
 V8 uses the rules of a locale. Tailwind CSS uses it only in its
-`canonicalize` code, which a build does not call.
+`canonicalize` code, which a build does not call. The command
+`canonicalize` uses the Rust code, which follows the newest version
+only, and has the order of V8 (`utils/locale_compare.rs`).
 
 The tests:
 

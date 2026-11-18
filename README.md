@@ -306,9 +306,28 @@ expects the same text, byte for byte:
 | The official command line program on small projects, also the warnings of the optimizer and of `@utility` | 20 projects |
 | The source maps of the official compiler and of its optimizer | 317 stylesheets |
 | The official command line program with `--map`, also with a JavaScript plugin and config | 29 projects |
+| The command `canonicalize`: each call of the unit tests of the official code, and the official program on 400 random lists | 1,914 calls, 11 projects |
 | The official command line program on projects with JavaScript and TypeScript plugins and configs (daisyUI, heroicons, `@tailwindcss/typography`, `@tailwindcss/forms`, two Phoenix projects) | 100 projects |
 | The `compile` calls of the unit tests of Tailwind CSS that load a JavaScript plugin or config | 296 calls |
 | Node.js 22 for the parts of Node.js that a plugin gets (`Buffer`, `URL`, timers, `fs`, `util`, ...), and for the files that `require` and `import` find | 124 values, 160 questions |
+
+The second command of the official program, `canonicalize`, is also
+there, with the same options and the same output:
+
+```sh
+$ tailwind.com canonicalize "py-3 p-1 px-3" "w-[16px] h-[16px] bg-[#FFF]"
+p-3
+size-[16px] bg-white
+```
+
+It gives the canonical form of each list of classes: one class for more
+classes when the CSS is the same, the bare value of an arbitrary value,
+the new names of old classes, and the sort of the official Prettier
+plugin. `--css app.css` uses the theme and the plugins of the project,
+and `--stream` reads one list from each line of the standard input. It
+runs in about 0.7 s, and the official program in about 2.7 s: the first
+list makes an index of all the classes. `cargo test` replays each call
+of the unit tests of the official code (1,914 calls).
 
 See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the results and
 the known differences, and [`docs/TESTING.md`](docs/TESTING.md) for the
@@ -392,8 +411,8 @@ differences.
   Start the file there with the APE loader of cosmocc
   (`ape-x86_64.elf tailwind.com`). Cosmopolitan supports OpenBSD 7.3 or
   earlier.
-- `canonicalize`, the second command of the official program, is not
-  there.
+- **`canonicalize`** follows Tailwind CSS 4.3.5 only. With another
+  version, the command gives an error.
 - **Tailwind CSS 3** (a project with only `tailwind.config.js` and
   `@tailwind` rules, and `version: "3.x"`) does not work: it is another
   program. Use the official Hex package or program for it.

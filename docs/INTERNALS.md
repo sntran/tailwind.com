@@ -46,6 +46,8 @@ Each file of `native/tailwind/src` follows one file of
 | `index.rs` | `index.ts` | `compile`: all the at-rules of Tailwind CSS, and `build`. |
 | `source_maps/` | `source-maps/` | The source of a node, offsets to lines and columns, and the decoded source map of a tree. |
 | `compat.rs`, `compat/` | `compat/` | The parts of the compatibility layer that need no JavaScript, and the engine for the parts that are JavaScript: see "JavaScript plugins". |
+| `sort.rs`, `intellisense.rs` | `sort.ts`, `intellisense.ts` | The order of classes (`getClassOrder`), and the class list and the variants for the editor tools (`getClassList`). |
+| `canonicalize/` | `canonicalize-candidates.ts`, `constant-fold-declaration.ts`, `expand-declaration.ts`, `canonicalize-calc-expressions.ts` | The canonical form of candidates, for the command `canonicalize`. |
 | `utils/` | `utils/` | Small functions. `utils/js.rs` has the number and string behavior of JavaScript. |
 
 The differences in structure come from the two languages:
@@ -62,6 +64,43 @@ The differences in structure come from the two languages:
   JavaScript prints (`calc(1 / 3 * 100%)`, `0.5` to `50%`), and sorts
   that compare UTF-16 code units. `utils/js.rs` gives the same results.
 - **No regular expressions.** Each one is a small matcher by hand.
+
+### The canonical form of candidates
+
+`canonicalize/` follows the newest version of Tailwind CSS only, with no
+switches. Its parts:
+
+- `signatures.rs`: the signature of a utility (its CSS through `@apply`
+  in a normal form: no `@theme inline`, the inlined theme values, the
+  fold of `calc()`, sorted and expanded declarations) and of a variant.
+  An invalid candidate has a signature of its own (a new `Symbol()`
+  upstream). The index of the class list by signature (the
+  "pre-computed utilities") is the slow part: about 23,000 signatures
+  for the default theme, one time for each design system.
+- `utilities.rs` and `variants.rs`: the steps of `UTILITY_CANONICALIZATIONS`
+  and `VARIANT_CANONICALIZATIONS`, in the same sequence. A generator of
+  upstream (`tryReplacements`) is a function with a visitor: the visitor
+  stops it at the first replacement that it takes, so the caches see the
+  same calls as upstream.
+- `collapse.rs`: one utility for more utilities, with the same
+  combinations in the same sequence (Gosper's hack) and the order of
+  `Set.prototype.intersection` of V8.
+
+The caches are on the design system (`Storage`), as the `storage` of
+upstream: a later call of the same design system sees the caches of the
+earlier calls, so the tests replay the calls in their sequence. The
+order of the sets and of the maps of JavaScript is the order of
+insertion here too (`IndexSet`, `IndexMap`). The class list needs the
+suggestions of each utility (`utilities/suggestions.rs`, and the
+functions that make utilities), of `@utility` (`css_utility.rs`), and of
+the plugins: `designSystem.utilities.suggest` and
+`designSystem.variants.suggest` of the plugin layer keep their function
+in JavaScript under a number, and Rust calls it only for the class list.
+
+An exception of a plugin in a compile of upstream gives no result in the
+cache of the compiled candidates, so the next compile throws again. The
+cache of `compile_ast_nodes` does the same: it keeps no result of a
+compile that had an exception (`js_error_count`).
 
 The compiler is single-threaded. Without the feature `js`, it has no
 dependency except `indexmap`. The feature `js` adds `serde_json` and the
@@ -197,6 +236,7 @@ The modules with state are replaced (`js/shims`, and
 |---|---|
 | `designSystem.theme` (`add`, `get`, `getOptions`, `namespace`, `clearNamespace`, `resolve`, `resolveValue`, `hasDefault`, `keysInNamespaces`, `prefix`, `addKeyframes`, ...) | One host operation for each method. The theme is the `Theme` of Rust. |
 | `designSystem.utilities.static` and `functional` | The compile function stays in JavaScript under a number. Rust registers a closure that calls the bundle with this number and the candidate as JSON, and gets the tree as JSON, `null` or `undefined`. |
+| `designSystem.utilities.suggest`, `designSystem.variants.suggest` | The same for the function of the suggestions: Rust calls it (`__tw_suggest`) only for the class list. |
 | `designSystem.variants.static`, `functional`, `compound`, `fromAst`, `group` | The same for the function of a variant (the rule goes to JavaScript and comes back) and for the compare function of a group. |
 | `designSystem.variants.get(name).applyFn` (`theme-variants.ts` wraps the core variants `aria`, `supports` and `data`) | Rust keeps the function of the variant under a number (`variants.get`), and JavaScript calls it with `variants.apply`. |
 | `designSystem.variants.variants` and `compareFns` (`screens-config.ts` moves the orders) | `variants.orders`, `variants.setOrder`, `variants.compareFnOrders`, `variants.moveCompareFns`. |
