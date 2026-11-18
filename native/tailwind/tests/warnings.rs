@@ -48,3 +48,24 @@ fn valid_arguments_give_no_warning() {
     assert_eq!(warnings(css), Vec::<String>::new());
     assert_eq!(warnings("@theme { --color-red: red; }\n@tailwind utilities;"), Vec::<String>::new());
 }
+
+#[test]
+fn a_module_loader_gets_each_warning_at_its_time() {
+    use std::rc::Rc;
+    use tailwind::MemoryLoader;
+
+    let css = "@utility tab-* {\n  tab-size: --value(size);\n}\n";
+    let loader = Rc::new(MemoryLoader::default());
+    let compiler = compile(css, CompileOptions { test_mode: true, module_loader: Some(loader.clone()), ..Default::default() }).unwrap();
+    assert_eq!(loader.console.borrow().len(), 2);
+    assert!(loader.console.borrow()[0].starts_with("Unsupported bare value data type: \"size\"."));
+    assert!(compiler.take_warnings().is_empty());
+
+    // As upstream gives the text to `console.warn` at once, an error later
+    // in the stylesheet does not remove the warning.
+    let css = format!("{css}@utility bad {{\n  @apply does-not-exist;\n}}\n@tailwind utilities;\n");
+    let loader = Rc::new(MemoryLoader::default());
+    let error = compile(&css, CompileOptions { test_mode: true, module_loader: Some(loader.clone()), ..Default::default() }).err().unwrap();
+    assert!(error.message.starts_with("Cannot apply unknown utility class `does-not-exist`"));
+    assert_eq!(loader.console.borrow().len(), 2, "{:?}", loader.console.borrow());
+}

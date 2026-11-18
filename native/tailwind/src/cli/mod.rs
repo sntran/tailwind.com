@@ -375,10 +375,6 @@ fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), fr
         #[cfg(not(tw_js))]
         Selection::Script(_) => return Err(Error::new("This build of the program has no JavaScript engine.")),
     };
-    // `console.warn` of the compiler writes to the standard error.
-    for warning in compiler.take_warnings() {
-        errln!("{warning}");
-    }
     ensure_source_detection_root_exists(compiler.root())?;
 
     let mut sources: Vec<PublicSourceEntry> = Vec::new();

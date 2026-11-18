@@ -49,8 +49,13 @@ pub struct DesignSystem {
     pub variants: Variants,
     pub invalid_candidates: RefCell<HashSet<String>>,
     /// The warnings of the compiler: each text that Tailwind CSS gives to
-    /// `console.warn`. `Compiler::take_warnings` gives them to the caller.
+    /// `console.warn`, when the compile has no module loader (`console`).
+    /// `Compiler::take_warnings` gives them to the caller.
     pub warnings: RefCell<Vec<String>>,
+    /// The module loader of the compile. Its `console` gets each warning
+    /// at the time that upstream gives it to `console.warn`, thus also
+    /// before an error of the compile.
+    pub console: Option<std::rc::Rc<dyn crate::ModuleLoader>>,
     /// True: each declaration of a utility is `!important`.
     pub important: bool,
     /// When set, `resolve_theme_value` calls this function.
@@ -99,6 +104,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         variants,
         invalid_candidates: RefCell::new(HashSet::default()),
         warnings: RefCell::new(Vec::new()),
+        console: None,
         important: false,
         resolve_theme_value_hook: None,
         track_sources: std::cell::Cell::new(false),
@@ -119,6 +125,15 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
 }
 
 impl DesignSystem {
+    /// `console.warn` of Tailwind CSS: the text goes to the `console` of
+    /// the module loader, or else to `warnings`.
+    pub fn warn(&self, text: String) {
+        match &self.console {
+            Some(loader) => loader.console(&text, true),
+            None => self.warnings.borrow_mut().push(text),
+        }
+    }
+
     /// All the readings of a candidate, from the cache.
     pub fn parse_candidate(&self, candidate: &str) -> Rc<Vec<Rc<Candidate>>> {
         if let Some(found) = self.parsed_candidates.borrow().get(candidate) {

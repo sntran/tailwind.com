@@ -77,7 +77,8 @@ pub struct CompileOptions<'a> {
     pub from: Option<String>,
     /// The file system for the JavaScript modules of `@plugin` and
     /// `@config`. `None`: these rules are errors, as upstream with no
-    /// `loadModule`.
+    /// `loadModule`. Its `console` also gets the warnings of the compiler
+    /// (`Compiler::take_warnings`).
     pub module_loader: Option<Rc<dyn ModuleLoader>>,
     /// The version of Tailwind CSS to compile as (`version.rs`). `None`:
     /// the version of the port.
@@ -151,9 +152,10 @@ pub struct Compiler {
 impl Compiler {
     /// The warnings of the compiler since the last call: each text that
     /// Tailwind CSS gives to `console.warn` in its own code (a data type
-    /// that `--value(…)` of `@utility` cannot have). The JavaScript of
-    /// the plugin layer and of a plugin gives its warnings to the
-    /// `ModuleLoader` (`console`).
+    /// that `--value(…)` of `@utility` cannot have). With a module loader,
+    /// the warnings go to its `console` at the time of the warning, as
+    /// the warnings of the JavaScript of the plugin layer and of a plugin,
+    /// and this list is empty.
     pub fn take_warnings(&self) -> Vec<String> {
         std::mem::take(&mut *self.design_system.warnings.borrow_mut())
     }
@@ -563,6 +565,7 @@ fn parse_css(ast: Vec<AstNode>, options: &CompileOptions) -> Result<Parsed> {
     features |= collected_features;
 
     let mut design_system = build_design_system(theme);
+    design_system.console = options.module_loader.clone();
     design_system.track_sources.set(options.from.as_deref().is_some_and(|from| !from.is_empty()));
 
     if important {

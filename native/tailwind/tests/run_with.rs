@@ -274,3 +274,21 @@ fn a_channel_input_gives_its_messages_and_ends_with_the_channel() {
     stop.store(true, std::sync::atomic::Ordering::SeqCst);
     assert_eq!(input.read(&mut [0; 8]).unwrap(), 0);
 }
+
+#[test]
+fn a_warning_comes_before_the_error_of_the_compile() {
+    let dir = project("warning-error", "");
+    std::fs::write(
+        dir.join("app.css"),
+        "@import \"tailwindcss\" source(none);\n@utility tab-* {\n  tab-size: --value(nope);\n}\n@utility bad {\n  @apply does-not-exist;\n}\n",
+    )
+    .unwrap();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let status = run_with(args(&["-i", "app.css"]), context(&dir, &[], &stdout, &stderr, Arc::default()));
+    assert_ne!(status, 0);
+    // The official program prints the warning, then the error.
+    let text = stderr.text();
+    let warning = text.find("Unsupported bare value data type: \"nope\".").expect("the warning");
+    let error = text.find("Cannot apply unknown utility class `does-not-exist`").expect("the error");
+    assert!(warning < error, "{text}");
+}

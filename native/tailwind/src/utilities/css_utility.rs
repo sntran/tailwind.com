@@ -60,7 +60,11 @@ pub fn create_css_utility_shared(node: SharedAtRule) -> Option<RegisterUtility> 
     if is_valid_functional_utility_name(&name) {
         return Some(Box::new(move |design_system: &mut DesignSystem| {
             let mut usage = Usage::default();
-            normalize_declarations(&mut node.borrow_mut().nodes, &mut design_system.warnings.borrow_mut(), &mut usage);
+            let mut warnings = Vec::new();
+            normalize_declarations(&mut node.borrow_mut().nodes, &mut warnings, &mut usage);
+            for warning in warnings {
+                design_system.warn(warning);
+            }
             let node = node.clone();
             let root = &name[..name.len() - 2];
             design_system.utilities.functional_full(
