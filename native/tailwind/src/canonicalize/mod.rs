@@ -93,28 +93,37 @@ pub struct Spacing {
     rem: Option<f64>,
 }
 
+/// A cache by the options of the signatures and a text.
+type ByText<T> = RefCell<HashMap<(SignatureOptions, String), T>>;
+/// The index of the static utilities: property to value to utilities.
+type StaticIndex = IndexMap<String, IndexMap<String, IndexSet<String>>>;
+/// A value with the inlined theme variables, and the variables.
+type Resolved = (String, Rc<Vec<String>>);
+/// A cache by the internal options and a text.
+type ByOptions<K, T> = RefCell<HashMap<(InternalOptions, K), T>>;
+
 /// The caches of the canonical form of candidates: the `storage` of the
 /// design system upstream. They stay with the design system.
 #[derive(Default)]
 pub struct Storage {
     symbols: Cell<u64>,
-    utility_signatures: RefCell<HashMap<(SignatureOptions, String), Signature>>,
-    utility_theme_variables: RefCell<HashMap<(SignatureOptions, String), Option<Rc<Vec<String>>>>>,
-    static_utilities: RefCell<HashMap<SignatureOptions, IndexMap<String, IndexMap<String, IndexSet<String>>>>>,
-    utility_properties: RefCell<HashMap<(SignatureOptions, String), Rc<signatures::PropertyValues>>>,
+    utility_signatures: ByText<Signature>,
+    utility_theme_variables: ByText<Option<Rc<Vec<String>>>>,
+    static_utilities: RefCell<HashMap<SignatureOptions, StaticIndex>>,
+    utility_properties: ByText<Rc<signatures::PropertyValues>>,
     pre_computed_utilities: RefCell<HashMap<SignatureOptions, Rc<signatures::Lookup>>>,
     variant_signatures: RefCell<HashMap<(RemKey, String), Signature>>,
     pre_computed_variants: RefCell<HashMap<RemKey, Rc<signatures::Lookup>>>,
     /// `SPACING_KEY`: made one time, with the `rem` of the first call.
     spacing: RefCell<Option<Option<Spacing>>>,
     spacing_values: RefCell<HashMap<String, Option<f64>>>,
-    candidates: RefCell<HashMap<(InternalOptions, String), String>>,
-    variants: RefCell<HashMap<(InternalOptions, *const Variant), Rc<Vec<Variant>>>>,
-    utilities: RefCell<HashMap<(InternalOptions, String), String>>,
+    candidates: ByOptions<String, String>,
+    variants: ByOptions<*const Variant, Rc<Vec<Variant>>>,
+    utilities: ByOptions<String, String>,
     /// The normal form of the values of declarations, by `rem` and value.
     normal_values: RefCell<HashMap<(RemKey, String), String>>,
     /// The values with the inlined theme variables, and the variables.
-    resolved_values: RefCell<HashMap<String, (String, Rc<Vec<String>>)>>,
+    resolved_values: RefCell<HashMap<String, Resolved>>,
 }
 
 impl Storage {

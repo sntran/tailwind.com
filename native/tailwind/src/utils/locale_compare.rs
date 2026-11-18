@@ -36,7 +36,7 @@ const PRIMARY: [u16; 128] = primary_table();
 
 /// The primary weight of a character, or 0 for a character with no weight.
 fn primary(c: char) -> u32 {
-    match u32::try_from(c).unwrap_or(0) {
+    match u32::from(c) {
         code @ 0..=127 => PRIMARY[code as usize] as u32,
         code => 1000 + code,
     }

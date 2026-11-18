@@ -538,7 +538,7 @@ type Visit<'a> = dyn FnMut(Candidate) -> bool + 'a;
 
 /// Visit each reading of a candidate. `true` when the visitor stops.
 fn visit_readings(ds: &DesignSystem, input: &str, visit: &mut Visit) -> bool {
-    parse_candidate(ds, input).into_iter().any(|candidate| visit(candidate))
+    parse_candidate(ds, input).into_iter().any(visit)
 }
 
 /// The first part of `tryReplacements` of `arbitraryUtilities` and

@@ -258,7 +258,7 @@ fn modernize_arbitrary_values_variant(ds: &DesignSystem, options: InternalOption
                 WalkAction::Continue
             });
             if contains_not {
-                let Some(hoisted) = ds.parse_variant(&format!("not-[{}]", vp::to_css(&parsed))) else { return None };
+                let hoisted = ds.parse_variant(&format!("not-[{}]", vp::to_css(&parsed)))?;
                 if target == signature(&ds.print_variant(&hoisted)) {
                     *variant = (*hoisted).clone();
                     return None;
@@ -417,7 +417,7 @@ fn modernize_arbitrary_values_variant(ds: &DesignSystem, options: InternalOption
             }
         } else if matches!(target, SelectorAstNode::Selector(_)) && is_attribute_selector(&target) {
             let text = node_value(&target).to_string();
-            let Some(attribute) = crate::attribute_selector_parser::parse(&text) else { return None };
+            let attribute = crate::attribute_selector_parser::parse(&text)?;
             let rest = |name: &str| {
                 format!(
                     "{name}{}{q}{}{q}{}",
@@ -467,7 +467,7 @@ fn arbitrary_variants(ds: &DesignSystem, options: InternalOptions, mut variant: 
         }
         let target = ds.print_variant(variant);
         let Signature::Css(signature) = variant_signature(ds, rem, &target) else { return None };
-        let Some(found) = variants.get(&signature).filter(|found| !found.is_empty()) else { return None };
+        let found = variants.get(&signature).filter(|found| !found.is_empty())?;
         // A variant in a canonical form stays: `min-lg` and `lg` give the
         // same CSS, and both are valid.
         if found.contains(&target) {

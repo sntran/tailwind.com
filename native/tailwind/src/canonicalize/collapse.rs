@@ -83,6 +83,10 @@ fn combinations(items: &[usize]) -> Vec<Vec<usize>> {
     result
 }
 
+/// The other utilities with the value of a candidate: property to value to
+/// utilities.
+type Dynamic = HashMap<String, IndexMap<String, IndexSet<String>>>;
+
 /// `collapseGroup`.
 fn collapse_group(ds: &DesignSystem, options: InternalOptions, candidates: Vec<String>) -> Vec<String> {
     let signature_options = options.signature_options;
@@ -143,12 +147,12 @@ fn collapse_group(ds: &DesignSystem, options: InternalOptions, candidates: Vec<S
 
     // The functional utilities with the value of a candidate, for each
     // property of the candidate (`dynamicUtilities`).
-    let mut dynamic: HashMap<String, Rc<HashMap<String, IndexMap<String, IndexSet<String>>>>> = HashMap::default();
-    let mut dynamic_utilities = |candidate: &str| -> Rc<HashMap<String, IndexMap<String, IndexSet<String>>>> {
+    let mut dynamic: HashMap<String, Rc<Dynamic>> = HashMap::default();
+    let mut dynamic_utilities = |candidate: &str| -> Rc<Dynamic> {
         if let Some(found) = dynamic.get(candidate) {
             return found.clone();
         }
-        let mut result: HashMap<String, IndexMap<String, IndexSet<String>>> = HashMap::default();
+        let mut result: Dynamic = HashMap::default();
         let relevant: IndexSet<String> = properties(candidate).keys().cloned().collect();
         if !relevant.is_empty() {
             for parsed in parse_candidate(ds, candidate) {
@@ -329,7 +333,7 @@ fn collapse_group(ds: &DesignSystem, options: InternalOptions, candidates: Vec<S
                 compare_order(class_order.get(*z).copied().flatten(), class_order.get(*a).copied().flatten()) as i64
             });
             let mut replacements: IndexSet<String> = members.into_iter().cloned().collect();
-            replacements.extend(potential.into_iter());
+            replacements.extend(potential);
 
             for replacement in replacements {
                 let signature = utility_signature(ds, signature_options, &replacement);

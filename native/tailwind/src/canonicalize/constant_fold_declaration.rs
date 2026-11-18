@@ -221,16 +221,14 @@ fn fold_calc(node: &ValueFunctionNode, in_function: bool) -> Option<ValueAstNode
                 return Some(vp::word(format!("{}{}", num(lhs_value - rhs_value), lhs_unit.unwrap_or(""))));
             }
         }
-        "/" => {
-            // No division by zero. Unitless / unitless, or unit / unitless.
-            if rhs_value != 0.0 && rhs_unit.is_none() {
-                let computed = lhs_value / rhs_value;
-                // Only a fold with a precision of .xx: `100% / 3.5` stays.
-                if js_round(computed * 100.0) / 100.0 != computed {
-                    return None;
-                }
-                return Some(vp::word(format!("{}{}", num(computed), lhs_unit.unwrap_or(""))));
+        // No division by zero. Unitless / unitless, or unit / unitless.
+        "/" if rhs_value != 0.0 && rhs_unit.is_none() => {
+            let computed = lhs_value / rhs_value;
+            // Only a fold with a precision of .xx: `100% / 3.5` stays.
+            if js_round(computed * 100.0) / 100.0 != computed {
+                return None;
             }
+            return Some(vp::word(format!("{}{}", num(computed), lhs_unit.unwrap_or(""))));
         }
         _ => {}
     }
