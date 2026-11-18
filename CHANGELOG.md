@@ -6,7 +6,14 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
-## Unreleased
+## 0.5.0 - 2026-11-18
+
+The npm package works in the browser, as the Play CDN of Tailwind CSS,
+with the program for a browser (`tailwind-browser.wasm`): the input CSS
+can be a file, the plugins run in the JavaScript engine of the browser,
+and the new CSS is lowered. Also the fixes of five issues: deep nesting,
+a way to stop a build of the NIF, macOS 27 on arm64 (the APE loader and
+the NIF object), and the input file as a source as 4.3.1 and older.
 
 ### Added
 
