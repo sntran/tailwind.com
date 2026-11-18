@@ -40,6 +40,10 @@ defmodule TailwindNifTest do
     |> Enum.map_join(&elem(&1, 1))
   end
 
+  # The text with no color codes. As in the official program, the
+  # messages have colors when the variable CI is set.
+  defp plain(text), do: String.replace(text, ~r/\e\[[0-9;]*m/, "")
+
   test "the NIF is loaded" do
     assert :tailwind_nif.available()
     assert :tailwind.nif()
@@ -63,7 +67,7 @@ defmodule TailwindNifTest do
   test "the standard output and the standard error are apart", %{dir: dir} do
     {0, output} = :tailwind_nif.run(~w(-i app.css), %{cd: dir}, &collect/3, [])
     assert text(output, :stdout) =~ ".flex {"
-    assert text(output, :stderr) =~ "tailwindcss v#{@version}"
+    assert plain(text(output, :stderr)) =~ "tailwindcss v#{@version}"
     refute text(output, :stderr) =~ ".flex {"
   end
 

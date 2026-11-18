@@ -32,6 +32,22 @@ impl Buffer {
     fn text(&self) -> String {
         String::from_utf8_lossy(&self.0.borrow()).into_owned()
     }
+
+    /// The text with no color codes. As in the official program, the
+    /// messages have colors also when the variable `CI` is set.
+    fn plain(&self) -> String {
+        let text = self.text();
+        let mut plain = String::new();
+        let mut rest = text.as_str();
+        while let Some(start) = rest.find("\x1b[") {
+            plain.push_str(&rest[..start]);
+            let code = &rest[start + 2..];
+            let end = code.find('m').map_or(code.len(), |end| end + 1);
+            rest = &code[end..];
+        }
+        plain.push_str(rest);
+        plain
+    }
 }
 
 /// A new project directory: `app.css` and `index.html`.
@@ -70,7 +86,7 @@ fn a_build_reads_the_working_directory_of_the_context() {
     let css = std::fs::read_to_string(dir.join("out.css")).unwrap();
     assert!(css.contains(".flex {") && css.contains(".p-4 {"), "{css}");
     // The messages go to the standard error of the context.
-    assert!(stderr.text().starts_with("≈ tailwindcss v"), "{}", stderr.text());
+    assert!(stderr.plain().starts_with("≈ tailwindcss v"), "{}", stderr.text());
     assert!(stderr.text().contains("Done in "), "{}", stderr.text());
     assert_eq!(stdout.text(), "");
     // The process keeps its working directory.
