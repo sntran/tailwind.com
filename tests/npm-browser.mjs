@@ -137,6 +137,17 @@ window.run = (args, files, input, env) => {
 }
 window.ready = true
 </script>`,
+  // The package with no package root in its URL, as the output of a
+  // bundler, and the option runtime: the JavaScript files of a plugin.
+  '/vendor.html': `<!doctype html><meta charset="utf-8"><script type="module">
+import { runWasm } from '/vendor/js/browser.mjs'
+const options = { input: '@import "tailwindcss";\\n@plugin "@tailwindcss/typography";\\n', files: { 'index.html': '<p class="prose">' }, env: { NO_COLOR: '1' } }
+window.local = await runWasm(['-i', '-'], options)
+// A bundler puts the program in its own directory, with a hash in its
+// name: the JavaScript files still come from runtime/ of the package.
+window.moved = await runWasm(['-i', '-'], { ...options, wasm: '/bundle/tailwind-browser-a1b2c3.wasm' })
+window.copied = await runWasm(['-i', '-'], { ...options, runtime: '/copy/' })
+</script>`,
   // The API of the condition "browser", in a module and in a Web Worker.
   '/api.html': `<!doctype html><meta charset="utf-8"><script type="module">
 import { runWasm } from '${prefix}/js/browser.mjs'
@@ -155,18 +166,33 @@ window.worker = await new Promise((resolve) => (worker.onmessage = ({ data }) =>
 }
 
 const types = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.html': 'text/html' }
+// A file of the package at three places: a CDN (`prefix`, with the package
+// root in the path), a copy with no such root (`/vendor`, as the output of
+// a bundler), and a copy of runtime/ only (`/copy`, for the option runtime).
+function packageFile(url) {
+  for (const base of [prefix, '/vendor', '/copy']) {
+    if (!url.startsWith(`${base}/`)) continue
+    const rest = url.slice(base.length)
+    if (base !== '/copy') {
+      if (rest.startsWith('/js/')) return [fs.readFileSync(path.join(root, 'js', path.basename(rest))), types['.js']]
+    }
+    const file = base === '/copy' ? `/runtime${rest}` : rest
+    if (file === '/runtime/tailwind.wasm') return [fs.readFileSync(opts.wasm), types['.wasm']]
+    if (file === '/runtime/tailwind-browser.wasm') return [fs.readFileSync(browserWasm), types['.wasm']]
+    // The JavaScript files of the program for its engine (js/engine.mjs).
+    const found = file.match(/^\/runtime\/((?:compat|typescript|plugins\/[a-z-]+)\.js)$/)
+    if (found) return [fs.readFileSync(path.join(root, 'native/tailwind/assets', found[1])), types['.js']]
+  }
+  return null
+}
+
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://localhost').pathname
   let body
   let type = types[path.extname(url)]
   if (url === prefix) [body, type] = [fs.readFileSync(path.join(root, 'js/page.js')), types['.js']]
-  else if (url === `${prefix}/runtime/tailwind.wasm`) body = fs.readFileSync(opts.wasm)
-  else if (url === `${prefix}/runtime/tailwind-browser.wasm`) body = fs.readFileSync(browserWasm)
-  else if (url.startsWith(`${prefix}/js/`)) body = fs.readFileSync(path.join(root, 'js', path.basename(url)))
-  // The JavaScript files of the program for its engine (js/engine.mjs).
-  else if (/^\/runtime\/(compat|typescript|plugins\/[a-z-]+)\.js$/.test(url.slice(prefix.length)) && url.startsWith(prefix)) {
-    ;[body, type] = [fs.readFileSync(path.join(root, 'native/tailwind/assets', url.slice(prefix.length + '/runtime/'.length))), types['.js']]
-  }
+  else if (packageFile(url)) [body, type] = packageFile(url)
+  else if (url === '/bundle/tailwind-browser-a1b2c3.wasm') [body, type] = [fs.readFileSync(browserWasm), types['.wasm']]
   else if (url === '/official.js' && opts.official) body = fs.readFileSync(opts.official)
   else if (url === '/compare.html') body = pages[url](new URL(request.url, 'http://localhost').searchParams.get('script'))
   else if (typeof pages[url] === 'string') body = pages[url]
@@ -317,6 +343,18 @@ try {
     await tab.goto(`${base}/docs/style.html`)
     await settle(tab, () => getComputedStyle(document.getElementById('extra')).marginTop === '8px')
     assert.equal(await tab.evaluate(() => getComputedStyle(document.getElementById('extra')).color), 'rgb(7, 8, 9)')
+    await tab.close()
+  })
+
+  await check('the package with no package root in its URL, a program in another directory, and the option runtime', async () => {
+    const tab = await browser.newPage()
+    tab.on('pageerror', (e) => messages.push(`vendor.html: ${e}`))
+    await tab.goto(`${base}/vendor.html`)
+    await tab.waitForFunction(() => window.local && window.moved && window.copied, null, { timeout: 30_000 })
+    for (const result of await tab.evaluate(() => [window.local, window.moved, window.copied])) {
+      assert.equal(result.status, 0, result.stderr)
+      assert.ok(result.stdout.includes('.prose {'), result.stdout.slice(-300))
+    }
     await tab.close()
   })
 
