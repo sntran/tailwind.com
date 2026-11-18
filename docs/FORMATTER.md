@@ -97,10 +97,15 @@ Prettier plugin, so the sort of the plugin does not change the result.
 lists. A list with `...` and the fixed parts of a string with
 interpolations get the sort only.
 
-The command follows Tailwind CSS 4.3.5 only. One run of `mix format`
-runs it one time for each file with new class lists, and each run makes
-an index of all the classes first (about 0.7 s). The results stay for 10
-seconds, as the order.
+The command follows Tailwind CSS 4.3.5 only. One process runs
+`canonicalize --stream` for all the files of a run of `mix format`
+(`Tailwind.Formatter.Canonical`): it writes each list as a line of the
+standard input of the command, and reads one line for each list. With
+the NIF, the run gets its input through `tailwind_nif:open/2`. The
+command makes an index of all the classes for the first list (about
+0.7 s), and each other list takes a few milliseconds. The process stops
+10 seconds after its last list. For 40 templates, `mix format` took
+0.89 s with `canonicalize: true`, and 0.22 s without it.
 
 ## How the plugin gets the order
 

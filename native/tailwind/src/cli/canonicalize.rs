@@ -101,6 +101,12 @@ fn stdin_is_terminal() -> bool {
     !context::embedded() && std::io::stdin().is_terminal()
 }
 
+/// True when the run has a standard input: the process, or a context
+/// with an input.
+fn has_stdin() -> bool {
+    !context::embedded() || context::has_stdin()
+}
+
 fn stdout_is_terminal() -> bool {
     use std::io::IsTerminal;
     !context::embedded() && std::io::stdout().is_terminal()
@@ -148,11 +154,11 @@ fn run_command_line(argv: &[String], style: &Style) -> (i32, String, String) {
 /// `readCandidateGroups`: the lines of the standard input with text,
 /// with no whitespace at the two ends. A terminal gives no groups.
 fn read_candidate_groups() -> Vec<String> {
-    if stdin_is_terminal() || context::embedded() {
+    if stdin_is_terminal() || !has_stdin() {
         return Vec::new();
     }
     let mut text = String::new();
-    let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut text);
+    let _ = std::io::Read::read_to_string(&mut context::Stdin, &mut text);
     split_candidate_groups(&text)
 }
 
@@ -170,9 +176,8 @@ fn stream(design_system: &DesignSystem, format: Format) -> Result<(), String> {
         context::out("[");
     }
     let mut first = true;
-    if !context::embedded() {
-        let stdin = std::io::stdin();
-        let mut reader = stdin.lock();
+    if has_stdin() {
+        let mut reader = std::io::BufReader::new(context::Stdin);
         let mut buffer = Vec::new();
         loop {
             buffer.clear();

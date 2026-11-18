@@ -151,6 +151,22 @@ defmodule TailwindNifTest do
     refute File.exists?(Path.join(dir, "slow.out.css"))
   end
 
+  test "a run of open/2 reads its standard input", %{dir: dir} do
+    {run, id} = :tailwind_nif.open(~w(canonicalize --stream --css app.css), %{cd: dir})
+    assert :tailwind_nif.write(run, "py-3 p-1 px-3\n")
+    assert_receive {:tailwind_nif, ^id, :stdout, "p-3\n"}, 10_000
+    assert :tailwind_nif.write(run, ["w-[16px] h-[16px]", ?\n])
+    assert_receive {:tailwind_nif, ^id, :stdout, "size-[16px]\n"}, 10_000
+    :ok = :tailwind_nif.close(run)
+    assert_receive {:tailwind_nif, ^id, :exit, 0}, 10_000
+    refute :tailwind_nif.write(run, "flex\n")
+
+    # A stop ends a run that waits for its input.
+    {run, id} = :tailwind_nif.open(~w(canonicalize --stream --css app.css), %{cd: dir})
+    :ok = :tailwind_nif.stop(run)
+    refute_receive {:tailwind_nif, ^id, _, _}, 500
+  end
+
   test "load/1 is ok when the NIF is loaded" do
     assert :tailwind_nif.load("/no/such/libtailwind_nif") == :ok
   end

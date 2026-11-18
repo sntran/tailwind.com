@@ -158,6 +158,10 @@ build of the NIF for WebAssembly yet.
 | `versions()` | The version of the program and of its Tailwind CSS, as binaries. |
 | `run(Args, Options)` | Run the program. The output goes to the group leader. The result is the exit status, or `timeout`. |
 | `run(Args, Options, Fun, Acc)` | Run the program. `Fun(stdout \| stderr, Binary, Acc)` gets each part of the output. The result is `{Status, Acc}`, or `{timeout, Acc}`. |
+| `open(Args, Options)` | Start a run with a standard input, and give `{Run, Id}` at once. The calling process gets the messages `{tailwind_nif, Id, stdout \| stderr, Binary}` and `{tailwind_nif, Id, exit, Status}`. The options are the options of `run/2`, with no `timeout`. |
+| `write(Run, Data)` | Give data to the standard input of a run of `open/2`. The result is `false` after `close/1`, or when the run ended. |
+| `close(Run)` | End the standard input of a run of `open/2`. |
+| `stop(Run)` | Stop a run of `open/2` (see [Stop a run](#stop-a-run)). |
 
 The options are a map:
 
@@ -189,7 +193,9 @@ The run is not a process, and these are different from a port:
 
 - The working directory and the environment of the run do not change the
   VM. Each run has its own.
-- There is no standard input. The input `-` is empty.
+- A run of `run/2` and `run/4` has no standard input. A run of `open/2`
+  has one, and only the command `canonicalize --stream` reads it (one
+  list of classes for each line). The input `-` of a build is empty.
 - A run stops when the calling process ends: the process keeps the
   resource of the run, and when the garbage collector frees it, the run
   stops (see [Stop a run](#stop-a-run)). This is also true for
@@ -232,6 +238,9 @@ free of its memory. A plugin with an endless loop stops in 2 ms. Lightning
 CSS can take a very long time for some inputs, also in the official
 program (`calc()` in `calc()` 30 times, with `var()` in the deepest one):
 there, the thread ends only at the end of the optimizer.
+
+`stop/1` stops a run of `open/2` in the same way. A run that waits for
+its standard input reads the flag each 100 ms.
 
 After the stop, the thread sends no more messages: with `timeout`,
 `run/2` and `run/4` return at once, and the mailbox of the process has no

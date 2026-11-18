@@ -52,6 +52,7 @@ fn context(dir: &Path, env: &[(&str, Option<&str>)], stdout: &Buffer, stderr: &B
         stderr: Box::new(stderr.clone()),
         terminal: false,
         stop,
+        stdin: None,
     }
 }
 
@@ -235,4 +236,41 @@ fn the_input_file_is_a_source_from_4_3_2() {
         let css = build(&auto, version);
         assert!(css.contains(".p-6 {") && css.contains("--duration: 0.3s;"), "{version:?}: {css}");
     }
+}
+
+#[test]
+fn the_command_canonicalize_reads_the_input_of_the_context() {
+    let dir = project("canonicalize", "");
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let mut ctx = context(&dir, &[], &stdout, &stderr, Arc::default());
+    ctx.stdin = Some(Box::new(std::io::Cursor::new(b"py-3 p-1 px-3\nw-[16px] h-[16px]\n".to_vec())));
+    let status = run_with(args(&["canonicalize", "--css", "app.css", "--stream"]), ctx);
+    assert_eq!(status, 0, "{}", stderr.text());
+    assert_eq!(stdout.text(), "p-3\nsize-[16px]\n");
+
+    // With no input, no lists: the help and an error.
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let status = run_with(args(&["canonicalize"]), context(&dir, &[], &stdout, &stderr, Arc::default()));
+    assert_eq!(status, 1);
+    assert_eq!(stderr.text(), "No candidate groups provided\n");
+}
+
+#[test]
+fn a_channel_input_gives_its_messages_and_ends_with_the_channel() {
+    use std::io::Read;
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let stop = Arc::new(AtomicBool::new(false));
+    let mut input = tailwind::cli::context::ChannelInput::new(receiver, stop.clone());
+    sender.send(b"flex\n".to_vec()).unwrap();
+    sender.send(b"p-4".to_vec()).unwrap();
+    drop(sender);
+    let mut text = String::new();
+    input.read_to_string(&mut text).unwrap();
+    assert_eq!(text, "flex\np-4");
+
+    // A stop ends the input, also with no end of the channel.
+    let (_sender, receiver) = std::sync::mpsc::channel::<Vec<u8>>();
+    let mut input = tailwind::cli::context::ChannelInput::new(receiver, stop.clone());
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(input.read(&mut [0; 8]).unwrap(), 0);
 }

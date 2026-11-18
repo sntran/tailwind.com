@@ -29,7 +29,10 @@ canonical form of class lists in `mix format`.
   4.3.5 only: with another version, it gives an error.
 - `Tailwind.Formatter` has the option `canonicalize: true`: `mix format`
   gives each class list of a template its canonical form, with the
-  command `canonicalize`.
+  command `canonicalize`. One run of `canonicalize --stream` serves all
+  the files of a run of `mix format`.
+- `tailwind_nif:open/2`, `write/2`, `close/1` and `stop/1`: a run of the
+  NIF with a standard input, for `canonicalize --stream`.
 - The Rust crate has the class list of the editor tools
   (`DesignSystem::get_class_list`), the completions of the variants, and
   `DesignSystem::canonicalize_candidates`, as `getClassList`,

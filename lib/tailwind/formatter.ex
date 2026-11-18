@@ -57,9 +57,9 @@ defmodule Tailwind.Formatter do
   one class for more classes when the CSS is the same, no second copy of
   a class, and the order of the official Prettier plugin. A list with
   `...` and a string with interpolations get the sort only. This needs
-  the version 4.3.5 of Tailwind CSS. One run of `mix format` runs the
-  command one time for each file with new class lists (about 0.7 s for
-  each run).
+  the version 4.3.5 of Tailwind CSS. One process runs the command with
+  `--stream` for all the files of a run of `mix format`: the first list
+  takes about 0.7 s, and each other list a few milliseconds.
   """
 
   @behaviour Mix.Tasks.Format
@@ -127,9 +127,8 @@ defmodule Tailwind.Formatter do
     )
   end
 
-  # The order and the canonical forms live this long: one run of `mix
-  # format` builds one time, and an editor that formats again later gets
-  # the new classes.
+  # The order lives this long: one run of `mix format` builds one time,
+  # and an editor that formats again later gets the new classes.
   @lifetime_ms 10_000
 
   ## The canonical form
@@ -146,101 +145,18 @@ defmodule Tailwind.Formatter do
 
   @doc false
   # The canonical form of each value (by its group of classes), from the
-  # command `canonicalize`. The forms of a run stay for `@lifetime_ms`.
-  def canonical_forms(_profile, []), do: %{}
-
+  # process of the command `canonicalize` of the profile.
   def canonical_forms(profile, values) do
-    key = {__MODULE__, :canonical, profile}
-
-    known =
-      case :persistent_term.get(key, nil) do
-        {time, forms} ->
-          if System.monotonic_time(:millisecond) - time < @lifetime_ms, do: forms, else: %{}
-
-        nil ->
-          %{}
-      end
-
-    groups = values |> Enum.map(&group/1) |> Enum.uniq() |> Enum.reject(&Map.has_key?(known, &1))
-
-    forms =
-      if groups == [] do
-        known
-      else
-        lines = String.split(canonicalize(profile, groups), "\n")
-
-        if length(lines) < length(groups) do
-          raise ArgumentError, "Tailwind.Formatter: the command canonicalize gave too few lines."
-        end
-
-        forms = Map.merge(known, Map.new(Enum.zip(groups, lines)))
-        :persistent_term.put(key, {System.monotonic_time(:millisecond), forms})
-        forms
-      end
-
-    Map.take(forms, Enum.map(values, &group/1))
+    groups = values |> Enum.map(&group/1) |> Enum.uniq()
+    Tailwind.Formatter.Canonical.forms(profile, groups)
   end
 
-  # The command `canonicalize` of the program for some groups of classes,
-  # with the input of the profile. The result is the standard output: one
-  # line for each group.
-  defp canonicalize(profile, groups) do
-    %{args: args, cd: cd, env: env} = :tailwind.config_for(profile)
-    env = Map.merge(%{~c"TAILWINDCSS_VERSION" => :tailwind.configured_version()}, env)
-    css = css_path(input_args(args))
-    argv = [~c"canonicalize"] ++ if(css, do: [~c"--css", css], else: []) ++ Enum.map(groups, &String.to_charlist/1)
+  @doc false
+  # The path of the input of the arguments of a profile, relative to the
+  # working directory of the profile: `--cwd` and `--input`.
+  def css_path(args) do
+    args = input_args(args)
 
-    {status, output, messages} =
-      if :tailwind.nif() do
-        {status, {out, err}} =
-          :tailwind_nif.run(
-            argv,
-            %{cd: cd, env: Map.to_list(env)},
-            fn
-              :stdout, data, {out, err} -> {[out, data], err}
-              _stderr, data, {out, err} -> {out, [err, data]}
-            end,
-            {[], []}
-          )
-
-        {status, out, err}
-      else
-        unless File.exists?(:tailwind.bin_path()) do
-          raise ArgumentError,
-                "Tailwind.Formatter: tailwind.com is not installed. Run `mix tailwind.install`."
-        end
-
-        {exe, port_args} = :tailwind.command(argv)
-
-        # The messages of plugins go to the standard error of the BEAM: a
-        # port has one stream.
-        port =
-          Port.open({:spawn_executable, exe}, [
-            {:args, port_args},
-            {:cd, cd},
-            {:env, Map.to_list(env)},
-            :binary,
-            :exit_status,
-            :use_stdio,
-            :hide
-          ])
-
-        {status, out} = collect(port, [])
-        {status, out, out}
-      end
-
-    if status != 0 do
-      raise ArgumentError,
-            "Tailwind.Formatter: the command canonicalize of the profile #{inspect(profile)} failed:\n" <>
-              IO.iodata_to_binary(messages)
-    end
-
-    output |> IO.iodata_to_binary() |> String.trim_trailing("\n")
-  end
-
-  # The path of the input of the arguments, relative to the working
-  # directory of the profile: `--cwd` and `--input`.
-  defp css_path(args) do
     {input, cwd} =
       Enum.reduce(Enum.chunk_every(split_args(args), 2), {nil, nil}, fn
         [flag, value], {_input, cwd} when flag in [~c"--input", ~c"-i"] -> {value, cwd}
