@@ -17,23 +17,50 @@
 // with compression).
 //
 // It also runs in a Web Worker, and in Deno and Node.js with no file
-// system. A bundler (Vite, webpack, esbuild) copies tailwind-browser.wasm
-// with the pattern `new URL('../runtime/tailwind-browser.wasm', import.meta.url)`.
+// system. Vite and webpack copy tailwind-browser.wasm and the JavaScript
+// files of runtime/ with the files of the site: each one has the pattern
+// `new URL('../runtime/NAME', import.meta.url)`. For a bundler that does
+// not copy them (esbuild), copy runtime/ of the package to the site, and
+// give its URL in options.runtime.
 import { createEngine, hasPromiseIntegration, needsEngine } from './engine.mjs';
 import { Files, run } from './wasi.mjs';
 
-// The URL of tailwind-browser.wasm, from the URL of a file of the
-// package. A CDN
-// URL has the package root in it: "https://cdn.jsdelivr.net/npm/tailwind.com@0.4.0/+esm",
-// "https://esm.sh/tailwind.com@0.4.0/es2022/tailwind.com.mjs", or only the
+// The package root in the URL of a file of the package on a CDN:
+// "https://cdn.jsdelivr.net/npm/tailwind.com@0.5.0/+esm",
+// "https://esm.sh/tailwind.com@0.5.0/es2022/tailwind.com.mjs", or only the
 // root for the default file, "https://cdn.jsdelivr.net/npm/tailwind.com@0.5".
-// Else, the file is in js/ of the package.
-export function wasmUrl(from = import.meta.url) {
+function packageRoot(from) {
   const url = new URL(from);
   const found = url.pathname.match(/^(.*\/tailwind\.com(?:@[^/]*)?)(?:\/|$)/);
-  if (found) return new URL(`${found[1]}/runtime/tailwind-browser.wasm`, url).href;
-  if (from === import.meta.url) return new URL('../runtime/tailwind-browser.wasm', import.meta.url).href;
-  return new URL('../runtime/tailwind-browser.wasm', url).href;
+  return found ? new URL(`${found[1]}/`, url).href : null;
+}
+
+// The files of runtime/ when this file is not on a CDN. A bundler finds
+// each pattern `new URL('…', import.meta.url)`: the text of each one must
+// stay as it is.
+const LOCAL = {
+  'tailwind-browser.wasm': () => new URL('../runtime/tailwind-browser.wasm', import.meta.url),
+  'compat.js': () => new URL('../runtime/compat.js', import.meta.url),
+  'typescript.js': () => new URL('../runtime/typescript.js', import.meta.url),
+  'plugins/forms.js': () => new URL('../runtime/plugins/forms.js', import.meta.url),
+  'plugins/typography.js': () => new URL('../runtime/plugins/typography.js', import.meta.url),
+  'plugins/aspect-ratio.js': () => new URL('../runtime/plugins/aspect-ratio.js', import.meta.url),
+};
+
+// The URL of a file of runtime/: in the directory `runtime`, else from the
+// package root of a CDN, else the copy of a bundler.
+function runtimeUrl(name, runtime) {
+  if (runtime) return new URL(name, new URL(String(runtime).replace(/\/?$/, '/'), globalThis.location?.href ?? import.meta.url)).href;
+  const root = packageRoot(import.meta.url);
+  return root ? new URL(`runtime/${name}`, root).href : LOCAL[name]().href;
+}
+
+// The URL of tailwind-browser.wasm, from the URL of a file of the package
+// (default: this file).
+export function wasmUrl(from = import.meta.url) {
+  if (from === import.meta.url) return runtimeUrl('tailwind-browser.wasm');
+  const root = packageRoot(from);
+  return root ? new URL('runtime/tailwind-browser.wasm', root).href : new URL('../runtime/tailwind-browser.wasm', from).href;
 }
 
 // The compiled module of each URL. A failed download can be tried again.
@@ -73,9 +100,9 @@ function text(url) {
 // The plugins in the program, as in the standalone program of Tailwind CSS.
 const PLUGINS = ['@tailwindcss/forms', '@tailwindcss/typography', '@tailwindcss/aspect-ratio'];
 
-// The JavaScript files that a build of `input` and `files` needs, from the
-// directory of the program: none with no @plugin and no @config.
-async function assets(wasm, input, files) {
+// The JavaScript files that a build of `input` and `files` needs: none
+// with no @plugin and no @config.
+async function assets(runtime, input, files) {
   const all = [input, ...Object.values(files).filter((value) => typeof value === 'string')].join('\n');
   if (!/@(?:plugin|config)\b/.test(all)) return {};
   const names = { compat: 'compat.js' };
@@ -84,7 +111,7 @@ async function assets(wasm, input, files) {
   for (const plugin of PLUGINS) {
     if (all.includes(plugin)) names[`plugin:${plugin}`] = `plugins/${plugin.slice('@tailwindcss/'.length)}.js`;
   }
-  const entries = await Promise.all(Object.entries(names).map(async ([name, file]) => [name, await text(new URL(file, wasm).href)]));
+  const entries = await Promise.all(Object.entries(names).map(async ([name, file]) => [name, await text(runtimeUrl(file, runtime))]));
   return Object.fromEntries(entries);
 }
 
@@ -94,20 +121,21 @@ async function assets(wasm, input, files) {
 // program. The program sees no other file.
 //
 // options: files, env (default: empty), input (the text of stdin), wasm
-// (the URL of the program, default: wasmUrl(), tailwind-browser.wasm).
+// (the URL of the program, default: wasmUrl(), tailwind-browser.wasm),
+// runtime (the URL of a copy of runtime/ of the package: the default
+// program and the JavaScript files come from there).
 //
 // tailwind-browser.wasm has no JavaScript engine: for @plugin and
 // @config, it runs the plugins in the JavaScript engine of the browser
 // (js/engine.mjs). That needs a page (not a worker) and JS Promise
-// Integration. The JavaScript files come from the directory of the
-// program.
+// Integration. The JavaScript files come from runtime/ of the package.
 // The result is { status, stdout, stderr } with the output as text. With
 // no -o, the CSS is in stdout. --watch does not end: do not give it.
 export async function runWasm(args = [], options = {}) {
   // A relative URL is relative to the page.
-  const url = new URL(String(options.wasm ?? wasmUrl()), globalThis.location?.href ?? import.meta.url).href;
+  const url = new URL(String(options.wasm ?? (options.runtime ? runtimeUrl('tailwind-browser.wasm', options.runtime) : wasmUrl())), globalThis.location?.href ?? import.meta.url).href;
   // The JavaScript files download while the program compiles.
-  const loading = assets(url, options.input ?? '', options.files ?? {});
+  const loading = assets(options.runtime, options.input ?? '', options.files ?? {});
   loading.catch(() => {});
   const module = await compile(url);
   let imports = {};

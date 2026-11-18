@@ -223,7 +223,7 @@ The input CSS can also be in the page, as for the Play CDN:
   with no style. The last CSS of each page stays in `localStorage`: the
   next load is styled at once, and the build replaces it.
 - In Chromium, with a network of 20 Mbps, the first visit shows the
-  styled page in about 0.5 s (1.0 s with the typography plugin), and a
+  styled page in about 0.6 s (0.8 s with the typography plugin), and a
   reload in about 50 ms. A build after
   a change takes about 15 ms. Use it for development, prototypes and
   editors, not for a production site.
@@ -239,9 +239,12 @@ const { status, stdout } = await runWasm(['-i', 'app.css'], {
 });
 ```
 
-With no `-o`, the CSS is in `stdout`. A bundler copies
-`tailwind-browser.wasm` with the files of the site. For `--minify` and
-`--optimize`, give the URL of `tailwind.wasm` in the option `wasm`.
+With no `-o`, the CSS is in `stdout`. Vite and webpack copy
+`tailwind-browser.wasm` and the JavaScript files of the plugins with the
+files of the site. For a bundler that does not copy them (esbuild), copy
+`runtime/` of the package to the site, and give its URL in the option
+`runtime`. For `--minify`, give the URL of `tailwind.wasm` in the option
+`wasm`.
 
 Each release also publishes the package to GitHub Packages, with the
 name `@sntran/tailwind.com` (registry `https://npm.pkg.github.com`), and
