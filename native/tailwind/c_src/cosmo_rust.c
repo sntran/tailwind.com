@@ -321,9 +321,18 @@ int tw_rs_fstatat(int dir, const char *path, struct musl_stat *m, int flags) {
 
 /* The width of the terminal of fd, for the help text and the error box
  * (`columns` of a stream of Node.js). 0: not a terminal. TIOCGWINSZ has a
- * value for each system, and Cosmopolitan reads the console on Windows. */
+ * value for each system, and Cosmopolitan reads the console on Windows.
+ *
+ * TW_NO_TERMINAL: the NIF objects (scripts/nif.sh). A run of the NIF has
+ * no terminal, and TIOCGWINSZ of Cosmopolitan is a variable that
+ * beam.com does not give to a NIF object. */
 int tw_terminal_columns(int fd) {
+#ifdef TW_NO_TERMINAL
+  (void)fd;
+  return 0;
+#else
   struct winsize ws;
   if (ioctl(fd, TIOCGWINSZ, &ws) == -1) return 0;
   return ws.ws_col;
+#endif
 }
