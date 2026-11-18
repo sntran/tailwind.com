@@ -56,8 +56,9 @@ defmodule Tailwind.Formatter do
   result replaces the list: it has the canonical form of each class,
   one class for more classes when the CSS is the same, no second copy of
   a class, and the order of the official Prettier plugin. A list with
-  `...` and a string with interpolations get the sort only. This needs
-  the version 4.3.5 of Tailwind CSS. One process runs the command with
+  `...` and a string with interpolations get the sort only. A
+  replacement is always a class of the version of Tailwind CSS of the
+  profile. One process runs the command with
   `--stream` for all the files of a run of `mix format`: the first list
   takes about 0.7 s, and each other list a few milliseconds.
   """

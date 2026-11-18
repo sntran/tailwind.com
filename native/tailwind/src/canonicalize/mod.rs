@@ -1,8 +1,11 @@
 //! The canonical form of candidates: `canonicalize-candidates.ts` of
 //! Tailwind CSS, and the modules that only it uses.
 //!
-//! This code follows the newest version of Tailwind CSS only. It has no
-//! switches for the older versions.
+//! The algorithm follows the newest version of Tailwind CSS, also for a
+//! design system of an older version: the canonical form of a candidate
+//! is a candidate with the same CSS, and the CSS comes from the compiler
+//! of the version of the design system, with its switches. A change of
+//! the algorithm in a later version of Tailwind CSS gets a switch.
 
 /// The features of a signature, as bits: `SignatureFeatures` of
 /// `canonicalize-candidates.ts`.
@@ -149,7 +152,13 @@ pub fn signature_options(options: &CanonicalizeOptions) -> SignatureOptions {
 
 /// `canonicalizeCandidates`: the canonical form of each candidate, with
 /// no duplicates. With `collapse`, one utility can replace more utilities.
+///
+/// The algorithm is the algorithm of the newest version of Tailwind CSS.
+/// The utilities, the variants and the theme are the ones of the version
+/// of the design system (`DesignSystem::version`): a candidate changes
+/// only when the CSS of that version stays the same.
 pub fn canonicalize_candidates(ds: &DesignSystem, candidates: &[String], options: &CanonicalizeOptions) -> Vec<String> {
+    let _version = crate::version::enter(ds.version);
     let signature_options = signature_options(options);
     utilities::prepare_spacing(ds, options.rem);
     let features = if options.collapse { FEATURE_COLLAPSE_UTILITIES } else { FEATURE_NONE };
@@ -165,6 +174,21 @@ pub fn canonicalize_candidates(ds: &DesignSystem, candidates: &[String], options
         result
     } else {
         collapse::collapse_candidates(ds, options, result)
+    }
+}
+
+/// The signature of a list of candidates: the CSS of the list through
+/// `@apply`, in the normal form of the canonical form of candidates.
+/// Two lists with the same signature give the same declarations. `None`
+/// for a list with a candidate that is not valid. The tests use it: the
+/// canonical form of a list has the signature of the list, in each
+/// version of Tailwind CSS.
+pub fn signature(ds: &DesignSystem, candidates: &[String], options: &CanonicalizeOptions) -> Option<String> {
+    let _version = crate::version::enter(ds.version);
+    utilities::prepare_spacing(ds, options.rem);
+    match signatures::utility_signature(ds, signature_options(options), &candidates.join(" ")) {
+        Signature::Css(css) => Some(css.to_string()),
+        Signature::Invalid(_) => None,
     }
 }
 

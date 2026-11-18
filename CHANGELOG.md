@@ -25,8 +25,13 @@ canonical form of class lists in `mix format`.
   a stylesheet, `--format` gives `text`, `json` or `jsonl`, and
   `--stream` reads one list from each line of the standard input. A run
   takes about 0.7 s, and 2.7 s for the official program: the first list
-  makes an index of all the classes. The command follows Tailwind CSS
-  4.3.5 only: with another version, it gives an error.
+  makes an index of all the classes. The command works as each version
+  of Tailwind CSS from 4.0.0: the algorithm is the one of 4.3.5, and a
+  replacement is always a class of the selected version, with the same
+  CSS in that version. On 400 random lists, the result is the result of
+  the official command of 4.3.2, 4.3.3 and 4.3.4. For 4.2.2 to 4.3.0, it
+  can be different, because the newer algorithm makes one class of more
+  classes in more cases (`docs/VERSIONS.md`).
 - `Tailwind.Formatter` has the option `canonicalize: true`: `mix format`
   gives each class list of a template its canonical form, with the
   command `canonicalize`. One run of `canonicalize --stream` serves all

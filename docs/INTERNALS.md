@@ -67,8 +67,14 @@ The differences in structure come from the two languages:
 
 ### The canonical form of candidates
 
-`canonicalize/` follows the newest version of Tailwind CSS only, with no
-switches. Its parts:
+The algorithm of `canonicalize/` is the algorithm of the newest version
+of Tailwind CSS, for a design system of each version: it has no
+switches for its own history. The design system keeps its version
+(`DesignSystem::version`), and `canonicalize_candidates`,
+`get_class_order` and `get_class_list` follow it (`version::enter`), so
+each signature is the CSS of that version. `docs/VERSIONS.md` has the
+reasons and the differences from the official command of the older
+versions. Its parts:
 
 - `signatures.rs`: the signature of a utility (its CSS through `@apply`
   in a normal form: no `@theme inline`, the inlined theme values, the

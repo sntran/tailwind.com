@@ -168,8 +168,50 @@ These parts are the code of this program, for each version:
 - **Source maps** (`--map`): the compiler of Tailwind CSS has source maps
   from version 4.1.6. For an earlier version, `--map` is an error.
 
+- **The command `canonicalize`**: the Rust code, with one algorithm
+  for each version. See the next section.
+
 Tailwind CSS 3 is another program (a PostCSS plugin with many
 dependencies). It does not work, and the program says so.
+
+## The command `canonicalize` and the versions
+
+The canonical form of a class is another class with the same CSS. So
+the command has two parts:
+
+- **The CSS of a class** comes from the Rust compiler as the selected
+  version, with its switches ([`SWITCHES.md`](SWITCHES.md)). A
+  replacement must be a utility or a variant of that version, with the
+  same CSS in that version. For example `start-4` becomes `inset-s-4`
+  only from 4.2.0, where `inset-s-*` is new, and `break-words` becomes
+  `wrap-break-word` only from 4.1.0.
+- **The algorithm** (which replacements the command tries, and how it
+  makes one class of more classes) is the algorithm of the newest
+  version, for each version. It has no switch for the changes of the
+  official code from 4.2.2 to 4.3.5: most of them repair faults, and a
+  newer algorithm gives a result that is also correct for an older
+  version. When a later version of Tailwind CSS changes the algorithm,
+  that change gets a switch, as each other change of the compiler.
+
+Thus the result is always a correct list for the selected version, but
+it is not always the result of the official command of that version:
+
+| Version | This program and the official command of the version, on 400 random lists |
+|---|---|
+| 4.3.4, 4.3.5 | The same code, and the same result (`tests/upstream/cli/canonicalize-4.3.4`, `canonicalize-random`) |
+| 4.3.1 to 4.3.3 | The same result on the 400 lists (`canonicalize-4.3.2`; 4.3.3 by hand). The official code of these versions is older, so another input can give a different result where 4.3.4 repaired a fault |
+| 4.2.3 to 4.3.0 | 1 list is different (4.2.4 and 4.3.0 by hand): the official command of these versions gives `bg-linear-0/longer` for `-bg-linear-0/longer` |
+| 4.2.2 | 53 lists are different: this program makes one class of more classes in more cases (`w-[16px] h-[16px]` is `size-[16px]`) |
+| 4.0.0 to 4.2.1 | The official program has no such command. This program has it |
+
+The command does not run with the script engine
+(`TAILWIND_COM_ENGINE=script`, or a version that only a package has):
+the official compiler of a package has its own canonical form, or none.
+
+`native/tailwind/tests/canonicalize_versions.rs` checks, for 400 lists
+and five versions from 4.0.0, that each class of a result is a class of
+the version, and that the result has the same declarations as the
+input.
 
 ## How the script engine stays the same as V8
 
@@ -189,8 +231,8 @@ two things needed work:
 `String.prototype.localeCompare` of QuickJS compares code units, and
 V8 uses the rules of a locale. Tailwind CSS uses it only in its
 `canonicalize` code, which a build does not call. The command
-`canonicalize` uses the Rust code, which follows the newest version
-only, and has the order of V8 (`utils/locale_compare.rs`).
+`canonicalize` uses the Rust code, which has the order of V8
+(`utils/locale_compare.rs`).
 
 The tests:
 

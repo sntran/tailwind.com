@@ -7,6 +7,7 @@ use crate::utilities::UtilityKind;
 use crate::utils::compare::compare;
 
 /// An item of the class list: `ClassItem`.
+#[derive(Clone)]
 struct ClassItem {
     name: String,
     utility: String,
@@ -27,6 +28,7 @@ fn is_fraction(value: &str) -> bool {
 impl DesignSystem {
     /// `getClassList`: each class with its modifiers.
     pub fn get_class_list(&self) -> Vec<(String, Vec<String>)> {
+        let _version = crate::version::enter(self.version);
         let mut items: IndexMap<String, ClassItem> = IndexMap::default();
         fn item<'a>(items: &'a mut IndexMap<String, ClassItem>, name: &str) -> &'a mut ClassItem {
             items.entry(name.to_string()).or_insert_with(|| ClassItem {
@@ -87,7 +89,10 @@ impl DesignSystem {
 
         // The sort by the name of the class.
         let mut list: Vec<ClassItem> = items.into_values().collect();
-        list.sort_by(|a, b| compare(&a.name, &b.name));
+        // The compare function of a version before 4.0.7 is not a
+        // consistent order: the result then depends on the algorithm, so
+        // this is the algorithm of V8.
+        crate::utils::v8_sort::sort(&mut list, |a, b| compare(&a.name, &b.name) as i64);
 
         sort_fractions_last(list)
     }

@@ -8,7 +8,8 @@
 //! tailwindcss canonicalize --stream --format jsonl
 //! ```
 //!
-//! The canonical form follows the newest version of Tailwind CSS only
+//! The algorithm is the algorithm of the newest version of Tailwind CSS,
+//! with the utilities, the variants and the theme of the selected version
 //! (`crate::canonicalize`).
 
 use super::{args, context, engine, header, modules, resolve, Style};
@@ -253,11 +254,15 @@ fn canonicalize(design_system: &DesignSystem, input: &str) -> Result<String, Str
 /// `defaultSort`: the classes with no order first, then by their order,
 /// then by their text.
 fn default_sort(mut entries: Vec<(String, Option<u64>)>) -> Vec<String> {
-    entries.sort_by(|(a, order_a), (z, order_z)| match (order_a, order_z) {
-        _ if order_a == order_z => compare(a, z),
-        (None, _) => std::cmp::Ordering::Less,
-        (_, None) => std::cmp::Ordering::Greater,
-        (Some(x), Some(y)) => x.cmp(y).then_with(|| compare(a, z)),
+    // The sort of V8: the compare function of an old version is not a
+    // consistent order (`intellisense.rs`).
+    crate::utils::v8_sort::sort(&mut entries, |(a, order_a), (z, order_z)| {
+        (match (order_a, order_z) {
+            _ if order_a == order_z => compare(a, z),
+            (None, _) => std::cmp::Ordering::Less,
+            (_, None) => std::cmp::Ordering::Greater,
+            (Some(x), Some(y)) => x.cmp(y).then_with(|| compare(a, z)),
+        }) as i64
     });
     entries.into_iter().map(|(candidate, _)| candidate).collect()
 }
@@ -266,14 +271,13 @@ fn default_sort(mut entries: Vec<(String, Option<u64>)>) -> Vec<String> {
 /// `@import "tailwindcss";` in the working directory.
 fn load_design_system(css_file: Option<&str>) -> Result<DesignSystem, String> {
     let selection = engine::select()?;
+    // The Rust compiler has the utilities and the variants of each
+    // version. The official compiler of a package (the script engine)
+    // has its own canonical form, or none: this command does not run it.
     let version = match &selection {
-        engine::Selection::Native { version, .. } if *version == crate::Version::NATIVE => *version,
-        other => {
-            return Err(format!(
-                "The canonicalize command follows Tailwind CSS v{} only, and this project uses v{}.",
-                crate::Version::NATIVE,
-                other.version()
-            ))
+        engine::Selection::Native { version, .. } => *version,
+        engine::Selection::Script(_) => {
+            return Err("The canonicalize command uses the Rust compiler. It does not run with the script engine.".into())
         }
     };
 

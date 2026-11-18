@@ -65,6 +65,11 @@ pub struct DesignSystem {
     variant_order: RefCell<Option<(usize, Rc<VariantOrder>)>>,
     /// The caches of the canonical form of candidates.
     pub(crate) canonical: crate::canonicalize::Storage,
+    /// The version of Tailwind CSS that the design system follows: the
+    /// version of the thread at its start (`version::enter`). The
+    /// functions for the editor tools and the canonical form of
+    /// candidates follow it also after the compile.
+    pub version: crate::Version,
 }
 
 /// A design system with the utilities and variants of Tailwind CSS.
@@ -90,6 +95,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         tracked: RefCell::new(HashSet::default()),
         variant_order: RefCell::new(None),
         canonical: Default::default(),
+        version: crate::version::current(),
     }
 }
 

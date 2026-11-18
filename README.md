@@ -306,7 +306,7 @@ expects the same text, byte for byte:
 | The official command line program on small projects, also the warnings of the optimizer and of `@utility` | 20 projects |
 | The source maps of the official compiler and of its optimizer | 317 stylesheets |
 | The official command line program with `--map`, also with a JavaScript plugin and config | 29 projects |
-| The command `canonicalize`: each call of the unit tests of the official code, and the official program on 400 random lists | 1,914 calls, 11 projects |
+| The command `canonicalize`: each call of the unit tests of the official code, and the official program on 400 random lists (4.3.5, 4.3.4 and 4.3.2) | 1,914 calls, 13 projects |
 | The official command line program on projects with JavaScript and TypeScript plugins and configs (daisyUI, heroicons, `@tailwindcss/typography`, `@tailwindcss/forms`, two Phoenix projects) | 100 projects |
 | The `compile` calls of the unit tests of Tailwind CSS that load a JavaScript plugin or config | 296 calls |
 | Node.js 22 for the parts of Node.js that a plugin gets (`Buffer`, `URL`, timers, `fs`, `util`, ...), and for the files that `require` and `import` find | 124 values, 160 questions |
@@ -411,8 +411,10 @@ differences.
   Start the file there with the APE loader of cosmocc
   (`ape-x86_64.elf tailwind.com`). Cosmopolitan supports OpenBSD 7.3 or
   earlier.
-- **`canonicalize`** follows Tailwind CSS 4.3.5 only. With another
-  version, the command gives an error.
+- **`canonicalize`** has one algorithm, the one of Tailwind CSS 4.3.5,
+  for each version of Tailwind CSS: see
+  [`docs/VERSIONS.md`](docs/VERSIONS.md). For 4.2.2 to 4.3.0, the result
+  can be better than the result of the official command of that version.
 - **Tailwind CSS 3** (a project with only `tailwind.config.js` and
   `@tailwind` rules, and `version: "3.x"`) does not work: it is another
   program. Use the official Hex package or program for it.

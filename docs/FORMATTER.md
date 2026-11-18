@@ -97,7 +97,9 @@ Prettier plugin, so the sort of the plugin does not change the result.
 lists. A list with `...` and the fixed parts of a string with
 interpolations get the sort only.
 
-The command follows Tailwind CSS 4.3.5 only. One process runs
+The command works for each version of Tailwind CSS of the Rust
+compiler, with the utilities of the version of the profile
+([`VERSIONS.md`](VERSIONS.md)). One process runs
 `canonicalize --stream` for all the files of a run of `mix format`
 (`Tailwind.Formatter.Canonical`): it writes each list as a line of the
 standard input of the command, and reads one line for each list. With

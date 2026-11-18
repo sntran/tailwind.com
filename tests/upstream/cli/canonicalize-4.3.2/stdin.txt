@@ -1,0 +1,400 @@
+hover:ms-0 hover:ml-0 hover:gap-x-2 hover:gap-y-2
+rounded-t-lg rounded-l-lg w-4 h-4
+group-hover:fill-emerald-50/0 group-hover:mask-radial-to-olive-50/100 group-hover:border-x-purple-800/100 group-hover:fill-rose-200/50 group-hover:text-shadow-slate-50/100
+hover:scroll-pe-4 hover:scroll-pb-4
+data-[open]:border-s data-[open]:border-e data-[open]:border-y-4
+group-hover:inset-x-2 group-hover:inset-y-2 group-hover:start-2 group-hover:w-4 group-hover:h-4
+hover:mask-x-to-green-800/0 hover:outline-cyan-950/50 hover:print:pointer-events-auto
+via-orange-50/100
+hover:scroll-px-2.5 hover:scroll-ps-2.5
+mask-linear-to-pink-600/0
+mask-b-from-purple-700/0 in-rtl:even:-scroll-ml-4 shadow-amber-900/50 mask-radial-to-rose-900/50
+dark:drop-shadow-current/100 dark:border-l-zinc-700/50 dark:mask-y-from-slate-300/0 dark:caret-sky-700/50 dark:accent-sky-400/0 dark:shadow-purple-400/0
+break-after-auto
+border-s-4 border-l border-y-4
+mask-conic-from-orange-800! stroke-yellow-900/50 max-block-1/6 divide-indigo-950/100 mask-linear-to-white/0
+ps-[0.5rem] pe-[0.5rem] px-[0.5rem]
+mask-r-from-yellow-400/0 stroke-lime-400
+inset-shadow-taupe-800 via-violet-800/50 divide-rose-50/100
+dark:mask-linear-from-fuchsia-950/100 dark:mask-t-from-101% dark:has-not:to-95%! dark:bg-cyan-400/50 dark:border-r-orange-400
+[&>*]:border-y-teal-800/100 [&>*]:mask-y-from-amber-50/0 [&>*]:fill-mauve-500/100 [&>*]:to-50% [&>*]:inset-ring-blue-50/50
+data-[open]:start-[0.5rem] data-[open]:right-[0.5rem] data-[open]:inset-x-[0.5rem] data-[open]:bottom-[0.5rem]
+[&>*]:mask-conic-from-mist-500/0 [&>*]:ring-offset-indigo-200/100 [&>*]:from-gray-400/50 [&>*]:border-y-taupe-400/100
+md:rounded-y-[8px] md:rounded-x-lg md:rounded-e-[8px] md:rounded-s-[8px]
+dark:scroll-pb-2 dark:scroll-ps-2 dark:scroll-py-2 dark:scroll-px-2 dark:w-4 dark:h-4
+border-s border-b-[3px] border-t-2 text-sm leading-5
+focus:hover:pb-[0.5rem] focus:hover:pt-[0.5rem] focus:hover:pe-[0.5rem] focus:hover:pr-[0.5rem]
+border-x-red-950/0 shadow-stone-950/100 fill-violet-50/50 border-t-sky-600/0
+focus:hover:text-shadow-mauve-500/100 focus:hover:mask-linear-to-purple-50/0 focus:hover:mask-y-from-purple-700/0 focus:hover:in-rtl:even:-scroll-ml-4 focus:hover:border-cyan-900/0 focus:hover:decoration-neutral-100/50
+border-e-violet-800/50 border-t-olive-900/100 border-b-sky-300/50
+[&>*]:mb-4 [&>*]:mt-4 [&>*]:mr-4
+dark:ps-[16px] dark:px-[16px] dark:pb-[16px] dark:w-4 dark:h-4
+[&>*]:pt-px [&>*]:pb-px
+data-[open]:border-e data-[open]:border-y-[3px] data-[open]:border-t
+data-[open]:decoration-inherit/50 data-[open]:inset-ring-neutral-400/100 data-[open]:mask-radial-from-gray-400/100 data-[open]:mask-b-to-yellow-200/100 data-[open]:min-[300px]:first-letter:bg-[#0088cc]/50 data-[open]:accent-zinc-100/50
+pl-4 pt-4 py-4
+not-supports-[display:grid]:row-[span_2/span_3]
+data-[open]:me-2 data-[open]:ms-2
+focus:hover:mask-x-to-red-800/50 focus:hover:mask-y-from-lime-600/100 focus:hover:mask-y-to-green-700/50
+group-hover:scroll-mb-px group-hover:scroll-ms-px group-hover:scroll-mx-px group-hover:overflow-x-auto group-hover:overflow-y-auto
+md:border-t-neutral-950/100 md:placeholder-mist-600/100 md:nth-[2n+1]:[color:--alpha(red/50%)] md:inset-ring-orange-950/0 md:border-e-amber-600/100 md:drop-shadow-neutral-900/0
+dark:ms-2 dark:ml-2
+md:mask-t-from-red-200/100 md:accent-fuchsia-50/50 md:mask-l-from-olive-200/50 md:mask-l-to-zinc-500/0 md:mask-r-from-gray-600/0
+[&>*]:border-s-amber-700/50 [&>*]:mask-conic-to-green-400/0 [&>*]:border-e-inherit/50 [&>*]:border-bs-teal-200/100 [&>*]:mask-l-to-neutral-400/[0.3] [&>*]:accent-fuchsia-400/0
+dark:mx-2.5 dark:ms-2.5 dark:mt-2.5 dark:me-2.5 dark:overflow-x-auto dark:overflow-y-auto
+top-0 inset-y-0 left-0 start-0 w-4 h-4
+inset-shadow-stone-700/100 scrollbar-thumb-mauve-100/100 caret-orange-800/100 border-r-pink-900/0
+focus:hover:scroll-py-[1rem] focus:hover:scroll-pr-[1rem] focus:hover:scroll-ps-[1rem]
+hover:pl-2.5 hover:pr-2.5 hover:px-2.5 hover:w-4 hover:h-4
+group-hover:scroll-mx-[3px] group-hover:scroll-my-[3px] group-hover:w-[16px] group-hover:h-[16px]
+outline-amber-700 bg-amber-300/0 checked:@min-3xs:scrollbar-track-amber-950 mask-b-to-emerald-50/50 decoration-olive-400/0 sm:data-(--d):mask-x-to-0.5/(--o)
+mask-radial-to-zinc-900/50 text-shadow-gray-500/100 bg-olive-200/0
+dark:outline-red-100/100 dark:mask-y-to-slate-800/50
+focus:hover:mx-0 focus:hover:me-0 focus:hover:mb-0
+group-hover:scrollbar-thumb-white/100 group-hover:mask-r-from-mist-50/0 group-hover:text-shadow-rose-200/100 group-hover:scrollbar-thumb-purple-800/0
+group-hover:to-purple-400/0 group-hover:border-e-yellow-950/0 group-hover:border-lime-50/0 group-hover:mask-l-from-sky-100/50 group-hover:-inset-be-1/2 group-hover:pr-9
+md:ps-1 md:py-1 md:pt-1 md:pb-1
+md:scroll-px-[1rem] md:scroll-pb-[1rem] md:w-[16px] md:h-[16px]
+[&>*]:border-l-neutral-300/50 [&>*]:text-shadow-rose-700/100
+ml-2.5 my-2.5
+hover:text-pink-50/100 hover:outline-yellow-50/0 hover:outline-olive-700
+focus:hover:border-y-gray-50/50
+focus:hover:pt-[16px] focus:hover:pb-[16px] focus:hover:px-[16px]
+md:mask-x-to-indigo-900/100 md:mask-radial-from-rose-400/0 md:accent-pink-400/50 md:nth-last:transform-[rotate(3deg)_scale(1.1)] md:via-amber-900/50
+[&>*]:scroll-me-4 [&>*]:scroll-ms-4 [&>*]:scroll-ml-4 [&>*]:gap-x-2 [&>*]:gap-y-2
+dark:inert:inset-ring-5! dark:bg-cyan-300/0 dark:*:text-shadow-stone-100/2 dark:mask-linear-from-taupe-600/50
+hover:border-l-rose-800/100 hover:scroll-p-3.5 hover:to-zinc-900/100 hover:mask-t-to-stone-50/0
+data-[open]:scroll-pl-px data-[open]:scroll-pb-px
+group-hover:pb-0 group-hover:pl-0 group-hover:py-0 group-hover:ps-0 group-hover:w-4 group-hover:h-4
+[&>*]:text-stone-500/0 [&>*]:border-x-slate-700/0 [&>*]:shadow-lime-600/0 [&>*]:mask-linear-to-stone-50/0 [&>*]:shadow-zinc-300 [&>*]:border-be-indigo-50
+group-hover:ps-4 group-hover:pt-4 group-hover:pr-4 group-hover:overflow-x-auto group-hover:overflow-y-auto
+rounded-t-none rounded-e-[8px] rounded-y-[8px]
+scroll-my-[1rem] scroll-mr-[1rem] scroll-ml-[1rem] scroll-mt-[1rem] overflow-x-auto overflow-y-auto
+border-t-purple-400/0 mask-radial-from-taupe-700/100 caret-taupe-500/100 border-l-zinc-600/0 shadow-mist-900/50 outline-yellow-100/50
+scroll-pt-1 scroll-py-1 scroll-ps-1 gap-x-2 gap-y-2
+dark:scroll-ps-[0.5rem] dark:scroll-pt-[0.5rem] dark:scroll-pr-[0.5rem] dark:gap-x-2 dark:gap-y-2
+pl-[3px] pt-[3px] py-[3px] pe-[3px] w-4 h-4
+border-b border-y-2 border-r border-e-4 overflow-x-auto overflow-y-auto
+data-[open]:pl-[0.5rem] data-[open]:ps-[0.5rem]
+focus:hover:scrollbar-track-rose-600/50 focus:hover:placeholder-mist-500/50 focus:hover:mask-r-from-inherit/100 focus:hover:fill-blue-200 focus:hover:mask-radial-from-mauve-800/50 focus:hover:mask-radial-to-gray-200/50
+focus:hover:border-mist-400/50 focus:hover:shadow-indigo-100/100
+dark:py-4 dark:pt-4
+focus:hover:mask-b-from-teal-500/0 focus:hover:mask-conic-to-purple-600/100 focus:hover:mask-t-to-sky-400/100 focus:hover:mask-y-to-emerald-100/100
+dark:from-emerald-950/0 dark:to-zinc-400/100 dark:divide-teal-950/50
+data-[open]:inset-x-0 data-[open]:end-0 data-[open]:start-0
+data-[open]:rounded-e-lg data-[open]:rounded-t-[8px]
+focus:hover:mask-b-to-blue-200/0 focus:hover:mask-conic-from-rose-300/0 focus:hover:outline-red-50/50
+focus:hover:scroll-mx-[1rem] focus:hover:scroll-mb-[1rem] focus:hover:scroll-ms-[1rem]
+focus:hover:mask-linear-from-lime-900/50 focus:hover:border-s-red-900/100 focus:hover:scrollbar-thumb-mist-900/50
+data-[open]:via-slate-700/0 data-[open]:border-bs-yellow-500 data-[open]:mask-y-to-mauve-800/50
+placeholder-blue-500/0
+data-[open]:decoration-orange-50/100 data-[open]:border-y-sky-950/0
+focus:hover:rounded-e-[8px] focus:hover:rounded-x-lg focus:hover:rounded-t-none focus:hover:overflow-x-auto focus:hover:overflow-y-auto
+hover:me-2.5 hover:mb-2.5 hover:ml-2.5 hover:mt-2.5
+max-w-2/12 mask-conic-to-fuchsia-800/100 scrollbar-thumb-neutral-900/100 border-y-cyan-700/0 border-lime-700/100
+dark:bottom-2.5 dark:start-2.5 dark:right-2.5 dark:top-2.5
+group-hover:mask-conic-from-yellow-50/50 group-hover:bg-neutral-700/50 group-hover:border-pink-50/0 group-hover:inset-shadow-lime-400/100 group-hover:border-l-rose-950
+focus:hover:border-l-4 focus:hover:border-x focus:hover:text-sm focus:hover:leading-5
+mask-t-from-red-700/100 mask-t-to-pink-300/100 mask-b-from-olive-200/100
+data-[open]:inset-y-0 data-[open]:bottom-0 data-[open]:inset-x-0 data-[open]:right-0
+hover:mask-r-from-zinc-500/100 hover:inset-shadow-lime-200/0 hover:border-s-cyan-900/100 hover:stroke-orange-600/0 hover:mask-radial-to-mist-100/50
+data-[open]:inset-ring-lime-100/50 data-[open]:fill-neutral-100/0 data-[open]:-skew-(--sk)/(--o) data-[open]:bg-red-900 data-[open]:mask-x-from-amber-200/0
+md:border-indigo-700/100 md:inset-ring-teal-600/0 md:mask-l-from-cyan-400/100
+[&>*]:border-x-fuchsia-50/100 [&>*]:border-e-cyan-600/50 [&>*]:border-e-taupe-200/100
+focus:hover:scroll-mt-1 focus:hover:scroll-me-1 focus:hover:scroll-ml-1 focus:hover:gap-x-2 focus:hover:gap-y-2
+rounded-l-[8px] rounded-e-lg rounded-b-[8px] rounded-s-lg overflow-x-auto overflow-y-auto
+group-hover:scroll-ms-[3px] group-hover:scroll-mr-[3px] group-hover:w-[16px] group-hover:h-[16px]
+md:data-active:brightness-[1.15]!
+group-hover:rounded-x-lg group-hover:rounded-b-none group-hover:rounded-e-lg group-hover:rounded-r-[8px]
+focus:hover:rounded-l-none focus:hover:rounded-r-[8px] focus:hover:rounded-x-none focus:hover:rounded-s-none focus:hover:w-[16px] focus:hover:h-[16px]
+focus:hover:mask-r-from-green-100/50 focus:hover:caret-orange-300/100 focus:hover:mask-conic-to-yellow-950/100
+hover:scroll-my-2.5 hover:scroll-mx-2.5 hover:scroll-ms-2.5
+focus:hover:mask-radial-to-emerald-800/0 focus:hover:shadow-mist-900/50 focus:hover:drop-shadow-stone-900/100 focus:hover:mask-x-from-sky-300/100
+focus:hover:border-e focus:hover:border-x focus:hover:border-r focus:hover:w-4 focus:hover:h-4
+hover:pr-[1rem] hover:pt-[1rem] hover:py-[1rem] hover:ps-[1rem]
+hover:rounded-t-lg hover:rounded-b-none hover:overflow-x-auto hover:overflow-y-auto
+decoration-pink-900/100 border-be-amber-100/50 open:@md:rtl:!mask-radial-[50%_50%] border-b-mauve-100/0
+data-[open]:drop-shadow-pink-700/0 data-[open]:mask-radial-to-olive-50/100 data-[open]:border-e-yellow-950/0
+[&>*]:scroll-py-px [&>*]:scroll-pl-px [&>*]:scroll-ps-px [&>*]:scroll-px-px [&>*]:w-[16px] [&>*]:h-[16px]
+focus:hover:border-e-lime-300/0 focus:hover:text-blue-800/50 focus:hover:shadow-mauve-500/0 focus:hover:scrollbar-track-gray-950/100 focus:hover:decoration-stone-700/0 focus:hover:text-shadow-zinc-900/50
+scroll-mx-[0.5rem] scroll-ml-[0.5rem] scroll-my-[0.5rem] scroll-ms-[0.5rem] w-[16px] h-[16px]
+mb-4 ml-4 mx-4
+via-cyan-400/0 mask-conic-from-emerald-900/50 bg-teal-950 accent-green-300/50
+start-4 left-4 text-sm leading-5
+[&>*]:to-mist-900/0 [&>*]:mask-r-to-purple-500/50 [&>*]:border-be-orange-400/0 [&>*]:mask-t-from-stone-200/50
+ps-2 pl-2 pe-2 pt-2
+group-hover:mask-r-from-emerald-950/100 group-hover:border-bs-neutral-300/100 group-hover:caret-slate-600/50
+[&>*]:mask-x-to-mauve-600/100 [&>*]:mask-radial-from-taupe-600/50 [&>*]:ring-sky-200/0 [&>*]:mask-linear-to-slate-300/100 [&>*]:text-shadow-rose-950/0 [&>*]:border-b-stone-600/50
+data-[open]:mask-l-to-emerald-200/100 data-[open]:from-teal-950/0
+[&>*]:inset-ring-white/100 [&>*]:from-violet-300/0 [&>*]:inset-ring-rose-800/100 [&>*]:fill-red-200/0 [&>*]:mask-radial-from-teal-900/0 [&>*]:mask-r-from-orange-800/50
+ps-[1rem] pe-[1rem] py-[1rem]
+hover:border-b-zinc-500/100 hover:ring-fuchsia-200/0 hover:mask-l-from-gray-950/50 hover:ring-gray-700/50 hover:inset-ring-black/0 hover:mask-x-from-orange-700/50
+border-be-rose-200/100 mask-x-to-orange-700/100 ring-offset-red-100/50
+ms-2.5 mx-2.5 mt-2.5 text-sm leading-5
+group-hover:mask-l-from-blue-950/50 group-hover:border-e-neutral-950/0 group-hover:border-be-slate-500/100 group-hover:border-e-pink-400/100 group-hover:fill-gray-800/0
+hover:scrollbar-thumb-emerald-600/0
+dark:drop-shadow-red-500/0 dark:[&>*]:border-bs-emerald-950 dark:fill-gray-50/100 dark:mask-x-from-emerald-300/50 dark:mask-conic-from-mauve-800/100 dark:text-shadow-zinc-900/50
+mask-x-from-cyan-900/50 mask-r-from-mist-700/100 mask-radial-from-blue-900/100 mask-r-from-indigo-600/100
+group-hover:via-gray-600/0 group-hover:outline-purple-50/0 group-hover:border-b-slate-950 group-hover:border-s-fuchsia-200/100
+[&>*]:ring-slate-800/100 [&>*]:shadow-slate-600/50 [&>*]:inset-shadow-mauve-800/100 [&>*]:decoration-red-50/0 [&>*]:mask-b-from-emerald-600/50
+rounded-b-none rounded-r-lg
+mask-linear-from-taupe-100/50 ring-fuchsia-100 border-t-cyan-950/100 decoration-taupe-300/100
+border-x-cyan-700/100 mask-t-to-slate-200/50 mask-r-from-mauve-800/100 border-y-taupe-200/0 caret-stone-950/50
+hover:border-l-green-700 hover:drop-shadow-indigo-900/100 hover:aria-disabled:mask-l-from-10 hover:mask-l-to-yellow-500 hover:mask-linear-from-mauve-200/0
+hover:ring-offset-purple-200/50 hover:font-(--fw)/37! hover:mask-t-from-blue-300/50 hover:ring-cyan-900/0 hover:aria-[sort=ascending]:-line-clamp-(--lc)
+mb-[0.5rem] mx-[0.5rem] mr-[0.5rem]
+[&>*]:border-l-cyan-200/0 [&>*]:border-be-slate-950/100 [&>*]:out-of-range:in-user-valid:mask-l-to-red-800 [&>*]:scrollbar-track-mist-400/100 [&>*]:mask-conic-from-slate-100/0
+border-x border-e
+md:text-shadow-indigo-200/50 md:inset-x-44 md:placeholder-green-400/0
+hover:inset-shadow-mauve-100/0 hover:ring-zinc-300/0
+[&>*]:mask-b-to-blue-400/100 [&>*]:mask-b-from-zinc-950/0
+md:peer-user-valid:!scroll-px-28
+group-hover:to-violet-200/100 group-hover:mask-x-to-mauve-500/50 group-hover:mask-conic-to-violet-200/100 group-hover:divide-slate-300/100
+focus:hover:border-y-4 focus:hover:border-b
+[&>*]:border-e [&>*]:border-t-4 [&>*]:border-b [&>*]:border-s-4
+group-hover:pt-4 group-hover:pe-4 group-hover:text-sm group-hover:leading-5
+md:mr-[16px] md:mt-[16px] md:w-4 md:h-4
+data-[open]:border-x-2 data-[open]:border-y-4 data-[open]:border-l-4 data-[open]:border-b
+bottom-1 inset-x-1 right-1 text-sm leading-5
+[&>*]:caret-white/50 [&>*]:mask-b-from-rose-100/50 [&>*]:inset-ring-violet-50/[35%] [&>*]:outline-indigo-500/100
+inset-shadow-pink-400/100 to-teal-700/0 border-x-sky-950/100
+group-hover:stroke-purple-600/100 group-hover:caret-fuchsia-200/50 group-hover:ring-purple-200/100 group-hover:mask-conic-from-pink-100/0 group-hover:not-aria-checked:flex group-hover:mask-l-from-pink-950/50
+mask-y-from-violet-300/0 mask-radial-from-pink-800/50 mask-t-from-purple-800/100 peer-data-active:text-[length:var(--x)]/[--o]
+border-y-orange-900 border-t-orange-500 caret-mauve-700/100 mask-x-to-lime-200/100 caret-red-300/0 border-bs-rose-700/100
+focus:hover:pt-px focus:hover:pe-px focus:hover:ps-px focus:hover:text-sm focus:hover:leading-5
+md:pointer-coarse:nth:aria-busy:mask-linear-from-mist-500 md:placeholder-lime-300/100
+data-[open]:bg-gray-100/0
+focus:hover:inset-shadow-emerald-400/100
+group-hover:mt-2 group-hover:me-2 group-hover:mb-2
+rounded-x-[8px] rounded-t-[8px]
+border-s border-y-[3px] border-l-4 border-r-2 w-[16px] h-[16px]
+focus:hover:-inset-e-1/3 focus:hover:text-shadow-violet-800/50 focus:hover:from-indigo-100/0 focus:hover:border-l-teal-200/50 focus:hover:stroke-mauve-600/100
+md:border-be-blue-500/100 md:mask-b-to-indigo-700/100 md:ring-blue-300/100 md:@min-[300px]:decoration-red-600!
+hover:noscript:drop-shadow-[0_0_5px_red] hover:from-emerald-50/0 hover:ring-green-700/100
+group-focus:before:max-inline-3/4
+md:mr-[1rem] md:mt-[1rem] md:my-[1rem]
+hover:mask-y-from-green-700/0 hover:mask-r-from-sky-400/100
+md:mask-conic-from-red-400/0
+focus:hover:mask-radial-from-olive-600/100 focus:hover:scrollbar-thumb-stone-300/0 focus:hover:divide-mist-400/0
+group-hover:border-r-amber-800/100 group-hover:shadow-gray-300/100 group-hover:mask-radial-to-green-700/100 group-hover:inline-1/6
+placeholder-mauve-100/50 mask-l-to-mist-800/50 mask-l-to-rose-700/100
+md:mask-l-to-yellow-100/0 md:text-shadow-neutral-900 md:shadow-lime-800/100 md:mask-x-to-lime-600/50
+dark:mx-[16px] dark:me-[16px] dark:ms-[16px] dark:ml-[16px]
+border-y-4 border-l-[3px] border-x-[3px] border-s
+group-hover:border-x-green-100/0
+dark:fill-mist-800/50 dark:mask-radial-from-orange-50/100
+data-[open]:min-h-4/5
+hover:mask-radial-from-taupe-500/0 hover:mask-t-to-teal-950/100 hover:border-r-emerald-200/50 hover:text-shadow-rose-500/0
+border-be-pink-50/100 inset-shadow-amber-900/100 border-be-red-700/50
+[&>*]:border-r-purple-50/100
+focus:hover:me-[3px] focus:hover:ml-[3px] focus:hover:mr-[3px] focus:hover:gap-x-2 focus:hover:gap-y-2
+min-h-6/12 -bg-linear-0/longer border-be-stone-700/0 mask-t-from-lime-400/50 contrast-less:col-end-10 scrollbar-track-rose-100/50
+mask-radial-to-amber-400/50 border-t-red-300/0 outline-green-950/100 ltr:border-l-violet-300/100 mask-y-from-rose-700/100
+data-[open]:end-px data-[open]:inset-y-px data-[open]:right-px data-[open]:bottom-px data-[open]:w-[16px] data-[open]:h-[16px]
+hover:border-t-stone-500/50
+data-[open]:mask-y-from-red-300/100 data-[open]:inset-shadow-slate-600 data-[open]:border-y-blue-50/50
+group-hover:bg-taupe-800/50 group-hover:border-r-sky-200/100 group-hover:in-[.sidebar]:mask-y-from-stone-950 group-hover:text-shadow-mauve-700 group-hover:scrollbar-track-emerald-50/0 group-hover:mask-r-from-amber-400/50
+md:mask-linear-from-neutral-50/0 md:rtl:inset-be-1/2 md:ring-yellow-950/50 md:border-t-stone-50/50
+data-[open]:bottom-2.5 data-[open]:left-2.5 data-[open]:end-2.5 data-[open]:inset-y-2.5
+[&>*]:mt-2 [&>*]:my-2
+dark:mask-conic-from-fuchsia-400/100 dark:mask-t-to-red-950/50 dark:inset-ring-amber-700/50
+data-[open]:scroll-ml-0 data-[open]:scroll-mx-0 data-[open]:scroll-ms-0 data-[open]:scroll-me-0 data-[open]:overflow-x-auto data-[open]:overflow-y-auto
+hover:pl-px hover:pe-px hover:px-px
+mask-y-from-emerald-50/0 outline-slate-600/0 mask-b-from-amber-200/100 border-l-blue-500/50 mask-y-from-lime-100/100 stroke-blue-400/0
+md:text-cyan-700/0
+dark:mask-x-from-sky-600/0 dark:mask-r-to-taupe-900/50 dark:to-lime-100/0 dark:mask-linear-to-teal-950/100
+focus:hover:border-x-green-500
+my-[16px] mx-[16px] mb-[16px] ml-[16px]
+group-hover:border-r group-hover:border-y-2 group-hover:border-s-2 group-hover:border-x
+group-hover:border-l-2 group-hover:border-x group-hover:border-t-4 group-hover:border-b-[3px]
+group-hover:border-t group-hover:border-l group-hover:border-y group-hover:border-b-[3px] group-hover:text-sm group-hover:leading-5
+scroll-mr-[16px] scroll-me-[16px]
+[&>*]:mask-x-from-blue-950/0 [&>*]:scrollbar-thumb-transparent/0 [&>*]:mask-t-to-indigo-300
+scroll-mx-0 scroll-mb-0 w-4 h-4
+[&>*]:rounded-r-[8px] [&>*]:rounded-b-lg [&>*]:rounded-s-[8px] [&>*]:rounded-y-none [&>*]:overflow-x-auto [&>*]:overflow-y-auto
+group-hover:mask-conic-from-cyan-900/0
+mask-conic-from-rose-800/0 text-9xl/tight bg-sky-500/0 stroke-fuchsia-700/100
+hover:decoration-cyan-200/50 hover:border-x-purple-500 hover:outline-emerald-100/0 hover:text-shadow-teal-950/50 hover:ring-mauve-100/101 hover:bg-mist-900/100
+[&>*]:rounded-e-none [&>*]:rounded-t-lg [&>*]:rounded-s-none [&>*]:gap-x-2 [&>*]:gap-y-2
+dark:scrollbar-track-mist-400/100
+[&>*]:border-y-blue-900/0 [&>*]:border-t-sky-200/50 [&>*]:border-e-red-50/0
+md:border-e-2 md:border-r md:border-l md:border-x md:text-sm md:leading-5
+hover:scroll-mx-[16px] hover:scroll-mt-[16px] hover:scroll-ml-[16px]
+dark:shadow-green-950/0 dark:border-neutral-800/50 dark:inset-e-8/12
+[&>*]:ps-0 [&>*]:py-0
+ms-2 mr-2
+px-0 pt-0
+border-l-cyan-700/0 stroke-indigo-300/50 mask-b-to-lime-500/100 forced-colors:required:bg-linear-to-t/[in_hsl_longer_hue]! not-not:-mask-conic-from-slate-300 text-mauve-900/100
+dark:mask-l-from-mist-400/50 dark:border-bs-rose-50/0 dark:border-t-indigo-900/50 dark:mask-b-from-fuchsia-100/100
+dark:border-y-[3px] dark:border-r dark:border-l
+hover:mask-l-to-amber-500/0 hover:shadow-slate-700/100 hover:mask-r-to-neutral-950/100 hover:-mr-64 hover:ring-slate-500 hover:mask-radial-to-olive-50/100
+mask-x-from-mist-100/100 mask-linear-to-mauve-600/0 mask-l-to-cyan-300/100 scrollbar-thumb-sky-50/0 accent-rose-100/50 [@media_print]:mask-clip-border
+data-[open]:px-px data-[open]:pt-px data-[open]:ps-px data-[open]:pl-px data-[open]:w-4 data-[open]:h-4
+group-hover:mask-t-to-zinc-900/50 group-hover:mask-y-to-teal-50/50 group-hover:mask-b-from-olive-600/50 group-hover:@4xl:@max-4xl:has-[>img]:mask-radial-to-15% group-hover:mask-linear-from-indigo-50/0 group-hover:mask-l-from-blue-50/50
+md:scroll-px-4 md:scroll-pe-4 md:scroll-pt-4 md:scroll-py-4 md:w-[16px] md:h-[16px]
+[&>*]:rounded-e-none [&>*]:rounded-x-[8px] [&>*]:rounded-t-lg
+rounded-s-[8px] rounded-x-lg rounded-r-[8px]
+group-hover:scroll-mr-[1rem] group-hover:scroll-my-[1rem]
+md:py-2.5 md:px-2.5 md:pe-2.5 md:pb-2.5 md:gap-x-2 md:gap-y-2
+[&>*]:mr-2.5 [&>*]:mt-2.5 [&>*]:mb-2.5
+[&>*]:mask-l-to-zinc-950/0 [&>*]:border-b-teal-500/100 [&>*]:mask-linear-from-mauve-700/0 [&>*]:text-green-900 [&>*]:mask-x-from-violet-950/0
+stroke-lime-600/50 border-b-teal-300/0 fill-rose-300/100
+focus:hover:scroll-px-1 focus:hover:scroll-pr-1 focus:hover:scroll-py-1 focus:hover:scroll-pl-1
+dark:mask-y-from-zinc-700/100 dark:scrollbar-track-olive-100/50 dark:fill-purple-300/0 dark:caret-yellow-400/50 dark:border-e-cyan-100/50 dark:mask-x-to-stone-800/0
+border-b-cyan-100/100 mask-b-to-olive-50/50
+border-b-[3px] border-e border-s overflow-x-auto overflow-y-auto
+divide-emerald-800/50
+scroll-ms-[0.5rem] scroll-mb-[0.5rem] scroll-mx-[0.5rem] w-[16px] h-[16px]
+ml-[16px] mx-[16px] my-[16px]
+[&>*]:divide-cyan-600/50 [&>*]:mask-t-from-lime-400/50 [&>*]:mask-r-from-neutral-900/0
+[&>*]:to-violet-200/100 [&>*]:mask-y-from-mauve-800/0 [&>*]:border-y-indigo-700/0 [&>*]:scrollbar-thumb-mist-300/0
+mask-linear-from-mauve-800/50 mask-x-from-red-950/100 mask-x-to-cyan-300/50 border-t-mist-100/100
+focus:hover:border-s-4 focus:hover:border-e-2 focus:hover:border-y focus:hover:border-l focus:hover:w-4 focus:hover:h-4
+hover:rounded-s-lg hover:rounded-b-lg hover:rounded-y-none hover:rounded-l-lg hover:w-4 hover:h-4
+border-y border-t
+md:border-y md:border-r md:border-b md:border-l
+[&>*]:border-l [&>*]:border-s-[3px] [&>*]:border-t
+group-hover:shadow-blue-300/100 group-hover:border-s-sky-600/50 group-hover:drop-shadow-taupe-300/100 group-hover:outline-amber-800/0 group-hover:mask-r-from-taupe-400/0
+group-hover:px-[16px] group-hover:pe-[16px] group-hover:ps-[16px] group-hover:pr-[16px]
+data-[open]:stroke-teal-400/100 data-[open]:border-e-sky-950/100 data-[open]:border-e-pink-400/100 data-[open]:border-b-stone-200/100
+[&>*]:mask-linear-from-orange-200 [&>*]:border-e-teal-100/100 [&>*]:inset-x-0
+md:rtl:not-min:inset-be-2/6 md:from-green-200/0 md:drop-shadow-amber-600/0 md:border-l-pink-500/50 md:mask-y-from-amber-950/0
+focus:hover:border-e-4 focus:hover:border-x-2 focus:hover:border-r-4 focus:hover:overflow-x-auto focus:hover:overflow-y-auto
+[&>*]:px-2 [&>*]:pb-2
+[&>*]:border-b-[3px] [&>*]:border-r-2
+mb-0 ms-0 my-0
+dark:border-r-4 dark:border-x dark:border-t-[3px] dark:border-l-2
+hover:via-taupe-900 hover:inset-ring-gray-950/50
+dark:rounded-y-none dark:rounded-b-lg dark:rounded-s-none dark:text-sm dark:leading-5
+dark:pl-2.5 dark:pr-2.5 dark:ps-2.5
+data-[open]:ml-[3px] data-[open]:mx-[3px] data-[open]:ms-[3px] data-[open]:mr-[3px] data-[open]:w-4 data-[open]:h-4
+hover:mask-radial-from-mist-600/0 hover:text-indigo-950/50
+data-[open]:inset-y-[0.5rem] data-[open]:right-[0.5rem] data-[open]:start-[0.5rem] data-[open]:overflow-x-auto data-[open]:overflow-y-auto
+dark:to-cyan-50/100 dark:border-bs-teal-700/100 dark:drop-shadow-green-400/50
+placeholder-zinc-900/100 mask-radial-from-amber-400/0 border-s-sky-200/100
+mask-radial-from-neutral-200/100 scrollbar-track-lime-500/50 mask-x-from-taupe-300/0
+group-hover:scroll-py-[0.5rem] group-hover:scroll-pl-[0.5rem] group-hover:scroll-px-[0.5rem] group-hover:text-sm group-hover:leading-5
+group-hover:border-s group-hover:border-l-2
+data-[open]:border-s-taupe-300/50 data-[open]:mask-linear-from-violet-200/0
+data-[open]:ml-0 data-[open]:mx-0 data-[open]:mt-0 data-[open]:w-4 data-[open]:h-4
+rounded-t-lg rounded-y-[8px]
+[&>*]:border-be-blue-500/100 [&>*]:placeholder-mauve-100/50 [&>*]:mask-l-to-zinc-100/50 [&>*]:border-y-zinc-800/100 [&>*]:nth:supports-[display:grid]:-scroll-ms-11/(--o)
+md:mask-radial-to-lime-800/50 md:to-cyan-400/50 md:fill-rose-200/50 md:mask-t-to-yellow-950/50 md:inset-ring-green-400/50 md:via-red-500/0
+mt-[0.5rem] mb-[0.5rem] mx-[0.5rem] w-[16px] h-[16px]
+data-[open]:scroll-my-[0.5rem] data-[open]:scroll-me-[0.5rem] data-[open]:scroll-ms-[0.5rem] data-[open]:scroll-mt-[0.5rem]
+mask-t-from-violet-700/0 mask-t-to-gray-300/100 text-stone-50/0
+focus:hover:in-disabled:rotate-17 focus:hover:from-indigo-800/100
+group-hover:scroll-pl-1 group-hover:scroll-pe-1 group-hover:scroll-pb-1
+placeholder-zinc-900/100 via-gray-600/0 to-pink-50/0
+md:mask-t-from-mauve-200/0
+pr-[16px] px-[16px] pt-[16px] w-[16px] h-[16px]
+dark:scroll-pt-[0.5rem] dark:scroll-pl-[0.5rem] dark:scroll-py-[0.5rem] dark:scroll-pb-[0.5rem]
+[&>*]:mask-b-to-lime-500/100 [&>*]:mask-b-to-purple-300/100
+group-hover:mask-radial-from-mist-300/100 group-hover:border-r-teal-600/0 group-hover:mask-linear-to-indigo-950/50 group-hover:decoration-gray-900/100 group-hover:mask-l-to-teal-950/0 group-hover:border-x-sky-950/100
+group-hover:inset-y-[0.5rem] group-hover:top-[0.5rem] group-hover:left-[0.5rem] group-hover:inset-x-[0.5rem] group-hover:w-[16px] group-hover:h-[16px]
+hover:border-y-4 hover:border-e hover:border-s
+data-[open]:rounded-s-lg data-[open]:rounded-t-[8px] data-[open]:rounded-r-none
+[&>*]:rounded-s-[8px] [&>*]:rounded-e-lg [&>*]:rounded-b-[8px] [&>*]:rounded-l-lg [&>*]:text-sm [&>*]:leading-5
+mask-t-from-indigo-100/50 scrollbar-track-red-700/50 mask-t-to-red-300 mask-y-from-pink-900/50 mask-t-from-green-50
+dark:aria-[sort=ascending]:mask-l-from-slate-700 dark:mask-b-from-indigo-700/50 dark:border-amber-600/0
+[&>*]:text-neutral-200/100 [&>*]:mask-y-from-zinc-600/50
+focus:hover:my-[0.5rem] focus:hover:mt-[0.5rem] focus:hover:mb-[0.5rem]
+dark:mask-y-to-violet-800/50 dark:to-blue-600/50
+[&>*]:border-e [&>*]:border-x-4 [&>*]:border-b
+group-hover:mask-linear-from-yellow-700/100
+focus:hover:mask-l-to-olive-700/100
+hover:divide-mauve-950/0
+group-hover:scroll-mr-4 group-hover:scroll-ms-4 group-hover:scroll-mb-4 group-hover:scroll-my-4 group-hover:w-[16px] group-hover:h-[16px]
+md:scroll-ps-px md:scroll-pr-px
+fill-cyan-700/50 inset-ring-green-300/0 text-shadow-fuchsia-400/0 right-9/12 inset-shadow-teal-50/100 mask-conic-to-slate-700/100
+md:mask-y-from-olive-200/100 md:mask-conic-from-stone-50/0
+focus:hover:mask-r-to-gray-100/50
+focus:hover:mask-l-to-mauve-950/100 focus:hover:mask-linear-from-yellow-950/0 focus:hover:accent-slate-800/0 focus:hover:border-t-sky-600/0 focus:hover:mask-l-to-blue-300/0
+[&>*]:border-l-lime-100/50 [&>*]:scrollbar-track-fuchsia-600/100
+hover:scroll-ps-1 hover:scroll-pb-1
+fill-pink-300/[35%]
+right-1 top-1 left-1
+group-hover:outline-blue-700/50 group-hover:ring-offset-mist-700/50 group-hover:border-y-neutral-400/100 group-hover:ring-offset-fuchsia-300/0 group-hover:shadow-zinc-950/50
+md:border-y-amber-500 md:-bottom-60 md:caret-pink-950/0 md:border-bs-orange-400/0 md:mask-t-to-blue-200/50
+dark:caret-taupe-50/100 dark:border-bs-sky-50/50 dark:fill-emerald-100/50
+pt-1 ps-1 pe-1 pb-1
+focus:hover:shadow-sky-100/0
+data-[open]:outline-taupe-100/50 data-[open]:border-b-teal-50/100
+focus:hover:border-e focus:hover:border-r focus:hover:border-s-2
+mt-1 mx-1 w-4 h-4
+group-hover:shadow-violet-400/0
+mask-linear-to-green-100/50
+border-x-4 border-s-[3px] border-y border-t
+data-[open]:mb-0 data-[open]:ml-0 data-[open]:text-sm data-[open]:leading-5
+divide-red-900/0 mask-y-to-gray-700/0
+md:border-e md:border-s-2
+[&>*]:mask-b-from-teal-200/100 [&>*]:font-(--fw)! [&>*]:ring-green-600/50 [&>*]:mask-linear-from-rose-400/0 [&>*]:first-line:@max:decoration-purple-950!
+ms-2 mr-2 gap-x-2 gap-y-2
+focus:hover:border-s-4 focus:hover:border-y-4 focus:hover:border-t focus:hover:border-e focus:hover:w-4 focus:hover:h-4
+[&>*]:mask-y-to-zinc-50/50 [&>*]:-transform-(--tf) [&>*]:border-be-mist-900/100 [&>*]:border-l-blue-500/50
+[&>*]:decoration-green-600/0 [&>*]:-inset-2 [&>*]:mask-x-to-red-200/0 [&>*]:mask-r-to-neutral-950/100
+focus:hover:inset-y-2 focus:hover:left-2 focus:hover:w-[16px] focus:hover:h-[16px]
+mb-4 my-4 mt-4
+[&>*]:text-green-50/0 [&>*]:mask-x-from-purple-600/100 [&>*]:group:group-rtl:valid:accent-green-900 [&>*]:to-lime-100/0 [&>*]:mask-y-from-gray-300/0 [&>*]:drop-shadow-pink-400/100
+top-[3px] end-[3px] right-[3px]
+dark:scroll-pl-0 dark:scroll-pt-0 dark:scroll-pe-0 dark:w-4 dark:h-4
+hover:scroll-ps-[3px] hover:scroll-pl-[3px] hover:scroll-py-[3px] hover:overflow-x-auto hover:overflow-y-auto
+rounded-t-[8px] rounded-y-none rounded-s-lg overflow-x-auto overflow-y-auto
+dark:divide-lime-700/50 dark:mask-linear-from-taupe-50/0 dark:outline-mauve-700/100 dark:mask-r-to-indigo-50/100 dark:via-sky-50/100 dark:shadow-teal-100/0
+md:ring-offset-purple-800/100 md:mask-t-from-blue-700/0 md:text-shadow-amber-400
+group-hover:text-shadow-teal-950/50 group-hover:mask-conic-to-slate-950/0
+mr-[1rem] my-[1rem] gap-x-2 gap-y-2
+data-[open]:me-1 data-[open]:ms-1 data-[open]:overflow-x-auto data-[open]:overflow-y-auto
+group-hover:mask-radial-from-inherit/50 group-hover:-inset-be-4/5 group-hover:mask-t-from-olive-800 group-hover:mask-y-to-rose-900/0 group-hover:[&:nth-child(3)]:-z-5 group-hover:from-sky-600/100
+hover:border-l hover:border-t hover:border-s
+group-hover:border-blue-300/0 group-hover:mask-radial-from-blue-700/0 group-hover:border-s-indigo-600 group-hover:scroll-pl-80
+data-[open]:mt-0 data-[open]:ml-0 data-[open]:mr-0
+hover:border-b hover:border-x hover:border-r-2
+focus:hover:start-[3px] focus:hover:inset-y-[3px]
+data-[open]:pe-[16px] data-[open]:pr-[16px] data-[open]:ps-[16px] data-[open]:px-[16px] data-[open]:w-4 data-[open]:h-4
+group-hover:inset-shadow-sky-500/100 group-hover:mask-b-from-inherit/0 group-hover:mask-radial-to-lime-800/50 group-hover:mask-r-to-fuchsia-300/100
+mask-l-from-rose-600/0 border-l-gray-500/50 inset-ring-mist-950/100 text-violet-300/100
+dark:mask-l-from-red-900/100 dark:mask-y-to-yellow-600/50 dark:shadow-stone-50/100 dark:mask-r-from-indigo-400/0 dark:border-t-red-500/100
+mask-x-to-emerald-100/0 mask-y-from-cyan-200/50 inset-ring-amber-800/100 inset-be-1/5 mask-t-to-rose-500/100 accent-rose-500/0
+focus:hover:scrollbar-thumb-indigo-400/100 focus:hover:mask-y-from-teal-900 focus:hover:from-slate-950/100
+drop-shadow-current/100 mask-conic-to-olive-800/50 mask-l-from-rose-600/0
+focus:hover:border-y-rose-800/100 focus:hover:via-emerald-300/0 focus:hover:mask-y-from-fuchsia-50/50 focus:hover:text-shadow-lime-900/0 focus:hover:mask-t-to-blue-700/50
+scroll-px-1 scroll-pe-1 scroll-ps-1
+dark:mt-[16px] dark:mb-[16px] dark:w-4 dark:h-4
+dark:mask-r-from-rose-500/100 dark:inset-shadow-sky-50/100 dark:mask-linear-from-taupe-200/100
+data-[open]:mb-2.5 data-[open]:me-2.5 data-[open]:my-2.5 data-[open]:w-4 data-[open]:h-4
+scroll-pt-0 scroll-px-0 scroll-pb-0
+bg-orange-700/50 text-lime-300/0 text-gray-700/50
+w-3/5 peer-checked:not-min:-ps-48
+group-hover:scroll-mr-[0.5rem] group-hover:scroll-ml-[0.5rem] group-hover:scroll-mx-[0.5rem] group-hover:scroll-mt-[0.5rem]
+data-[open]:scroll-px-px data-[open]:scroll-pb-px data-[open]:scroll-ps-px data-[open]:scroll-pr-px data-[open]:gap-x-2 data-[open]:gap-y-2
+border-y-mist-950/100 to-purple-50/50 mask-radial-to-white/0
+data-[open]:border-be-cyan-200/50 data-[open]:mask-r-to-fuchsia-800/100 data-[open]:decoration-red-500/0
+me-1 mx-1 mr-1 mt-1
+group-hover:bottom-px group-hover:inset-y-px group-hover:start-px group-hover:top-px
+dark:rounded-e-lg dark:rounded-x-lg
+group-hover:border-t group-hover:border-y
+border-y-2 border-b border-e-2
+[&>*]:scroll-pr-[3px] [&>*]:scroll-ps-[3px] [&>*]:scroll-pb-[3px] [&>*]:scroll-pe-[3px]
+dark:scroll-pt-[1rem] dark:scroll-pr-[1rem] dark:w-4 dark:h-4
+group-hover:mask-radial-from-amber-500/50 group-hover:mask-linear-from-purple-700/50 group-hover:mask-l-from-fuchsia-950/0 group-hover:mask-x-to-fuchsia-200/100
+[&>*]:scroll-px-[1rem] [&>*]:scroll-ps-[1rem] [&>*]:scroll-py-[1rem] [&>*]:scroll-pb-[1rem] [&>*]:w-[16px] [&>*]:h-[16px]
+border-e-zinc-600/100 text-lime-300/0 border-r-mist-300/0 bg-fuchsia-900/100 shadow-zinc-100/100
+group-hover:rounded-r-lg group-hover:rounded-y-[8px]
+[&>*]:inset-x-4 [&>*]:end-4 [&>*]:top-4 [&>*]:text-sm [&>*]:leading-5
+hover:border-s-stone-500/100 hover:has:-left-2/5! hover:mask-r-to-orange-200/50
+inset-bs-1/2 shadow-zinc-500/50 to-rose-400/100 bg-pink-700
+scrollbar-thumb-green-400/50
+hover:scroll-px-0 hover:scroll-pl-0 hover:scroll-pr-0 hover:w-4 hover:h-4
+data-[open]:scroll-ml-4 data-[open]:scroll-ms-4 data-[open]:scroll-mr-4 data-[open]:overflow-x-auto data-[open]:overflow-y-auto
+outline-emerald-800/100 border-l-sky-950/0 text-cyan-400/100 border-r-mist-50/100
+hover:bg-linear-120/decreasing hover:scrollbar-track-amber-50/0 hover:mask-l-from-red-200/0
+data-[open]:rounded-tr-lg data-[open]:via-lime-700/0 data-[open]:placeholder-orange-500 data-[open]:ease-in-out data-[open]:[&_p]:inset-shadow-red-50 data-[open]:mask-b-from-rose-100/50
+dark:mask-conic-from-taupe-600/100 dark:border-l-taupe-700/0 dark:mask-conic-from-gray-800/100 dark:mask-r-from-blue-300/100
+data-[open]:text-fuchsia-900/100 data-[open]:mask-y-from-lime-100/100 data-[open]:-bg-linear-330/decreasing data-[open]:border-l-rose-600/0 data-[open]:mask-linear-to-violet-500
+[&>*]:border-y-pink-400/0 [&>*]:mask-t-to-fuchsia-700/0 [&>*]:from-violet-950/100 [&>*]:mask-r-to-slate-50/0
+group-hover:pt-[1rem] group-hover:pe-[1rem] group-hover:w-[16px] group-hover:h-[16px]
+hover:border-l-lime-950/0
+focus:hover:text-shadow-zinc-300/0 focus:hover:bg-slate-950/50 focus:hover:mask-t-from-lime-300/0 focus:hover:md:border-t-gray-200 focus:hover:accent-gray-400/50
+dark:border-lime-100/50 dark:mask-r-from-olive-700 dark:placeholder-gray-950/0 dark:mask-conic-to-zinc-300/50
+focus:hover:inset-e-0.5 focus:hover:caret-sky-300/100 focus:hover:mask-y-to-green-50 focus:hover:supports-[display:grid]:aria-[current=page]:skew-x-[17deg] focus:hover:border-y-green-800/0
