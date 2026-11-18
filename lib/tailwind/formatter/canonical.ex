@@ -2,7 +2,7 @@ defmodule Tailwind.Formatter.Canonical do
   @moduledoc false
   # One run of `tailwind.com canonicalize --stream` for a profile, for all
   # the files of a run of `mix format`: the program makes its index of
-  # the classes one time (about 0.7 s), and then each list takes a few
+  # the classes one time (about 0.6 s), and then each list takes a few
   # milliseconds. The process writes one list for each line of the
   # standard input of the program, and reads one line of the output for
   # each list. It runs the program as a NIF when the project has one, and

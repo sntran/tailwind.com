@@ -22,7 +22,8 @@ cargo build --release      # target/release/tailwind
 
 `cargo build --release --no-default-features --features cli` is not a
 build without JavaScript: the feature `cli` has the features `program`,
-`optimize` and `js`. See "The library only" below for the features.
+`optimize`, `js` and `canonicalize`. See "The library only" below for the
+features.
 
 The feature `program` alone is the program with no optimizer and no
 JavaScript engine: `--minify`, `--optimize`, `@plugin` and `@config`
@@ -32,8 +33,11 @@ The feature `lower` alone has only the lowering: `--optimize` lowers,
 and `--minify` gives an error. The feature `host-js` runs `@plugin` and
 `@config` in the JavaScript engine of the host, with JS Promise
 Integration (`js/engine.mjs`, see "The engine of the host" in
-`INTERNALS.md`). `tailwind-browser.wasm` has the features `program`,
-`lower` and `host-js`: see "The WASI program" below.
+`INTERNALS.md`). The feature `canonicalize` has the command
+`canonicalize`, the class list of the editor tools and the suggestions of
+the utilities; with no such feature, the command gives an error.
+`tailwind-browser.wasm` has the features `program`, `lower` and
+`host-js`: see "The WASI program" below.
 
 This is the same program as `tailwind.com`, for one system. Use it for
 development and for the tests.
@@ -94,8 +98,8 @@ warning, and the program has no JavaScript: `@plugin` and `@config` are
 then errors.
 
 `tailwind-browser.wasm` is the program for a browser: the features
-`program`, `lower` and `host-js`, with no Lightning CSS and no QuickJS,
-3.6 MB, or 0.80 MB with brotli. `--optimize` lowers the new CSS only. Its plugins run in the JavaScript engine of the
+`program`, `lower` and `host-js`, with no Lightning CSS, no QuickJS and
+no command `canonicalize`. `--optimize` lowers the new CSS only. Its plugins run in the JavaScript engine of the
 host, with JS Promise Integration (a browser of 2025 or later, Node.js
 24 or later), and the npm package has the JavaScript files of the
 program in `runtime/`. `js/browser.mjs` and `js/node.mjs` (`runWasm`)

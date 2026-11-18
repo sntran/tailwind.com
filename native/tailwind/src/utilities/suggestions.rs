@@ -1,239 +1,198 @@
 //! The suggestions of the utilities for the editor tools: the `suggest`
-//! calls of `utilities.ts`, in their sequence. The functions that make
-//! utilities (`functional_utility`, `color_utility`, `spacing_utility`)
-//! add their own suggestions. The class list (`intellisense.rs`) and the
-//! canonical form of candidates use them.
+//! calls of `utilities.ts`, in their sequence, as data. The functions that
+//! make utilities (`functional_utility`, `color_utility`,
+//! `spacing_utility`) add their own suggestions. The class list
+//! (`intellisense.rs`) and the canonical form of candidates use them.
 //!
-//! Only the sequence of the groups of one utility changes the class
-//! list. Upstream calls `suggest` for a utility after the function that
-//! makes it, so the calls of this file come after all the utilities.
+//! Only the sequence of the groups of one utility changes the class list.
+//! Upstream calls `suggest` for a utility after the function that makes
+//! it, so the calls of this file come after all the utilities.
 
-use super::{one_to, steps, suggest, Suggestion, Utilities, DEFAULT_SPACING_SUGGESTIONS};
+use super::{color, suggest, DefaultSuggestion, Group, Utilities, Values, GROUP, OPACITY_MODIFIERS};
 
-fn group(values: &[&str]) -> Suggestion {
-    Suggestion::default().values(values)
+const fn list(values: &'static [&'static str]) -> Values {
+    Values::List(values)
 }
 
-/// The values of the scale utilities.
-const SCALES: &[&str] = &["0", "50", "75", "90", "95", "100", "105", "110", "125", "150", "200"];
-/// The values of the rotate utilities.
-const ROTATIONS: &[&str] = &["0", "1", "2", "3", "6", "12", "45", "90", "180"];
-/// The values of the skew utilities.
-const SKEWS: &[&str] = &["0", "1", "2", "3", "6", "12"];
-/// The modifiers of the gradients: `suggestedModifiers`.
-const GRADIENT_MODIFIERS: &[&str] = &["oklab", "oklch", "srgb", "hsl", "longer", "shorter", "increasing", "decreasing"];
-/// The angles of the gradients.
-const GRADIENT_ANGLES: &[&str] = &["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300", "330"];
+/// The percentages: `0%` to `100%` in steps of 5.
+const PERCENTAGES: Values = Values::Steps { length: 21, step: 5, unit: "%" };
+const SCALES: Values = list(&["0", "50", "75", "90", "95", "100", "105", "110", "125", "150", "200"]);
+const ROTATIONS: Values = list(&["0", "1", "2", "3", "6", "12", "45", "90", "180"]);
+const SKEWS: Values = list(&["0", "1", "2", "3", "6", "12"]);
+/// `suggestedModifiers` of the gradients.
+const GRADIENT_MODIFIERS: Values = list(&["oklab", "oklch", "srgb", "hsl", "longer", "shorter", "increasing", "decreasing"]);
+const GRADIENT_ANGLES: Values = list(&["0", "30", "60", "90", "120", "150", "180", "210", "240", "270", "300", "330"]);
+const BORDER_WIDTHS: Values = list(&["0", "2", "4", "8"]);
+const WIDTHS: Values = list(&["0", "1", "2", "4", "8"]);
+const QUARTERS: Values = list(&["0", "25", "50", "75", "100"]);
+const TIMES: Values = list(&["75", "100", "150", "200", "300", "500", "700", "1000"]);
+const BRIGHTNESS: Values = list(&["0", "50", "75", "90", "95", "100", "105", "110", "125", "150", "200"]);
+const CONTRASTS: Values = list(&["0", "50", "75", "100", "125", "150", "200"]);
+const HUES: Values = list(&["0", "15", "30", "60", "90", "180"]);
+const SATURATIONS: Values = list(&["0", "50", "100", "150", "200"]);
+const SEPIAS: Values = list(&["0", "50", "100"]);
 
-fn gradient_modifiers() -> Vec<String> {
-    GRADIENT_MODIFIERS.iter().map(|m| m.to_string()).collect()
+const fn values(values: Values, theme_keys: &'static [&'static str]) -> Group {
+    Group { values, theme_keys, ..GROUP }
 }
+
+const fn negative(values: Values, theme_keys: &'static [&'static str]) -> Group {
+    Group { values, theme_keys, negative: true, ..GROUP }
+}
+
+const fn with_default(group: Group) -> Group {
+    Group { default: DefaultSuggestion::Yes, ..group }
+}
+
+/// The colors of a background, and the positions of a gradient stop.
+const STOP: &[Group] = &[color(&["--background-color", "--color"]), values(PERCENTAGES, &["--gradient-color-stop-positions"])];
+
+/// The two `suggest` calls of `maskStopUtility`.
+const MASK_STOP: &[Group] = STOP;
+const MASK_STOP_VALUES: &[Group] =
+    &[values(PERCENTAGES, &[]), values(Values::Spacing, &[]), color(&["--background-color", "--color"])];
+
+/// The angles of `mask-linear` and `mask-conic`.
+const MASK_ANGLES: &[Group] = &[negative(ROTATIONS, &[])];
+
+/// The groups of a shadow (`shadow`, `inset-shadow`, `text-shadow`).
+const fn shadow(colors: &'static [&'static str], key: &'static str, keys: &'static [&'static str]) -> [Group; 3] {
+    [
+        color(colors),
+        values(list(&["none"]), &[]),
+        Group { theme_keys: keys, modifiers: OPACITY_MODIFIERS, default: DefaultSuggestion::IfTheme(key), ..GROUP },
+    ]
+}
+
+/// Each `suggest` call: the utilities and their groups.
+const TABLE: &[(&[&str], &[Group])] = &[
+    (&["z"], &[negative(list(&["0", "10", "20", "30", "40", "50"]), &["--z-index"])]),
+    (&["order"], &[negative(Values::OneTo(12), &["--order"])]),
+    (&["col-span"], &[values(Values::OneTo(12), &[])]),
+    (&["col-start"], &[negative(Values::OneTo(13), &["--grid-column-start"])]),
+    (&["col-end"], &[negative(Values::OneTo(13), &["--grid-column-end"])]),
+    (&["row-span"], &[values(Values::OneTo(12), &[])]),
+    (&["row-start"], &[negative(Values::OneTo(13), &["--grid-row-start"])]),
+    (&["row-end"], &[negative(Values::OneTo(13), &["--grid-row-end"])]),
+    (&["line-clamp"], &[values(list(&["1", "2", "3", "4", "5", "6"]), &["--line-clamp"])]),
+    (&["flex"], &[Group { fractions: true, ..GROUP }, values(Values::OneTo(12), &[])]),
+    (&["shrink"], &[with_default(values(list(&["0"]), &[]))]),
+    (&["grow"], &[with_default(values(list(&["0"]), &[]))]),
+    (&["scale", "scale-x", "scale-y", "scale-z"], &[negative(SCALES, &["--scale"])]),
+    (&["rotate", "rotate-x", "rotate-y", "rotate-z"], &[negative(ROTATIONS, &["--rotate"])]),
+    (&["skew", "skew-x", "skew-y"], &[negative(SKEWS, &["--skew"])]),
+    (&["transform"], &[with_default(GROUP)]),
+    (&["zoom"], &[values(list(&["50", "75", "90", "95", "100", "105", "110", "125", "150", "200"]), &[])]),
+    (&["columns"], &[values(Values::OneTo(12), &["--columns", "--container"])]),
+    (&["grid-cols"], &[values(Values::OneTo(12), &["--grid-template-columns"])]),
+    (&["grid-rows"], &[values(Values::OneTo(12), &["--grid-template-rows"])]),
+    (&["tab"], &[values(list(&["2", "4", "8"]), &[])]),
+    // `borderSideUtility`.
+    (
+        &["border", "border-x", "border-y", "border-s", "border-e", "border-bs", "border-be", "border-t", "border-r", "border-b", "border-l"],
+        &[with_default(color(&["--border-color", "--color"])), values(BORDER_WIDTHS, &["--border-width"])],
+    ),
+    (&["divide-x", "divide-y"], &[with_default(values(BORDER_WIDTHS, &["--divide-width", "--border-width"]))]),
+    (
+        &["bg-linear"],
+        &[
+            Group { values: list(&["to-t", "to-tr", "to-r", "to-br", "to-b", "to-bl", "to-l", "to-tl"]), modifiers: GRADIENT_MODIFIERS, ..GROUP },
+            Group { values: GRADIENT_ANGLES, negative: true, modifiers: GRADIENT_MODIFIERS, ..GROUP },
+        ],
+    ),
+    (
+        &["bg-conic"],
+        &[
+            Group { default: DefaultSuggestion::Yes, modifiers: GRADIENT_MODIFIERS, ..GROUP },
+            Group { values: GRADIENT_ANGLES, negative: true, modifiers: GRADIENT_MODIFIERS, ..GROUP },
+        ],
+    ),
+    (&["bg-radial"], &[Group { default: DefaultSuggestion::Yes, modifiers: GRADIENT_MODIFIERS, ..GROUP }]),
+    (&["bg"], &[color(&["--background-color", "--color"]), values(Values::None, &["--background-image"])]),
+    // `gradientStopUtility`.
+    (&["from", "via", "to"], STOP),
+];
+
+/// The `suggest` calls of the mask utilities, and of the utilities after
+/// them. Each mask utility has two calls, in this sequence.
+const MASK_ROOTS: &[&str] = &[
+    "mask-x-from", "mask-x-to", "mask-y-from", "mask-y-to", "mask-t-from", "mask-t-to", "mask-r-from", "mask-r-to", "mask-b-from",
+    "mask-b-to", "mask-l-from", "mask-l-to",
+];
+
+const SHADOW: [Group; 3] = shadow(&["--box-shadow-color", "--color"], "--shadow", &["--shadow"]);
+const INSET_SHADOW: [Group; 3] = shadow(&["--box-shadow-color", "--color"], "--inset-shadow", &["--inset-shadow"]);
+const TEXT_SHADOW: [Group; 3] = shadow(&["--text-shadow-color", "--color"], "--text-shadow", &["--text-shadow"]);
+
+const TABLE_AFTER_MASKS: &[(&[&str], &[Group])] = &[
+    (&["fill"], &[color(&["--fill", "--color"])]),
+    (&["stroke"], &[color(&["--stroke", "--color"]), values(list(&["0", "1", "2", "3"]), &["--stroke-width"])]),
+    (&["font"], &[values(Values::None, &["--font"]), values(Values::None, &["--font-weight"])]),
+    (&["font-stretch"], &[values(list(&["50%", "75%", "90%", "95%", "100%", "105%", "110%", "125%", "150%", "200%"]), &[])]),
+    (&["decoration"], &[color(&["--text-decoration-color", "--color"]), values(list(&["0", "1", "2"]), &["--text-decoration-thickness"])]),
+    (&["brightness"], &[values(BRIGHTNESS, &["--brightness"])]),
+    (&["backdrop-brightness"], &[values(BRIGHTNESS, &["--backdrop-brightness", "--brightness"])]),
+    (&["contrast"], &[values(CONTRASTS, &["--contrast"])]),
+    (&["backdrop-contrast"], &[values(CONTRASTS, &["--backdrop-contrast", "--contrast"])]),
+    (&["grayscale"], &[with_default(values(QUARTERS, &["--grayscale"]))]),
+    (&["backdrop-grayscale"], &[with_default(values(QUARTERS, &["--backdrop-grayscale", "--grayscale"]))]),
+    (&["hue-rotate"], &[values(HUES, &["--hue-rotate"])]),
+    (&["backdrop-hue-rotate"], &[values(HUES, &["--backdrop-hue-rotate", "--hue-rotate"])]),
+    (&["invert"], &[with_default(values(QUARTERS, &["--invert"]))]),
+    (&["backdrop-invert"], &[with_default(values(QUARTERS, &["--backdrop-invert", "--invert"]))]),
+    (&["saturate"], &[values(SATURATIONS, &["--saturate"])]),
+    (&["backdrop-saturate"], &[values(SATURATIONS, &["--backdrop-saturate", "--saturate"])]),
+    (&["sepia"], &[with_default(values(SEPIAS, &["--sepia"]))]),
+    (&["backdrop-sepia"], &[with_default(values(SEPIAS, &["--backdrop-sepia", "--sepia"]))]),
+    (&["drop-shadow"], &[color(&["--drop-shadow-color", "--color"]), values(Values::None, &["--drop-shadow"])]),
+    (&["backdrop-opacity"], &[values(OPACITY_MODIFIERS, &["--backdrop-opacity", "--opacity"])]),
+    (&["delay"], &[values(TIMES, &["--transition-delay"])]),
+    (&["duration"], &[values(TIMES, &["--transition-duration"])]),
+    (&["outline"], &[with_default(color(&["--outline-color", "--color"])), values(WIDTHS, &["--outline-width"])]),
+    (&["outline-offset"], &[negative(WIDTHS, &["--outline-offset"])]),
+    (&["opacity"], &[values(OPACITY_MODIFIERS, &["--opacity"])]),
+    (&["underline-offset"], &[negative(WIDTHS, &["--text-underline-offset"])]),
+    (
+        &["text"],
+        &[color(&["--text-color", "--color"]), Group { theme_keys: &["--text"], modifier_theme_keys: &["--leading"], ..GROUP }],
+    ),
+    (&["text-shadow"], &TEXT_SHADOW),
+    (&["shadow"], &SHADOW),
+    (&["inset-shadow"], &INSET_SHADOW),
+    (&["ring", "inset-ring"], &[color(&["--ring-color", "--color"]), with_default(values(WIDTHS, &["--ring-width"]))]),
+    (&["ring-offset"], &[color(&["--ring-offset-color", "--color"]), values(WIDTHS, &["--ring-offset-width"])]),
+    (&["@container"], &[with_default(values(list(&["normal"]), &[]))]),
+];
 
 /// The `suggest` calls of `utilities.ts` that are not in a function that
 /// makes utilities, and the calls of `borderSideUtility`,
 /// `gradientStopUtility` and `maskStopUtility`.
 pub(super) fn register(u: &mut Utilities) {
-    suggest(u, "z", |_| vec![group(&["0", "10", "20", "30", "40", "50"]).negative().theme_keys(&["--z-index"])]);
-    suggest(u, "order", |_| vec![Suggestion::default().negative().values_owned(one_to(12)).theme_keys(&["--order"])]);
-    suggest(u, "col-span", |_| vec![Suggestion::default().values_owned(one_to(12))]);
-    suggest(u, "col-start", |_| vec![Suggestion::default().negative().values_owned(one_to(13)).theme_keys(&["--grid-column-start"])]);
-    suggest(u, "col-end", |_| vec![Suggestion::default().negative().values_owned(one_to(13)).theme_keys(&["--grid-column-end"])]);
-    suggest(u, "row-span", |_| vec![Suggestion::default().values_owned(one_to(12))]);
-    suggest(u, "row-start", |_| vec![Suggestion::default().negative().values_owned(one_to(13)).theme_keys(&["--grid-row-start"])]);
-    suggest(u, "row-end", |_| vec![Suggestion::default().negative().values_owned(one_to(13)).theme_keys(&["--grid-row-end"])]);
-    suggest(u, "line-clamp", |_| vec![group(&["1", "2", "3", "4", "5", "6"]).theme_keys(&["--line-clamp"])]);
-    suggest(u, "flex", |_| vec![Suggestion::default().fractions(), Suggestion::default().values_owned(one_to(12))]);
-    suggest(u, "shrink", |_| vec![group(&["0"]).default_value()]);
-    suggest(u, "grow", |_| vec![group(&["0"]).default_value()]);
-    suggest(u, "scale", |_| vec![group(SCALES).negative().theme_keys(&["--scale"])]);
-    for axis in ["x", "y", "z"] {
-        suggest(u, &format!("scale-{axis}"), |_| vec![group(SCALES).negative().theme_keys(&["--scale"])]);
-    }
-    suggest(u, "rotate", |_| vec![group(ROTATIONS).negative().theme_keys(&["--rotate"])]);
-    for axis in ["x", "y", "z"] {
-        suggest(u, &format!("rotate-{axis}"), |_| vec![group(ROTATIONS).negative().theme_keys(&["--rotate"])]);
-    }
-    suggest(u, "skew", |_| vec![group(SKEWS).negative().theme_keys(&["--skew"])]);
-    suggest(u, "skew-x", |_| vec![group(SKEWS).negative().theme_keys(&["--skew"])]);
-    suggest(u, "skew-y", |_| vec![group(SKEWS).negative().theme_keys(&["--skew"])]);
-    suggest(u, "transform", |_| vec![Suggestion::default().default_value()]);
-    suggest(u, "zoom", |_| vec![group(&["50", "75", "90", "95", "100", "105", "110", "125", "150", "200"])]);
-    suggest(u, "columns", |_| vec![Suggestion::default().values_owned(one_to(12)).theme_keys(&["--columns", "--container"])]);
-    suggest(u, "grid-cols", |_| vec![Suggestion::default().values_owned(one_to(12)).theme_keys(&["--grid-template-columns"])]);
-    suggest(u, "grid-rows", |_| vec![Suggestion::default().values_owned(one_to(12)).theme_keys(&["--grid-template-rows"])]);
-    suggest(u, "tab", |_| vec![group(&["2", "4", "8"])]);
-
-    // `borderSideUtility`.
-    for root in ["border", "border-x", "border-y", "border-s", "border-e", "border-bs", "border-be", "border-t", "border-r", "border-b", "border-l"] {
-        suggest(u, root, |_| {
-            vec![
-                Suggestion::color(&["--border-color", "--color"]).default_value(),
-                group(&["0", "2", "4", "8"]).theme_keys(&["--border-width"]),
-            ]
-        });
-    }
-
-    suggest(u, "divide-x", |_| vec![group(&["0", "2", "4", "8"]).theme_keys(&["--divide-width", "--border-width"]).default_value()]);
-    suggest(u, "divide-y", |_| vec![group(&["0", "2", "4", "8"]).theme_keys(&["--divide-width", "--border-width"]).default_value()]);
-
-    suggest(u, "bg-linear", |_| {
-        vec![
-            group(&["to-t", "to-tr", "to-r", "to-br", "to-b", "to-bl", "to-l", "to-tl"]).modifiers(gradient_modifiers()),
-            group(GRADIENT_ANGLES).negative().modifiers(gradient_modifiers()),
-        ]
-    });
-    suggest(u, "bg-conic", |_| {
-        vec![
-            Suggestion::default().default_value().modifiers(gradient_modifiers()),
-            group(GRADIENT_ANGLES).negative().modifiers(gradient_modifiers()),
-        ]
-    });
-    suggest(u, "bg-radial", |_| vec![Suggestion::default().default_value().modifiers(gradient_modifiers())]);
-    suggest(u, "bg", |_| {
-        vec![Suggestion::color(&["--background-color", "--color"]), Suggestion::default().theme_keys(&["--background-image"])]
-    });
-
-    // `gradientStopUtility`.
-    for root in ["from", "via", "to"] {
-        suggest(u, root, |_| {
-            vec![
-                Suggestion::color(&["--background-color", "--color"]),
-                Suggestion::default().values_owned(steps(21, 5, "%")).theme_keys(&["--gradient-color-stop-positions"]),
-            ]
-        });
-    }
+    let table = |u: &mut Utilities, table: &'static [(&'static [&'static str], &'static [Group])]| {
+        for (roots, groups) in table {
+            for root in *roots {
+                suggest(u, root, groups);
+            }
+        }
+    };
+    table(u, TABLE);
 
     // `maskStopUtility`, also through `maskEdgeUtility`.
-    let mask_stops = |u: &mut Utilities, root: &str| {
-        suggest(u, root, |_| {
-            vec![
-                Suggestion::color(&["--background-color", "--color"]),
-                Suggestion::default().values_owned(steps(21, 5, "%")).theme_keys(&["--gradient-color-stop-positions"]),
-            ]
-        });
-        suggest(u, root, |theme| {
-            let spacing = theme.get(&["--spacing"]).is_some_and(|v| !v.is_empty());
-            vec![
-                Suggestion::default().values_owned(steps(21, 5, "%")),
-                group(if spacing { DEFAULT_SPACING_SUGGESTIONS } else { &[] }),
-                Suggestion::color(&["--background-color", "--color"]),
-            ]
-        });
+    let mask = |u: &mut Utilities, root: &str| {
+        suggest(u, root, MASK_STOP);
+        suggest(u, root, MASK_STOP_VALUES);
     };
-    for root in [
-        "mask-x-from", "mask-x-to", "mask-y-from", "mask-y-to", "mask-t-from", "mask-t-to", "mask-r-from", "mask-r-to", "mask-b-from",
-        "mask-b-to", "mask-l-from", "mask-l-to",
-    ] {
-        mask_stops(u, root);
+    for root in MASK_ROOTS {
+        mask(u, root);
     }
-    suggest(u, "mask-linear", |_| vec![group(ROTATIONS).negative()]);
-    mask_stops(u, "mask-linear-from");
-    mask_stops(u, "mask-linear-to");
-    mask_stops(u, "mask-radial-from");
-    mask_stops(u, "mask-radial-to");
-    suggest(u, "mask-conic", |_| vec![group(ROTATIONS).negative()]);
-    mask_stops(u, "mask-conic-from");
-    mask_stops(u, "mask-conic-to");
+    suggest(u, "mask-linear", MASK_ANGLES);
+    mask(u, "mask-linear-from");
+    mask(u, "mask-linear-to");
+    mask(u, "mask-radial-from");
+    mask(u, "mask-radial-to");
+    suggest(u, "mask-conic", MASK_ANGLES);
+    mask(u, "mask-conic-from");
+    mask(u, "mask-conic-to");
 
-    suggest(u, "fill", |_| vec![Suggestion::color(&["--fill", "--color"])]);
-    suggest(u, "stroke", |_| {
-        vec![Suggestion::color(&["--stroke", "--color"]), group(&["0", "1", "2", "3"]).theme_keys(&["--stroke-width"])]
-    });
-    suggest(u, "font", |_| vec![Suggestion::default().theme_keys(&["--font"]), Suggestion::default().theme_keys(&["--font-weight"])]);
-    suggest(u, "font-stretch", |_| vec![group(&["50%", "75%", "90%", "95%", "100%", "105%", "110%", "125%", "150%", "200%"])]);
-    suggest(u, "decoration", |_| {
-        vec![
-            Suggestion::color(&["--text-decoration-color", "--color"]),
-            group(&["0", "1", "2"]).theme_keys(&["--text-decoration-thickness"]),
-        ]
-    });
-
-    // The filters.
-    let brightness = &["0", "50", "75", "90", "95", "100", "105", "110", "125", "150", "200"];
-    suggest(u, "brightness", |_| vec![group(brightness).theme_keys(&["--brightness"])]);
-    suggest(u, "backdrop-brightness", |_| vec![group(brightness).theme_keys(&["--backdrop-brightness", "--brightness"])]);
-    let contrast = &["0", "50", "75", "100", "125", "150", "200"];
-    suggest(u, "contrast", |_| vec![group(contrast).theme_keys(&["--contrast"])]);
-    suggest(u, "backdrop-contrast", |_| vec![group(contrast).theme_keys(&["--backdrop-contrast", "--contrast"])]);
-    let quarters = &["0", "25", "50", "75", "100"];
-    suggest(u, "grayscale", |_| vec![group(quarters).theme_keys(&["--grayscale"]).default_value()]);
-    suggest(u, "backdrop-grayscale", |_| vec![group(quarters).theme_keys(&["--backdrop-grayscale", "--grayscale"]).default_value()]);
-    let hues = &["0", "15", "30", "60", "90", "180"];
-    suggest(u, "hue-rotate", |_| vec![group(hues).theme_keys(&["--hue-rotate"])]);
-    suggest(u, "backdrop-hue-rotate", |_| vec![group(hues).theme_keys(&["--backdrop-hue-rotate", "--hue-rotate"])]);
-    suggest(u, "invert", |_| vec![group(quarters).theme_keys(&["--invert"]).default_value()]);
-    suggest(u, "backdrop-invert", |_| vec![group(quarters).theme_keys(&["--backdrop-invert", "--invert"]).default_value()]);
-    let saturations = &["0", "50", "100", "150", "200"];
-    suggest(u, "saturate", |_| vec![group(saturations).theme_keys(&["--saturate"])]);
-    suggest(u, "backdrop-saturate", |_| vec![group(saturations).theme_keys(&["--backdrop-saturate", "--saturate"])]);
-    let sepias = &["0", "50", "100"];
-    suggest(u, "sepia", |_| vec![group(sepias).theme_keys(&["--sepia"]).default_value()]);
-    suggest(u, "backdrop-sepia", |_| vec![group(sepias).theme_keys(&["--backdrop-sepia", "--sepia"]).default_value()]);
-    suggest(u, "drop-shadow", |_| {
-        vec![Suggestion::color(&["--drop-shadow-color", "--color"]), Suggestion::default().theme_keys(&["--drop-shadow"])]
-    });
-    suggest(u, "backdrop-opacity", |_| {
-        vec![Suggestion::default().values_owned(steps(21, 5, "")).theme_keys(&["--backdrop-opacity", "--opacity"])]
-    });
-
-    let times = &["75", "100", "150", "200", "300", "500", "700", "1000"];
-    suggest(u, "delay", |_| vec![group(times).theme_keys(&["--transition-delay"])]);
-    suggest(u, "duration", |_| vec![group(times).theme_keys(&["--transition-duration"])]);
-
-    let widths = &["0", "1", "2", "4", "8"];
-    suggest(u, "outline", |_| {
-        vec![
-            Suggestion::color(&["--outline-color", "--color"]).default_value(),
-            group(widths).theme_keys(&["--outline-width"]),
-        ]
-    });
-    suggest(u, "outline-offset", |_| vec![group(widths).negative().theme_keys(&["--outline-offset"])]);
-    suggest(u, "opacity", |_| vec![Suggestion::default().values_owned(steps(21, 5, "")).theme_keys(&["--opacity"])]);
-    suggest(u, "underline-offset", |_| vec![group(widths).negative().theme_keys(&["--text-underline-offset"])]);
-    suggest(u, "text", |_| {
-        vec![
-            Suggestion::color(&["--text-color", "--color"]),
-            Suggestion::default().theme_keys(&["--text"]).modifier_theme_keys(&["--leading"]),
-        ]
-    });
-    suggest(u, "text-shadow", |theme| {
-        vec![
-            Suggestion::color(&["--text-shadow-color", "--color"]),
-            group(&["none"]),
-            Suggestion::default()
-                .theme_keys(&["--text-shadow"])
-                .modifiers(steps(21, 5, ""))
-                .default_value_if(theme.get(&["--text-shadow"]).is_some()),
-        ]
-    });
-    suggest(u, "shadow", |theme| {
-        vec![
-            Suggestion::color(&["--box-shadow-color", "--color"]),
-            group(&["none"]),
-            Suggestion::default()
-                .theme_keys(&["--shadow"])
-                .modifiers(steps(21, 5, ""))
-                .default_value_if(theme.get(&["--shadow"]).is_some()),
-        ]
-    });
-    suggest(u, "inset-shadow", |theme| {
-        vec![
-            Suggestion::color(&["--box-shadow-color", "--color"]),
-            group(&["none"]),
-            Suggestion::default()
-                .theme_keys(&["--inset-shadow"])
-                .modifiers(steps(21, 5, ""))
-                .default_value_if(theme.get(&["--inset-shadow"]).is_some()),
-        ]
-    });
-    suggest(u, "ring", |_| {
-        vec![Suggestion::color(&["--ring-color", "--color"]), group(widths).theme_keys(&["--ring-width"]).default_value()]
-    });
-    suggest(u, "inset-ring", |_| {
-        vec![Suggestion::color(&["--ring-color", "--color"]), group(widths).theme_keys(&["--ring-width"]).default_value()]
-    });
-    suggest(u, "ring-offset", |_| {
-        vec![Suggestion::color(&["--ring-offset-color", "--color"]), group(widths).theme_keys(&["--ring-offset-width"])]
-    });
-    suggest(u, "@container", |_| vec![group(&["normal"]).default_value()]);
+    table(u, TABLE_AFTER_MASKS);
 }

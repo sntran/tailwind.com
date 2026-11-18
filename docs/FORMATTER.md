@@ -105,7 +105,8 @@ compiler, with the utilities of the version of the profile
 standard input of the command, and reads one line for each list. With
 the NIF, the run gets its input through `tailwind_nif:open/2`. The
 command makes an index of all the classes for the first list (about
-0.7 s), and each other list takes a few milliseconds. The process stops
+0.6 s and 70 MB of memory, with the NIF in the memory of the BEAM), and
+each other list takes a few milliseconds. The process stops
 10 seconds after its last list. For 40 templates, `mix format` took
 0.89 s with `canonicalize: true`, and 0.22 s without it.
 

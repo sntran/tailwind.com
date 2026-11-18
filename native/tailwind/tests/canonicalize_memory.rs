@@ -5,6 +5,7 @@
 //! measures the live bytes after 400 lists of classes
 //! (`tests/upstream/cli/canonicalize-random/stdin.txt`). The caches kept
 //! about 550 MB before `transient_compiles`, and about 110 MB with it.
+#![cfg(feature = "canonicalize")]
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};

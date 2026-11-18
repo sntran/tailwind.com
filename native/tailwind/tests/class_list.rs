@@ -2,6 +2,7 @@
 //! against the record of the official compiler
 //! (`tests/fixtures/class_list.json.gz`, from
 //! `tests/upstream/tools/gen-class-list.mjs`).
+#![cfg(feature = "canonicalize")]
 
 use serde::Deserialize;
 use std::io::Read;

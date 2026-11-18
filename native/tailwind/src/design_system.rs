@@ -78,6 +78,7 @@ pub struct DesignSystem {
     tracked: RefCell<HashSet<String>>,
     variant_order: RefCell<Option<(usize, Rc<VariantOrder>)>>,
     /// The caches of the canonical form of candidates.
+    #[cfg(feature = "canonicalize")]
     pub(crate) canonical: crate::canonicalize::Storage,
     /// The entries of `transient_compiles`. `None` out of it.
     transient: RefCell<Option<Transient>>,
@@ -110,6 +111,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         keep_compiled: std::cell::Cell::new(true),
         tracked: RefCell::new(HashSet::default()),
         variant_order: RefCell::new(None),
+        #[cfg(feature = "canonicalize")]
         canonical: Default::default(),
         transient: RefCell::new(None),
         version: crate::version::current(),

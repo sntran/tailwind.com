@@ -48,7 +48,7 @@ required-features = ["program"]
 default = ["cli", "mimalloc"]
 # The command line program: the scanner of Tailwind CSS, and Lightning CSS
 # for --minify and --optimize.
-cli = ["program", "optimize", "js"]
+cli = ["program", "optimize", "js", "canonicalize"]
 # The command line program with no optimizer and no JavaScript engine:
 # the build for the browser (js/page.js), where the browser has the
 # JavaScript engine. --minify and --optimize give an error.
@@ -60,6 +60,12 @@ optimize = ["lower", "dep:lightningcss", "dep:parcel_sourcemap"]
 # functions, the math functions) with no Lightning CSS: the program for a
 # browser. There, --optimize only lowers, and --minify gives an error.
 lower = []
+# The canonical form of candidates (the command `canonicalize`,
+# `DesignSystem::canonicalize_candidates`), the class list of the editor
+# tools (`DesignSystem::get_class_list`) and the suggestions of the
+# utilities and variants. The program for a browser does not have it:
+# there, `runWasm` gives `canonicalize` to tailwind.wasm.
+canonicalize = []
 # `@plugin` and `@config`: the QuickJS engine (c_src/quickjs, c_src/js.c)
 # and the plugin layer of Tailwind CSS (assets/compat.js). build.rs
 # compiles the C files. For wasm32-wasip1 it needs WASI_SDK_PATH: with no

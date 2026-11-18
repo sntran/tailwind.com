@@ -3,6 +3,7 @@
 //! from `tests/upstream/tools/gen-canonicalize.mjs`): each call of the unit
 //! tests of `canonicalize-candidates.ts`, in their sequence, with the same
 //! design system.
+#![cfg(feature = "canonicalize")]
 
 use serde::Deserialize;
 use std::io::Read;

@@ -156,6 +156,9 @@ window.main = await runWasm(['-i', 'app.css'], { files, env: { NO_COLOR: '1' } }
 // --minify: no minifier in the program for a browser, and the full program.
 window.small = await runWasm(['-i', 'app.css', '--minify'], { files, env: { NO_COLOR: '1' } })
 window.full = await runWasm(['-i', 'app.css', '--minify'], { files, env: { NO_COLOR: '1' }, wasm: '${prefix}/runtime/tailwind.wasm' })
+// canonicalize: not in the program for a browser, and in the full program.
+window.noCanonical = await runWasm(['canonicalize', 'px-4 py-4'], { env: { NO_COLOR: '1' } })
+window.canonical = await runWasm(['canonicalize', 'px-4 py-4', 'w-[16px] h-[16px]'], { env: { NO_COLOR: '1' }, wasm: '${prefix}/runtime/tailwind.wasm' })
 const worker = new Worker(URL.createObjectURL(new Blob([\`
   import { runWasm } from '\${new URL('${prefix}/js/browser.mjs', location.href)}'
   self.onmessage = async ({ data }) => self.postMessage(await runWasm(data.args, data.options))
@@ -363,7 +366,14 @@ try {
     tab.on('pageerror', (e) => messages.push(`api.html: ${e}`))
     await tab.goto(`${base}/api.html`)
     await tab.waitForFunction(() => window.main && window.worker, null, { timeout: 30_000 })
-    const { main, small, full, worker } = await tab.evaluate(() => ({ main: window.main, small: window.small, full: window.full, worker: window.worker }))
+    const { main, small, full, worker, noCanonical, canonical } = await tab.evaluate(() => ({
+      main: window.main,
+      small: window.small,
+      full: window.full,
+      worker: window.worker,
+      noCanonical: window.noCanonical,
+      canonical: window.canonical,
+    }))
     assert.equal(main.status, 0, main.stderr)
     assert.ok(main.stdout.includes('.flex {\n    display: flex;'), main.stdout.slice(-300))
     assert.equal(small.status, 1)
@@ -371,6 +381,10 @@ try {
     assert.equal(full.status, 0, full.stderr)
     assert.ok(full.stdout.includes('.flex{display:flex}'), full.stdout.slice(-300))
     assert.ok(full.stdout.includes('.p-4{padding:calc(var(--spacing) * 4)}'), full.stdout.slice(-300))
+    assert.equal(noCanonical.status, 1)
+    assert.match(noCanonical.stderr, /no command canonicalize/)
+    assert.equal(canonical.status, 0, canonical.stderr)
+    assert.equal(canonical.stdout, 'p-4\nsize-[16px]\n')
     assert.equal(worker.status, 0, worker.stderr)
     assert.ok(worker.stdout.includes('.underline {'), worker.stdout.slice(-300))
     await tab.close()

@@ -243,8 +243,8 @@ With no `-o`, the CSS is in `stdout`. Vite and webpack copy
 `tailwind-browser.wasm` and the JavaScript files of the plugins with the
 files of the site. For a bundler that does not copy them (esbuild), copy
 `runtime/` of the package to the site, and give its URL in the option
-`runtime`. For `--minify`, give the URL of `tailwind.wasm` in the option
-`wasm`.
+`runtime`. For `--minify` and the command `canonicalize`, give the URL
+of `tailwind.wasm` in the option `wasm`.
 
 Each release also publishes the package to GitHub Packages, with the
 name `@sntran/tailwind.com` (registry `https://npm.pkg.github.com`), and
@@ -325,8 +325,9 @@ classes when the CSS is the same, the bare value of an arbitrary value,
 the new names of old classes, and the sort of the official Prettier
 plugin. `--css app.css` uses the theme and the plugins of the project,
 and `--stream` reads one list from each line of the standard input. It
-runs in about 0.7 s, and the official program in about 2.7 s: the first
-list makes an index of all the classes. `cargo test` replays each call
+runs in about 0.6 s with 135 MB of memory, and the official program in
+about 3.1 s with 560 MB: the first list makes an index of all the
+classes. `cargo test` replays each call
 of the unit tests of the official code (1,914 calls).
 
 See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the results and
@@ -438,12 +439,13 @@ WASI file system. It has the same JavaScript engine for `@plugin` and
 runs it in the browser, with a small WASI host in JavaScript
 (`js/wasi.mjs`, [`docs/SITE.md`](docs/SITE.md)).
 
-`tailwind-browser.wasm` of each release is the program for a browser:
-no Lightning CSS and no JavaScript engine, about 0.8 MB with
-compression, and `tailwind.wasm` is about 1.8 MB. Its plugins run in the
-JavaScript engine of the host, with JS Promise Integration
-(`js/engine.mjs`): a browser, or Node.js 24 or later. `--optimize` only
-lowers the new CSS functions and mixins, and `--minify` gives an error.
+`tailwind-browser.wasm` of each release is the program for a browser,
+for builds: no Lightning CSS, no JavaScript engine and no command
+`canonicalize`, about 0.8 MB with compression, and `tailwind.wasm` is
+about 1.9 MB. Its plugins run in the JavaScript engine of the host, with
+JS Promise Integration (`js/engine.mjs`): a browser, or Node.js 24 or
+later. `--optimize` only lowers the new CSS functions and mixins, and
+`--minify` and `canonicalize` give an error.
 The condition `browser` of the npm package gives it.
 
 ## Documentation

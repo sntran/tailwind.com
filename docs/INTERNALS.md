@@ -108,6 +108,24 @@ cache of the compiled candidates, so the next compile throws again. The
 cache of `compile_ast_nodes` does the same: it keeps no result of a
 compile that had an exception (`js_error_count`).
 
+The memory. The index and the collapse compile and parse about 200,000
+candidates, and upstream keeps each one in its caches (about 600 MB).
+Here `DesignSystem::transient_compiles` removes the entries of the
+compiled cache and of the parse cache that cannot change a result, at
+the end of each signature: an entry whose compile read no `inline`
+option of the theme (`Theme::inline_reads`), in a design system with no
+plugins. Such a compile gives the same nodes the next time. The other
+entries stay, because a compile with `without_inline` and one without
+it give different nodes, and upstream uses the entry that is in the
+cache. Each entry of the compiled cache holds its candidate, so no other
+candidate gets its address while the entry lives. A run of 400 lists
+takes about 135 MB (`tests/canonicalize_memory.rs`).
+
+The suggestions are data (`utilities/suggestions.rs`): a table of
+groups, and one function that reads them for the class list. The
+feature `canonicalize` has the canonicalizer, the class list and the
+suggestions; `tailwind-browser.wasm` does not have it.
+
 The compiler is single-threaded. Without the feature `js`, it has no
 dependency except `indexmap`. The feature `js` adds `serde_json` and the
 C code of QuickJS.

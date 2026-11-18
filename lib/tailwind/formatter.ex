@@ -60,7 +60,7 @@ defmodule Tailwind.Formatter do
   replacement is always a class of the version of Tailwind CSS of the
   profile. One process runs the command with
   `--stream` for all the files of a run of `mix format`: the first list
-  takes about 0.7 s, and each other list a few milliseconds.
+  takes about 0.6 s, and each other list a few milliseconds.
   """
 
   @behaviour Mix.Tasks.Format

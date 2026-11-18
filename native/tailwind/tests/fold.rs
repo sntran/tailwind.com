@@ -1,6 +1,7 @@
 //! The constant fold, the order of `calc()` operands and the expansion of
 //! declarations against the record of the official compiler
 //! (`tests/fixtures/fold.json.gz`, from `tests/upstream/tools/gen-fold.mjs`).
+#![cfg(feature = "canonicalize")]
 
 use serde::Deserialize;
 use std::io::Read;

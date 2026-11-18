@@ -7,7 +7,8 @@
 #   make wasm       build/tailwind.wasm: the program for WASI. With
 #                   WASI_SDK_PATH (a wasi-sdk), the program has JavaScript
 #                   for @plugin and @config. Also build/tailwind-browser.wasm:
-#                   the program for a browser, with no optimizer and no
+#                   the program for a browser, with no optimizer, no
+#                   command canonicalize, and no
 #                   JavaScript engine: its plugins run in the JavaScript
 #                   engine of the browser (js/engine.mjs).
 #   make test       all the tests

@@ -14,6 +14,7 @@
 //! The command line cases `canonicalize-4.3.2` and `canonicalize-4.3.4`
 //! (`tests/upstream/cli`) compare the result with the official program of
 //! those versions.
+#![cfg(feature = "canonicalize")]
 
 use tailwind::canonicalize::{signature, CanonicalizeOptions};
 use tailwind::index::load_design_system;

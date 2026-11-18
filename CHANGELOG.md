@@ -24,8 +24,9 @@ canonical form of class lists in `mix format`.
   (`[&>*]:flex` is `*:flex`). `--css` uses the theme and the plugins of
   a stylesheet, `--format` gives `text`, `json` or `jsonl`, and
   `--stream` reads one list from each line of the standard input. A run
-  takes about 0.7 s, and 2.7 s for the official program: the first list
-  makes an index of all the classes. The command works as each version
+  takes about 0.6 s and 135 MB of memory, and 3.1 s and 560 MB for the
+  official program: the first list makes an index of all the classes
+  (`docs/BENCHMARKS.md`). The command works as each version
   of Tailwind CSS from 4.0.0: the algorithm is the one of 4.3.5, and a
   replacement is always a class of the selected version, with the same
   CSS in that version. On 400 random lists, the result is the result of
@@ -38,6 +39,15 @@ canonical form of class lists in `mix format`.
   the files of a run of `mix format`.
 - `tailwind_nif:open/2`, `write/2`, `close/1` and `stop/1`: a run of the
   NIF with a standard input, for `canonicalize --stream`.
+- The Cargo feature `canonicalize` (in `cli`): the command, the class
+  list and the suggestions. `tailwind-browser.wasm` does not have it, so
+  its size stays the same; `runWasm` gives `canonicalize` to
+  `tailwind.wasm` with the option `wasm`, as for `--minify`.
+
+### Fixed
+
+- The compiler keeps no result of a compile that a plugin made throw, as
+  upstream: the next compile of the candidate throws again.
 - The Rust crate has the class list of the editor tools
   (`DesignSystem::get_class_list`), the completions of the variants, and
   `DesignSystem::canonicalize_candidates`, as `getClassList`,

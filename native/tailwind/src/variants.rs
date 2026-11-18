@@ -291,8 +291,12 @@ impl Variants {
 
     /// `suggest`: the completions of a variant. A new call replaces the
     /// completions of the variant.
+    /// With no feature `canonicalize`, the registry keeps no completions.
     pub fn suggest(&mut self, name: impl Into<String>, suggestions: impl Fn(&DesignSystem) -> Vec<String> + 'static) {
+        #[cfg(feature = "canonicalize")]
         self.completions.insert(name.into(), std::rc::Rc::new(suggestions));
+        #[cfg(not(feature = "canonicalize"))]
+        let _ = (name, suggestions);
     }
 
     /// `getCompletions`: the values of a variant for the editor tools.
@@ -888,6 +892,7 @@ fn media_width_variant(operator: &'static str) -> impl Fn(&mut AstNode, &Variant
 }
 
 /// All the variants of Tailwind CSS.
+#[cfg(feature = "canonicalize")]
 /// The `variants.suggest` calls of `variants.ts`. Upstream reads the keys
 /// of the breakpoints and of the containers when it registers the
 /// variants, and the other variants when it gives the completions.
@@ -1236,6 +1241,7 @@ pub fn create_variants(theme: &Theme) -> Variants {
     }
 
 
+    #[cfg(feature = "canonicalize")]
     register_completions(&mut variants, theme);
 
     variants

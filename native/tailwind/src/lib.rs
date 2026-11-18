@@ -7,6 +7,7 @@ pub mod ast;
 pub mod at_import;
 pub mod attribute_selector_parser;
 pub mod candidate;
+#[cfg(feature = "canonicalize")]
 pub mod canonicalize;
 #[cfg(feature = "program")]
 pub mod cli;
@@ -19,6 +20,7 @@ pub mod css_parser;
 pub mod design_system;
 pub mod hash;
 pub mod index;
+#[cfg(feature = "canonicalize")]
 pub mod intellisense;
 pub mod nesting;
 pub mod optimize;
