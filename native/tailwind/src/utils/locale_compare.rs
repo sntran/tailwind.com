@@ -49,11 +49,13 @@ fn tertiary(c: char) -> u8 {
 
 /// `a.localeCompare(b)` of V8.
 pub fn locale_compare(a: &str, b: &str) -> Ordering {
-    let weights = |s: &'_ str| s.chars().map(primary).filter(|w| *w != 0).collect::<Vec<u32>>();
-    match weights(a).cmp(&weights(b)) {
+    // The same text has the same weights.
+    if a == b {
+        return Ordering::Equal;
+    }
+    match a.chars().map(primary).filter(|w| *w != 0).cmp(b.chars().map(primary).filter(|w| *w != 0)) {
         Ordering::Equal => {}
         other => return other,
     }
-    let tertiaries = |s: &'_ str| s.chars().filter(|c| primary(*c) != 0).map(tertiary).collect::<Vec<u8>>();
-    tertiaries(a).cmp(&tertiaries(b))
+    a.chars().filter(|c| primary(*c) != 0).map(tertiary).cmp(b.chars().filter(|c| primary(*c) != 0).map(tertiary))
 }

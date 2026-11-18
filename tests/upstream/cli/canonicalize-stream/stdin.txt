@@ -1,0 +1,5 @@
+[display:_flex_] py-3 p-1 px-3
+mt-2 mr-2 mb-2 ml-2 focus:hover:p-3 hover:p-1 py-3
+
+   
+border-t border-b border-l border-r overflow-x-hidden overflow-y-hidden

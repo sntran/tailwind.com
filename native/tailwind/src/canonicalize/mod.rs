@@ -111,6 +111,10 @@ pub struct Storage {
     candidates: RefCell<HashMap<(InternalOptions, String), String>>,
     variants: RefCell<HashMap<(InternalOptions, *const Variant), Rc<Vec<Variant>>>>,
     utilities: RefCell<HashMap<(InternalOptions, String), String>>,
+    /// The normal form of the values of declarations, by `rem` and value.
+    normal_values: RefCell<HashMap<(RemKey, String), String>>,
+    /// The values with the inlined theme variables, and the variables.
+    resolved_values: RefCell<HashMap<String, (String, Rc<Vec<String>>)>>,
 }
 
 impl Storage {

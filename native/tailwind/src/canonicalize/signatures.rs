@@ -188,25 +188,14 @@ pub fn canonicalize_ast(
 
                     // The inlined values of the theme.
                     if value.contains("var(") {
-                        let inlined = theme_variables.as_deref_mut().map(|variables| variables.get(&mut node.loc));
-                        value = resolve_variables_in_value(&value, ds, inlined);
+                        let (resolved, variables) = resolve_variables_cached(ds, &value);
+                        if let Some(set) = theme_variables.as_deref_mut().map(|variables| variables.get(&mut node.loc)) {
+                            set.extend(variables.iter().cloned());
+                        }
+                        value = resolved;
                     }
 
-                    // `--spacing(4)` is `calc(var(--spacing, 0.25rem) * 4)`,
-                    // with the inlined variable `calc(0.25rem * 4)`, and
-                    // the fold gives `1rem`.
-                    let (folded, folded_ast) = constant_fold_declaration_ast(vp::parse(&value), rem, true);
-
-                    // `calc(var(--foo) * -1)` and `calc(-1 * var(--foo))`
-                    // are the same text.
-                    let (normalized, canonical_ast) = canonicalize_calc_expressions_ast(folded_ast);
-                    if folded || normalized {
-                        value = vp::to_css(&canonical_ast);
-                    }
-
-                    // No whitespace that is not necessary, as for the
-                    // print of arbitrary values.
-                    node.value = Some(print_arbitrary_value(&value));
+                    node.value = Some(normal_value(ds, &value, rem, options.rem));
                     WalkAction::Continue
                 }
                 // The special nodes are their children.
@@ -284,6 +273,40 @@ fn lowercase_hex_colors(value: &str) -> String {
         result.push(c);
         i += c.len_utf8();
     }
+    result
+}
+
+/// The normal form of a value of a declaration, from a cache: the fold,
+/// the order of the operands of `calc()`, and the print of arbitrary
+/// values.
+fn normal_value(ds: &DesignSystem, value: &str, rem: Option<f64>, rem_key: RemKey) -> String {
+    let key = (rem_key, value.to_string());
+    if let Some(found) = ds.canonical.normal_values.borrow().get(&key) {
+        return found.clone();
+    }
+    // `--spacing(4)` is `calc(var(--spacing, 0.25rem) * 4)`, with the
+    // inlined variable `calc(0.25rem * 4)`, and the fold gives `1rem`.
+    let (folded, folded_ast) = constant_fold_declaration_ast(vp::parse(value), rem, true);
+    // `calc(var(--foo) * -1)` and `calc(-1 * var(--foo))` are the same text.
+    let (normalized, canonical_ast) = canonicalize_calc_expressions_ast(folded_ast);
+    let value = if folded || normalized { vp::to_css(&canonical_ast) } else { value.to_string() };
+    // No whitespace that is not necessary, as for the print of arbitrary
+    // values.
+    let result = print_arbitrary_value(&value);
+    ds.canonical.normal_values.borrow_mut().insert(key, result.clone());
+    result
+}
+
+/// `resolveVariablesInValue` from a cache: the value, and the inlined
+/// variables.
+fn resolve_variables_cached(ds: &DesignSystem, value: &str) -> (String, Rc<Vec<String>>) {
+    if let Some(found) = ds.canonical.resolved_values.borrow().get(value) {
+        return found.clone();
+    }
+    let mut inlined = IndexSet::default();
+    let resolved = resolve_variables_in_value(value, ds, Some(&mut inlined));
+    let result = (resolved, Rc::new(inlined.into_iter().collect::<Vec<_>>()));
+    ds.canonical.resolved_values.borrow_mut().insert(value.to_string(), result.clone());
     result
 }
 

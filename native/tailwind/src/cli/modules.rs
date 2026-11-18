@@ -14,12 +14,20 @@ pub struct FileSystem {
     dependencies: RefCell<Vec<(PathBuf, Stamp)>>,
     /// True: the messages of `console` are not printed.
     quiet: bool,
+    /// True: the messages of `console.log` go to the standard error.
+    console_to_stderr: bool,
 }
 
 impl FileSystem {
     /// A file system whose `console` prints nothing when `quiet` is true.
     pub fn with_quiet_console(quiet: bool) -> Self {
         Self { quiet, ..Self::default() }
+    }
+
+    /// A file system whose `console` prints to the standard error, as
+    /// the `canonicalize` command of the official program does.
+    pub fn with_console_to_stderr() -> Self {
+        Self { console_to_stderr: true, ..Self::default() }
     }
 
     pub fn take_dependencies(&self) -> Vec<(PathBuf, Stamp)> {
@@ -105,7 +113,7 @@ impl ModuleLoader for FileSystem {
         if self.quiet {
             return;
         }
-        if is_error {
+        if is_error || self.console_to_stderr {
             super::context::err(&format!("{text}\n"));
         } else {
             super::context::out(&format!("{text}\n"));

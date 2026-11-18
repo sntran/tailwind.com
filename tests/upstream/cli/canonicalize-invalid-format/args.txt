@@ -1,0 +1,4 @@
+canonicalize
+--format
+xml
+flex

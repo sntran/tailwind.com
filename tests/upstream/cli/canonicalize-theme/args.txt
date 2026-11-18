@@ -1,0 +1,8 @@
+canonicalize
+--css
+theme.css
+tw:mt-card tw:mb-card
+tw:w-[16px] tw:h-[16px]
+tw:text-[#123] tw:bg-brand/[50%]
+tw:hover:mt-[1rem] tw:hover:mb-[1rem]
+flex

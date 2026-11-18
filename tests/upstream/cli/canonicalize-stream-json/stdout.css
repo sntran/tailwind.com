@@ -1,0 +1,27 @@
+[
+  {
+    "input": "[display:_flex_] py-3 p-1 px-3",
+    "output": "flex p-3",
+    "changed": true
+  },
+  {
+    "input": "mt-2 mr-2 mb-2 ml-2 focus:hover:p-3 hover:p-1 py-3",
+    "output": "m-2 py-3 hover:p-1 focus:hover:p-3",
+    "changed": true
+  },
+  {
+    "input": "",
+    "output": "",
+    "changed": false
+  },
+  {
+    "input": "   ",
+    "output": "",
+    "changed": true
+  },
+  {
+    "input": "border-t border-b border-l border-r overflow-x-hidden overflow-y-hidden",
+    "output": "overflow-hidden border",
+    "changed": true
+  }
+]
