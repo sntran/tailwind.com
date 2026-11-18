@@ -141,6 +141,35 @@ impl Theme {
         keys
     }
 
+    /// Run `f` with no `inline` option on the values of the theme:
+    /// `temporarilyDisableThemeInline` of `canonicalize-candidates.ts`.
+    /// Then `@theme` and `@theme inline` give the same utilities.
+    /// Upstream removes the option from each value that `f` reads; here
+    /// it removes the option from all the values. The functions of the
+    /// theme that read each value give the options only through a read of
+    /// one value, so the result is the same.
+    pub fn without_inline<T>(&self, f: impl FnOnce() -> T) -> T {
+        let restore: Vec<String> = {
+            let mut values = self.values.borrow_mut();
+            values
+                .iter_mut()
+                .filter(|(_, value)| value.options & INLINE != 0)
+                .map(|(key, value)| {
+                    value.options &= !INLINE;
+                    key.clone()
+                })
+                .collect()
+        };
+        let result = f();
+        let mut values = self.values.borrow_mut();
+        for key in restore {
+            if let Some(value) = values.get_mut(&key) {
+                value.options |= INLINE;
+            }
+        }
+        result
+    }
+
     /// The value of the first key that exists.
     pub fn get(&self, theme_keys: &[&str]) -> Option<String> {
         let values = self.values.borrow();

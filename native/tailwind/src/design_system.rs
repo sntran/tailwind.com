@@ -63,6 +63,8 @@ pub struct DesignSystem {
     keep_compiled: std::cell::Cell<bool>,
     tracked: RefCell<HashSet<String>>,
     variant_order: RefCell<Option<(usize, Rc<VariantOrder>)>>,
+    /// The caches of the canonical form of candidates.
+    pub(crate) canonical: crate::canonicalize::Storage,
 }
 
 /// A design system with the utilities and variants of Tailwind CSS.
@@ -87,6 +89,7 @@ pub fn build_design_system(theme: Theme) -> DesignSystem {
         keep_compiled: std::cell::Cell::new(true),
         tracked: RefCell::new(HashSet::default()),
         variant_order: RefCell::new(None),
+        canonical: Default::default(),
     }
 }
 
@@ -118,6 +121,7 @@ impl DesignSystem {
         if let Some(found) = self.compiled.borrow().get(&key) {
             return found.clone();
         }
+        let errors_before = self.js_error_count();
         let mut compiled = compile_ast_nodes(candidate, self, flags);
 
         // An arbitrary value or property can have a function such as
@@ -141,8 +145,30 @@ impl DesignSystem {
         }
 
         let compiled = Rc::new(compiled);
-        self.compiled.borrow_mut().insert(key, compiled.clone());
+        // Upstream keeps no result when a plugin throws: the next compile
+        // of the candidate throws again.
+        if self.js_error_count() == errors_before {
+            self.compiled.borrow_mut().insert(key, compiled.clone());
+        }
         compiled
+    }
+
+    /// The number of exceptions of plugins since the start.
+    pub fn js_error_count(&self) -> u64 {
+        #[cfg(tw_js)]
+        if let Some(js) = &self.js {
+            return js.error_count();
+        }
+        0
+    }
+
+    /// True when an exception of a plugin waits for `take_js_error`.
+    pub fn has_js_error(&self) -> bool {
+        #[cfg(tw_js)]
+        if let Some(js) = &self.js {
+            return js.has_error();
+        }
+        false
     }
 
     /// True (the default): a build copies the compiled nodes of a candidate

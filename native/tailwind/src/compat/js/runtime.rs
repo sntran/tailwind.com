@@ -59,6 +59,8 @@ pub struct JsRuntime {
     stash: RefCell<Vec<VariantFn>>,
     /// The first exception of a plugin function in a build.
     error: RefCell<Option<Error>>,
+    /// The number of exceptions of plugins, also the ones after the first.
+    errors: std::cell::Cell<u64>,
     /// The `cause` chain of the exception that JavaScript throws now.
     causes: RefCell<Vec<String>>,
     /// The source locations of the nodes that are in JavaScript.
@@ -114,6 +116,7 @@ impl JsRuntime {
             exclusive: Cell::new(false),
             stash: RefCell::new(Vec::new()),
             error: RefCell::new(None),
+            errors: std::cell::Cell::new(0),
             causes: RefCell::new(Vec::new()),
             locs: LocTable::default(),
         });
@@ -131,12 +134,23 @@ impl JsRuntime {
         &self.engine
     }
 
+    /// True when an exception of a plugin waits for `take_error`.
+    pub fn has_error(&self) -> bool {
+        self.error.borrow().is_some()
+    }
+
+    /// The number of exceptions of plugins since the start.
+    pub fn error_count(&self) -> u64 {
+        self.errors.get()
+    }
+
     /// Take the first exception of a plugin function in a build.
     pub fn take_error(&self) -> Option<Error> {
         self.error.borrow_mut().take()
     }
 
     fn set_error(&self, message: String) {
+        self.errors.set(self.errors.get() + 1);
         let mut slot = self.error.borrow_mut();
         if slot.is_none() {
             *slot = Some(Error::new(message));

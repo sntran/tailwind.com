@@ -16,7 +16,7 @@ mod default_theme;
 pub mod js;
 pub mod legacy_utilities;
 pub mod module_loader;
-mod theme_fn;
+pub(crate) mod theme_fn;
 
 use crate::ast::{css_parent, AstNode};
 use crate::design_system::DesignSystem;
