@@ -160,6 +160,34 @@ defmodule TailwindFormatterTest do
     assert formatter.(File.read!(file)) =~ ~s(<div class="flex p-4 underline">{@title}</div>)
   end
 
+  test "the canonical form of the class lists", %{dir: dir} do
+    :persistent_term.erase({Tailwind.Formatter, :canonical, :default})
+
+    assert format(dir, ~s|<div class="py-3 p-1 px-3 flex"></div>\n|, canonicalize: true) ==
+             ~s|<div class="flex p-3"></div>\n|
+
+    # The strings of `class={…}`, one class for more classes, and the
+    # classes of the project first. A list with `...` and a string with an
+    # interpolation get the sort only.
+    text = """
+    <div class={["w-[16px]  h-[16px]", @open && "mt-2 mb-2 card"]}>
+      <p class="mt-[1px] mb-[1px] ...">x</p>
+      <p class={"pt-2 pb-2 \#{@x} flex"}>y</p>
+    </div>
+    """
+
+    assert format(dir, text, canonicalize: true) == """
+           <div class={["size-[16px]", @open && "card my-2"]}>
+             <p class="mt-[1px] mb-[1px] ...">x</p>
+             <p class={"pt-2 pb-2 \#{@x} flex"}>y</p>
+           </div>
+           """
+
+    # With no option, only the sort.
+    assert format(dir, ~s|<div class="py-3 p-1 px-3"></div>\n|) ==
+             ~s|<div class="p-1 px-3 py-3"></div>\n|
+  end
+
   test "a build that fails gives its messages", %{dir: dir} do
     File.write!(
       Path.join(dir, "assets/broken.css"),

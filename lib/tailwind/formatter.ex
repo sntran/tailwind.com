@@ -38,12 +38,29 @@ defmodule Tailwind.Formatter do
       Default: `false`.
     * `:preserve_duplicates` - keep a second copy of a class. Default:
       `false`.
+    * `:canonicalize` - give each class list its canonical form, as the
+      command `canonicalize` of the official program does: `px-4 py-4`
+      becomes `p-4`, `w-[16px] h-[16px]` becomes `size-4`. The CSS stays
+      the same. Default: `false`. See below.
 
   The order comes from a normal build of the profile, one time for each
   run of `mix format` (as a NIF when the project has one): the place of a
   class is the place of its first rule in the layer `utilities` of the
   output. A class with no rule (a class of the project, or a class that
   the build does not see) comes first. `docs/FORMATTER.md` has more.
+
+  ## The canonical form
+
+  With `canonicalize: true`, the plugin gives each class list with no
+  interpolation to the command `canonicalize` of `tailwind.com`. The
+  result replaces the list: it has the canonical form of each class,
+  one class for more classes when the CSS is the same, no second copy of
+  a class, and the order of the official Prettier plugin. A list with
+  `...` and a string with interpolations get the sort only. A
+  replacement is always a class of the version of Tailwind CSS of the
+  profile. One process runs the command with
+  `--stream` for all the files of a run of `mix format`: the first list
+  takes about 0.6 s, and each other list a few milliseconds.
   """
 
   @behaviour Mix.Tasks.Format
@@ -65,8 +82,19 @@ defmodule Tailwind.Formatter do
   # The sort of the values of a template, with the order of the build.
   defp sort(contents, slots, config) do
     text = fn {start, stop} -> binary_part(contents, start, stop - start) end
-    places = order(profile(config))
+    profile = profile(config)
+    places = order(profile)
     place = fn class -> Map.get(places, escape(class)) end
+
+    canonical =
+      if Keyword.get(config, :canonicalize, false) do
+        values =
+          for {:attribute, range} <- slots, value = text.(range), canonical?(value), do: value
+
+        canonical_forms(profile, values)
+      else
+        %{}
+      end
 
     options = [
       remove_duplicates: not Keyword.get(config, :preserve_duplicates, false),
@@ -76,7 +104,12 @@ defmodule Tailwind.Formatter do
     replacements =
       Enum.flat_map(slots, fn
         {:attribute, range} ->
-          [{range, sort_attribute(text.(range), place, options)}]
+          value = text.(range)
+
+          case Map.fetch(canonical, group(value)) do
+            {:ok, form} -> [{range, form}]
+            :error -> [{range, sort_attribute(value, place, options)}]
+          end
 
         {:template, ranges} ->
           Enum.zip(ranges, sort_template(Enum.map(ranges, text), place, options))
@@ -97,11 +130,61 @@ defmodule Tailwind.Formatter do
     )
   end
 
-  ## The order of the classes
-
-  # The order lives this long: one run of `mix format` builds one time, and
-  # an editor that formats again later gets the new classes.
+  # The order lives this long: one run of `mix format` builds one time,
+  # and an editor that formats again later gets the new classes.
   @lifetime_ms 10_000
+
+  ## The canonical form
+
+  # A value with classes, no Mustache text and no `...`.
+  defp canonical?(value) do
+    group = group(value)
+
+    group != "" and not String.contains?(value, "{{") and
+      not Enum.any?(String.split(group, " "), &(&1 in ["...", "…"]))
+  end
+
+  # The classes of a value, with one space between them.
+  defp group(value), do: value |> String.split(~r/[\t\r\f\n ]+/, trim: true) |> Enum.join(" ")
+
+  @doc false
+  # The canonical form of each value (by its group of classes), from the
+  # process of the command `canonicalize` of the profile.
+  def canonical_forms(profile, values) do
+    groups = values |> Enum.map(&group/1) |> Enum.uniq()
+    Tailwind.Formatter.Canonical.forms(profile, groups)
+  end
+
+  @doc false
+  # The path of the input of the arguments of a profile, relative to the
+  # working directory of the profile: `--cwd` and `--input`.
+  def css_path(args) do
+    args = input_args(args)
+
+    {input, cwd} =
+      Enum.reduce(Enum.chunk_every(split_args(args), 2), {nil, nil}, fn
+        [flag, value], {_input, cwd} when flag in [~c"--input", ~c"-i"] -> {value, cwd}
+        [~c"--cwd", value], {input, _} -> {input, value}
+        _, acc -> acc
+      end)
+
+    if input,
+      do:
+        if(cwd, do: Path.join(to_string(cwd), to_string(input)), else: to_string(input))
+        |> String.to_charlist()
+  end
+
+  # `--name=value` is `--name value`.
+  defp split_args(args) do
+    Enum.flat_map(args, fn arg ->
+      case :string.split(arg, ~c"=") do
+        [flag, value] -> [flag, value]
+        _ -> [arg]
+      end
+    end)
+  end
+
+  ## The order of the classes
 
   @doc false
   # The place of each class, from a build of the profile: escaped class

@@ -243,8 +243,8 @@ With no `-o`, the CSS is in `stdout`. Vite and webpack copy
 `tailwind-browser.wasm` and the JavaScript files of the plugins with the
 files of the site. For a bundler that does not copy them (esbuild), copy
 `runtime/` of the package to the site, and give its URL in the option
-`runtime`. For `--minify`, give the URL of `tailwind.wasm` in the option
-`wasm`.
+`runtime`. For `--minify` and the command `canonicalize`, give the URL
+of `tailwind.wasm` in the option `wasm`.
 
 Each release also publishes the package to GitHub Packages, with the
 name `@sntran/tailwind.com` (registry `https://npm.pkg.github.com`), and
@@ -306,9 +306,29 @@ expects the same text, byte for byte:
 | The official command line program on small projects, also the warnings of the optimizer and of `@utility` | 20 projects |
 | The source maps of the official compiler and of its optimizer | 317 stylesheets |
 | The official command line program with `--map`, also with a JavaScript plugin and config | 29 projects |
+| The command `canonicalize`: each call of the unit tests of the official code, and the official program on 400 random lists (4.3.5, 4.3.4 and 4.3.2) | 1,914 calls, 13 projects |
 | The official command line program on projects with JavaScript and TypeScript plugins and configs (daisyUI, heroicons, `@tailwindcss/typography`, `@tailwindcss/forms`, two Phoenix projects) | 100 projects |
 | The `compile` calls of the unit tests of Tailwind CSS that load a JavaScript plugin or config | 296 calls |
 | Node.js 22 for the parts of Node.js that a plugin gets (`Buffer`, `URL`, timers, `fs`, `util`, ...), and for the files that `require` and `import` find | 124 values, 160 questions |
+
+The second command of the official program, `canonicalize`, is also
+there, with the same options and the same output:
+
+```sh
+$ tailwind.com canonicalize "py-3 p-1 px-3" "w-[16px] h-[16px] bg-[#FFF]"
+p-3
+size-[16px] bg-white
+```
+
+It gives the canonical form of each list of classes: one class for more
+classes when the CSS is the same, the bare value of an arbitrary value,
+the new names of old classes, and the sort of the official Prettier
+plugin. `--css app.css` uses the theme and the plugins of the project,
+and `--stream` reads one list from each line of the standard input. It
+runs in about 0.6 s with 135 MB of memory, and the official program in
+about 3.1 s with 560 MB: the first list makes an index of all the
+classes. `cargo test` replays each call
+of the unit tests of the official code (1,914 calls).
 
 See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the results and
 the known differences, and [`docs/TESTING.md`](docs/TESTING.md) for the
@@ -392,8 +412,10 @@ differences.
   Start the file there with the APE loader of cosmocc
   (`ape-x86_64.elf tailwind.com`). Cosmopolitan supports OpenBSD 7.3 or
   earlier.
-- `canonicalize`, the second command of the official program, is not
-  there.
+- **`canonicalize`** has one algorithm, the one of Tailwind CSS 4.3.5,
+  for each version of Tailwind CSS: see
+  [`docs/VERSIONS.md`](docs/VERSIONS.md). For 4.2.2 to 4.3.0, the result
+  can be better than the result of the official command of that version.
 - **Tailwind CSS 3** (a project with only `tailwind.config.js` and
   `@tailwind` rules, and `version: "3.x"`) does not work: it is another
   program. Use the official Hex package or program for it.
@@ -417,12 +439,13 @@ WASI file system. It has the same JavaScript engine for `@plugin` and
 runs it in the browser, with a small WASI host in JavaScript
 (`js/wasi.mjs`, [`docs/SITE.md`](docs/SITE.md)).
 
-`tailwind-browser.wasm` of each release is the program for a browser:
-no Lightning CSS and no JavaScript engine, about 0.8 MB with
-compression, and `tailwind.wasm` is about 1.8 MB. Its plugins run in the
-JavaScript engine of the host, with JS Promise Integration
-(`js/engine.mjs`): a browser, or Node.js 24 or later. `--optimize` only
-lowers the new CSS functions and mixins, and `--minify` gives an error.
+`tailwind-browser.wasm` of each release is the program for a browser,
+for builds: no Lightning CSS, no JavaScript engine and no command
+`canonicalize`, about 0.8 MB with compression, and `tailwind.wasm` is
+about 1.9 MB. Its plugins run in the JavaScript engine of the host, with
+JS Promise Integration (`js/engine.mjs`): a browser, or Node.js 24 or
+later. `--optimize` only lowers the new CSS functions and mixins, and
+`--minify` and `canonicalize` give an error.
 The condition `browser` of the npm package gives it.
 
 ## Documentation

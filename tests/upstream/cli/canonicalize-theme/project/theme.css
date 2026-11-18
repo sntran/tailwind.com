@@ -1,0 +1,6 @@
+@import 'tailwindcss' prefix(tw);
+@theme {
+  --spacing-card: 1rem;
+  --color-brand: #123;
+  --opacity-15: 15%;
+}

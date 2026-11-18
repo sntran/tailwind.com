@@ -15,6 +15,10 @@
 //! process that keeps it ends), or at `nif_stop/1`: a watch ends at its
 //! next tick, and a build at its next check (`stop.rs` of the crate
 //! `tailwind`). After the stop, the thread sends no more messages.
+//!
+//! `nif_open/6` starts a run as `nif_start/6` does, with a standard input:
+//! `nif_write/2` gives it data, and `nif_close/1` ends it. The command
+//! `canonicalize --stream` reads it.
 
 use rustler::{Encoder, LocalPid, OwnedBinary, OwnedEnv, ResourceArc};
 use std::io::Write;
@@ -59,6 +63,8 @@ impl Shared {
 /// A run of the program. Its drop stops the run.
 struct Run {
     shared: Arc<Shared>,
+    /// The standard input of a run of `nif_open/6`, until `nif_close/1`.
+    input: Mutex<Option<std::sync::mpsc::Sender<Vec<u8>>>>,
 }
 
 #[rustler::resource_impl]
@@ -111,8 +117,54 @@ fn nif_start(
     id: u64,
     terminal: bool,
 ) -> rustler::NifResult<ResourceArc<Run>> {
+    start(argv, cwd, vars, pid, id, terminal, false)
+}
+
+/// Run the program as `nif_start/6` does, with a standard input.
+#[rustler::nif]
+fn nif_open(
+    argv: Vec<String>,
+    cwd: String,
+    vars: Vec<(String, Option<String>)>,
+    pid: LocalPid,
+    id: u64,
+    terminal: bool,
+) -> rustler::NifResult<ResourceArc<Run>> {
+    start(argv, cwd, vars, pid, id, terminal, true)
+}
+
+/// Give data to the standard input of a run of `nif_open/6`. The result
+/// is `false` after `nif_close/1`, or when the run ended.
+#[rustler::nif]
+fn nif_write(run: ResourceArc<Run>, data: rustler::Binary) -> bool {
+    match run.input.lock().ok().and_then(|input| input.clone()) {
+        Some(sender) => sender.send(data.as_slice().to_vec()).is_ok(),
+        None => false,
+    }
+}
+
+/// End the standard input of a run of `nif_open/6`.
+#[rustler::nif]
+fn nif_close(run: ResourceArc<Run>) -> rustler::Atom {
+    if let Ok(mut input) = run.input.lock() {
+        input.take();
+    }
+    rustler::types::atom::ok()
+}
+
+fn start(
+    argv: Vec<String>,
+    cwd: String,
+    vars: Vec<(String, Option<String>)>,
+    pid: LocalPid,
+    id: u64,
+    terminal: bool,
+    with_input: bool,
+) -> rustler::NifResult<ResourceArc<Run>> {
     let shared = Arc::new(Shared { stop: Arc::new(AtomicBool::new(false)), gate: Mutex::new(()) });
-    let run = ResourceArc::new(Run { shared: shared.clone() });
+    let (sender, receiver) = std::sync::mpsc::channel::<Vec<u8>>();
+    let receiver = with_input.then_some(receiver);
+    let run = ResourceArc::new(Run { shared: shared.clone(), input: Mutex::new(with_input.then_some(sender)) });
     std::thread::Builder::new()
         .name("tailwind".into())
         // The stack of the program: the compiler and Lightning CSS go deep
@@ -133,6 +185,10 @@ fn nif_start(
                 stderr: Box::new(stream(atoms::stderr())),
                 terminal,
                 stop: shared.stop.clone(),
+                stdin: match receiver {
+                    Some(receiver) => Some(Box::new(tailwind::cli::context::ChannelInput::new(receiver, shared.stop.clone()))),
+                    None => None,
+                },
             };
             // A panic must not stop the VM: it is the status 101, as for a
             // panic of the program.

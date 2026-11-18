@@ -510,6 +510,28 @@ node tests/upstream/tools/gen-node-api.mjs
 node tests/upstream/tools/gen-optimize-warnings.mjs /path/to/scratch/cli
 ```
 
+## The records of the canonical form of candidates
+
+These files in `native/tailwind/tests/fixtures` record the code of the editor tools and of the command `canonicalize` of
+Tailwind CSS 4.3.5. The scripts with `<clone>` bundle the TypeScript source of the clone with esbuild, because the npm
+package does not export these functions.
+
+| File | Script | What |
+|---|---|---|
+| `canonicalize.json.gz` | `gen-canonicalize.mjs <clone>` | Each call of `canonicalizeCandidates` in the unit tests of `canonicalize-candidates.test.ts` (a small replacement of vitest runs the test file): the stylesheet, the stylesheets and modules that it loads, and the calls of each design system in their sequence. |
+| `class_list.json.gz` | `gen-class-list.mjs` | `getClassList()` and the completions of the variants for 7 stylesheets, 2 of them with plugins. |
+| `print_candidate.json.gz` | `gen-print-candidate.mjs` | `printCandidate` and `printVariant` for the candidates of `candidates.jsonl.gz`. |
+| `fold.json.gz` | `gen-fold.mjs <clone>` | `constantFoldDeclaration`, `canonicalizeCalcExpressions` and `expandDeclaration`. |
+| `locale_compare.json.gz` | `gen-locale-compare.mjs` | `localeCompare` of Node.js for 40,000 pairs of texts. |
+
+```sh
+node tests/upstream/tools/gen-canonicalize.mjs /path/to/tw
+node tests/upstream/tools/gen-class-list.mjs
+node tests/upstream/tools/gen-print-candidate.mjs
+node tests/upstream/tools/gen-fold.mjs /path/to/tw
+node tests/upstream/tools/gen-locale-compare.mjs
+```
+
 ## How to make the files again
 
 ```sh

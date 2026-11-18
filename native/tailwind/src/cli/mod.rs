@@ -4,6 +4,8 @@
 //! so this program can replace it.
 
 pub mod args;
+#[cfg(feature = "canonicalize")]
+mod canonicalize;
 pub mod context;
 #[cfg(feature = "lower")]
 pub mod css_math;
@@ -88,7 +90,10 @@ fn help_text(style: &Style) -> String {
     out.push_str("\n\n");
     out.push_str(&style.dim("Usage:"));
     out.push_str("\n  tailwindcss [--input input.css] [--output output.css] [--watch] [--poll=ms] [options…]\n");
-    out.push_str("  tailwindcss build [--input input.css] [--output output.css] [--watch] [--poll=ms] [options…]\n\n");
+    out.push_str("  tailwindcss build [--input input.css] [--output output.css] [--watch] [--poll=ms] [options…]\n");
+    #[cfg(feature = "canonicalize")]
+    out.push_str(&format!("  {}\n", canonicalize::USAGE[0]));
+    out.push('\n');
     out.push_str(&style.dim("Options:"));
     out.push('\n');
     for (flags, description) in [
@@ -807,6 +812,15 @@ pub fn run(mut argv: Vec<String>) -> i32 {
     let command = argv.first().cloned();
     if command.as_deref() == Some("build") {
         argv.remove(0);
+    } else if command.as_deref() == Some("canonicalize") {
+        argv.remove(0);
+        #[cfg(feature = "canonicalize")]
+        return canonicalize::run(argv);
+        #[cfg(not(feature = "canonicalize"))]
+        {
+            errln!("This build of the program has no command canonicalize. The program for a browser has no such command: give it to tailwind.wasm.");
+            return 1;
+        }
     }
     let parsed = args::parse(&argv);
 

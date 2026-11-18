@@ -1,0 +1,4 @@
+canonicalize
+--stream
+--css
+input.css

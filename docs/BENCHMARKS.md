@@ -180,6 +180,33 @@ In CI, the job `bench` of `.github/workflows/build.yml` runs the
 benchmarks on Linux and macOS for each push, and writes the table to the
 summary of the run.
 
+## The command `canonicalize`
+
+The command against the official npm CLI, for the default theme
+(`@import "tailwindcss";`): one list, a list that needs no index (no
+class to collapse), and the 400 random lists of
+`tests/upstream/cli/canonicalize-random`. The median of 5 runs. Each
+output is the output of the official program.
+
+| Workload | tailwind.com | native | official npm CLI |
+|---|---:|---:|---:|
+| one list (`px-4 py-4`) | 597 ms | 606 ms | 3.11 s |
+| a list with no collapse (`flex`) | 5 ms | 6 ms | 184 ms |
+| 400 lists, standard input | 2.44 s | 2.18 s | 8.09 s |
+| 400 lists, `--stream` | 2.69 s | 2.22 s | 8.19 s |
+| peak memory: 400 lists | 135 MB | 145 MB | 560 MB |
+
+The first list makes an index of the class list: the signature of
+about 23,000 classes. Most of the time of a run is this index. The
+caches keep only the compiled and parsed candidates that can change a
+result (`DesignSystem::transient_compiles`); with all of them, as
+upstream keeps them, a run took about 600 MB.
+
+The canonicalizer adds about 1.1 MB to `tailwind.com` (two systems),
+0.7 MB to the native program and 0.5 MB to `tailwind.wasm` (0.1 MB with
+brotli). `tailwind-browser.wasm` does not have it (the feature
+`canonicalize`).
+
 ## Node.js 22 and tailwind.wasm
 
 Node.js 22.23 can stop with the signal SIGSEGV when `tailwind.wasm`

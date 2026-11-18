@@ -91,7 +91,13 @@ pub struct Variants {
     /// Only for a version before 4.1.14 and custom variants that use each
     /// other in a circle (`switches::CUSTOM_VARIANT_CYCLE_ERROR`).
     pub keep_at_variant: bool,
+    /// The values of each functional or compound variant for the editor
+    /// tools, as functions of the registry.
+    completions: HashMap<String, CompletionFn>,
 }
+
+/// The completions of a variant, as a function of the registry.
+pub type CompletionFn = std::rc::Rc<dyn Fn(&DesignSystem) -> Vec<String>>;
 
 impl Variants {
     pub fn new() -> Self {
@@ -281,6 +287,21 @@ impl Variants {
 
     pub fn keys(&self) -> impl Iterator<Item = &String> {
         self.variants.keys()
+    }
+
+    /// `suggest`: the completions of a variant. A new call replaces the
+    /// completions of the variant.
+    /// With no feature `canonicalize`, the registry keeps no completions.
+    pub fn suggest(&mut self, name: impl Into<String>, suggestions: impl Fn(&DesignSystem) -> Vec<String> + 'static) {
+        #[cfg(feature = "canonicalize")]
+        self.completions.insert(name.into(), std::rc::Rc::new(suggestions));
+        #[cfg(not(feature = "canonicalize"))]
+        let _ = (name, suggestions);
+    }
+
+    /// `getCompletions`: the values of a variant for the editor tools.
+    pub fn get_completions(&self, name: &str, design_system: &DesignSystem) -> Vec<String> {
+        self.completions.get(name).map(|f| f(design_system)).unwrap_or_default()
     }
 
     pub fn entries(&self) -> impl Iterator<Item = (&String, &VariantInfo)> {
@@ -871,6 +892,32 @@ fn media_width_variant(operator: &'static str) -> impl Fn(&mut AstNode, &Variant
 }
 
 /// All the variants of Tailwind CSS.
+#[cfg(feature = "canonicalize")]
+/// The `variants.suggest` calls of `variants.ts`. Upstream reads the keys
+/// of the breakpoints and of the containers when it registers the
+/// variants, and the other variants when it gives the completions.
+fn register_completions(variants: &mut Variants, theme: &Theme) {
+    for root in ["not", "group", "peer", "in", "has"] {
+        variants.suggest(root, move |design_system| {
+            let variants = &design_system.variants;
+            variants.keys().filter(|name| variants.compounds_with_name(root, name)).cloned().collect()
+        });
+    }
+    variants.suggest("aria", |_| {
+        ["busy", "checked", "disabled", "expanded", "hidden", "pressed", "readonly", "required", "selected"]
+            .iter()
+            .map(|v| v.to_string())
+            .collect()
+    });
+    let keys = |namespace: &str| -> Vec<String> { theme.namespace(namespace).into_keys().flatten().collect() };
+    let breakpoints = keys("--breakpoint");
+    let widths = keys("--container");
+    for (root, values) in [("max", &breakpoints), ("min", &breakpoints), ("@max", &widths), ("@min", &widths), ("@", &widths)] {
+        let values = values.clone();
+        variants.suggest(root, move |_| values.clone());
+    }
+}
+
 pub fn create_variants(theme: &Theme) -> Variants {
     let mut variants = Variants::new();
     let v = &mut variants;
@@ -1192,6 +1239,10 @@ pub fn create_variants(theme: &Theme) -> Variants {
 
         static_variant(v, "noscript", &["@media (scripting: none)"], None);
     }
+
+
+    #[cfg(feature = "canonicalize")]
+    register_completions(&mut variants, theme);
 
     variants
 }

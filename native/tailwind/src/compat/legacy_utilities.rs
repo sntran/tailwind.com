@@ -1,8 +1,8 @@
 //! The utilities of older versions: `compat/legacy-utilities.ts` of
 //! Tailwind CSS. Upstream registers them for each stylesheet.
 //!
-//! Upstream also hides these utilities from the suggestions of the editor
-//! tools (`suggest`). This crate has no suggestions.
+//! Upstream also hides most of these utilities from the suggestions of the
+//! editor tools (`suggest` with no groups).
 
 use crate::ast::{decl, AstNode};
 use crate::candidate::{FunctionalCandidate, UtilityValue};
@@ -12,6 +12,16 @@ use crate::utils::segment::segment;
 
 /// Register the utilities.
 pub fn register_legacy_utilities(design_system: &mut DesignSystem) {
+    // No suggestions for these utilities.
+    for name in [
+        "bg-gradient-to-t", "bg-gradient-to-tr", "bg-gradient-to-r", "bg-gradient-to-br", "bg-gradient-to-b", "bg-gradient-to-bl",
+        "bg-gradient-to-l", "bg-gradient-to-tl", "bg-left-top", "bg-right-top", "bg-left-bottom", "bg-right-bottom",
+        "object-left-top", "object-right-top", "object-left-bottom", "object-right-bottom", "max-w-screen", "overflow-ellipsis",
+        "decoration-slice", "decoration-clone", "flex-shrink", "flex-grow", "order-none", "break-words",
+    ] {
+        design_system.utilities.suggest(name, |_| Vec::new());
+    }
+
     let utilities = &mut design_system.utilities;
 
     for (value, direction) in [

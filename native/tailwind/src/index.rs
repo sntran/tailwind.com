@@ -410,6 +410,7 @@ fn find_utilities(nodes: &mut [AstNode], path: &mut Vec<usize>) -> Option<Vec<us
 
 /// The design system of a stylesheet (`__unstable__loadDesignSystem`).
 pub fn load_design_system(css: &str, options: CompileOptions) -> Result<DesignSystem> {
+    let _version = version::enter(options.version.unwrap_or(Version::NATIVE));
     nesting::take_error();
     let design_system = parse_css(css_parser::parse_with_source(css, options.from.as_deref())?, &options)?.design_system;
     match nesting::take_error() {

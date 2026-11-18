@@ -9,12 +9,13 @@
 //     files: { 'app.css': '@import "tailwindcss";', 'index.html': '<div class="flex p-4">' },
 //   });
 //
-// tailwind-browser.wasm has no Lightning CSS and no JavaScript engine:
-// --optimize only lowers the new CSS (functions, mixins, if(), @when, the
-// sibling functions, the math functions), --minify gives an error, and the
+// tailwind-browser.wasm is for builds. It has no Lightning CSS, no
+// JavaScript engine and no command canonicalize: --optimize only lowers
+// the new CSS (functions, mixins, if(), @when, the sibling functions, the
+// math functions), --minify and canonicalize give an error, and the
 // plugins run in the JavaScript engine of the browser (js/engine.mjs). For
-// --minify, give the URL of tailwind.wasm in options.wasm (about 1.8 MB
-// with compression).
+// --minify and canonicalize, give the URL of tailwind.wasm in
+// options.wasm (about 1.8 MB with compression).
 //
 // It also runs in a Web Worker, and in Deno and Node.js with no file
 // system. Vite and webpack copy tailwind-browser.wasm and the JavaScript

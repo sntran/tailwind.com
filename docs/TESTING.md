@@ -26,6 +26,11 @@ and for the tools that make them again). The tests need no Node.js.
 | `tests/css_parser.rs`, `tests/to_css.rs`, `tests/walk.rs` | The cases of `css-parser.test.ts`, `ast.test.ts` and `walk.test.ts`. |
 | `tests/source_maps.rs` | The source maps of 317 stylesheets (`source-maps.jsonl.gz`): the locations of the parser, the decoded map, its JSON text, and the code and the map of the optimizer, plain and minified. The messages of 23 syntax errors with their positions. The cases of `translation-map.test.ts`. The cases of `line-table.test.ts` and of the test of `@tailwindcss/node` are unit tests in `src/source_maps/line_table.rs` and `src/cli/source_maps.rs`. The records have the six `compile` calls of `source-map.test.ts`. |
 | `tests/value_parser.rs`, `tests/selector_parser.rs`, `tests/attribute_selector_parser.rs`, `tests/utils.rs` | The cases of the test files of Tailwind CSS for these modules. |
+| `tests/canonicalize.rs` | The canonical form of candidates: each of the 1,914 calls of `canonicalizeCandidates` in the unit tests of `canonicalize-candidates.ts`, in their sequence and with the same design system (76 design systems, 4 with a plugin), against the record of the official code (`tests/fixtures/canonicalize.json.gz`, from `tests/upstream/tools/gen-canonicalize.mjs`). Run it with `--release`: the debug build takes about 2 minutes. |
+| `tests/canonicalize_versions.rs` | The canonical form as five versions of Tailwind CSS from 4.0.0, for 400 lists of classes: each class of a result is a class of the version or of the input, and the result has the same declarations as the input (the same signature). A replacement with a utility that the version does not have is not made (`start-4` before 4.2.0). |
+| `tests/class_list.rs` | The class list of the editor tools (`getClassList`) and the completions of the variants, in the same order, for 7 stylesheets: the default theme, a prefix, a custom theme, `@utility` with `--value(…)` and `--modifier(…)`, a local plugin with `matchUtilities` and `matchVariant`, and the plugins typography and forms (`tests/fixtures/class_list.json.gz`, from `gen-class-list.mjs`). |
+| `tests/print_candidate.rs` | `printCandidate` and `printVariant` for each reading of 10,847 candidates and 215 variants, with no prefix and with a prefix (`print_candidate.json.gz`, from `gen-print-candidate.mjs`). |
+| `tests/fold.rs`, `tests/locale_compare.rs` | The constant fold of values (with no `rem`, with `rem: 16`, and with no change of units), the order of the operands of `calc()`, and the expansion of shorthand declarations, for 5,624 values and 792 declarations of the official code (`fold.json.gz`, from `gen-fold.mjs`, which bundles the TypeScript source). `localeCompare` of Node.js for 40,000 pairs of texts (`locale_compare.json.gz`). |
 
 Useful variables: `NODES_KIND`, `NODES_FILTER`, `NODES_SHOW`
 (`tests/nodes.rs`), `SUITE_FILTER`, `SUITE_SHOW` (`tests/suite.rs`),
@@ -74,7 +79,7 @@ The crate uses `proptest`:
 
 ## The program
 
-`tests/cli.sh PROGRAM` runs the program on 24 small projects, and
+`tests/cli.sh PROGRAM` runs the program on 37 small projects, and
 compares the output and the exit status with the record of the official
 program (`tests/upstream/cli`): automatic source detection with
 `.gitignore`, `source(none)`, `@source`, `@source not`,
@@ -85,6 +90,11 @@ projects with warnings (the optimizer with one warning, with three, and
 with two values deeper than the limit of Lightning CSS, and
 `--value(…)` of `@utility`), and the CSS variables of the input file as
 4.3.5 and as 4.3.1 (`INPUT_FILE_IS_A_SOURCE` of [`SWITCHES.md`](SWITCHES.md)).
+The 13 cases `canonicalize-*` are for the command `canonicalize`: lists
+as arguments and on the standard input, `--stream`, the formats `text`,
+`json` and `jsonl`, an empty stream, an invalid format, a theme with a
+prefix, and 400 random lists of classes, also as 4.3.2 and as 4.3.4
+against the official program of those versions.
 
 A case can have more files than the output and the exit status:
 

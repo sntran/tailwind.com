@@ -1,0 +1,4 @@
+canonicalize
+--stream
+--format
+json

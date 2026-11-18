@@ -73,6 +73,42 @@ The options are in the key `:tailwind` of `.formatter.exs`:
 | `:attributes` | `["class"]` | The names of the attributes to sort, for example `["class", "input_class"]`. |
 | `:preserve_whitespace` | `false` | Keep the whitespace between the classes. |
 | `:preserve_duplicates` | `false` | Keep a second copy of a class. |
+| `:canonicalize` | `false` | Give each class list its canonical form, as the command `canonicalize` does: `px-4 py-4` is `p-4`. See below. |
+
+## The canonical form
+
+With `canonicalize: true`, the plugin also gives each class list with no
+interpolation to the command `canonicalize` of the program (as a NIF
+when the project has one), with the `--input` of the profile as `--css`:
+
+```heex
+<div class="py-3 p-1 px-3 w-[16px] h-[16px] bg-[#FFF]">
+```
+
+becomes
+
+```heex
+<div class="size-[16px] bg-white p-3">
+```
+
+The CSS stays the same. The command gives the order of the official
+Prettier plugin, so the sort of the plugin does not change the result.
+`:preserve_whitespace` and `:preserve_duplicates` do not apply to these
+lists. A list with `...` and the fixed parts of a string with
+interpolations get the sort only.
+
+The command works for each version of Tailwind CSS of the Rust
+compiler, with the utilities of the version of the profile
+([`VERSIONS.md`](VERSIONS.md)). One process runs
+`canonicalize --stream` for all the files of a run of `mix format`
+(`Tailwind.Formatter.Canonical`): it writes each list as a line of the
+standard input of the command, and reads one line for each list. With
+the NIF, the run gets its input through `tailwind_nif:open/2`. The
+command makes an index of all the classes for the first list (about
+0.6 s and 70 MB of memory, with the NIF in the memory of the BEAM), and
+each other list takes a few milliseconds. The process stops
+10 seconds after its last list. For 40 templates, `mix format` took
+0.89 s with `canonicalize: true`, and 0.22 s without it.
 
 ## How the plugin gets the order
 

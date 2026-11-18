@@ -114,8 +114,22 @@ real standalone program.
 - **The watch** uses inotify, kqueue, or `ReadDirectoryChangesW` on
   Windows. The official program uses `@parcel/watcher`. `--poll` is the
   same.
-- **`canonicalize`** and the class list for editors are not there. The
-  sort of classes is there: see [`FORMATTER.md`](FORMATTER.md).
+- **`canonicalize` as an older version**: the algorithm is the one of
+  Tailwind CSS 4.3.5 for each version, with the utilities, the variants
+  and the theme of the selected version. The official command is from
+  4.2.2, and its code changed in most releases until 4.3.4. On 400
+  random lists of
+  classes, the result is the same as the official command of 4.3.2,
+  4.3.3 and 4.3.4. One list is different for 4.2.4 and 4.3.0, and 53
+  lists for 4.2.2: the newer algorithm makes one class of more classes
+  in more cases. For a version before 4.2.2, the official program has no
+  such command, and this program has it. See
+  [`VERSIONS.md`](VERSIONS.md). The help text of the command has the form
+  of the help of this program.
+- **`localeCompare`**: the canonical form of candidates sorts some texts
+  as `localeCompare` of V8 does (`utils/locale_compare.rs`). The order of
+  a character that is not ASCII is the order of its code point, not the
+  order of ICU.
 - **An invalid `@variant` in a custom variant**: Tailwind CSS throws
   from `build` when a candidate uses that variant. Here the candidate
   gives no rule. In `@apply`, the error is the same as upstream.

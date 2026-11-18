@@ -659,7 +659,7 @@ fn kebab_case(value: &str) -> String {
 
 /// `keyPathToCssProperty`: the name of the theme variable of a key path,
 /// without the `--`. `None` is a path with no theme variable.
-pub(super) fn key_path_to_css_property(path: &[String]) -> Option<String> {
+pub(crate) fn key_path_to_css_property(path: &[String]) -> Option<String> {
     let first = path.first().map(String::as_str).unwrap_or("");
 
     // The `DEFAULT` of these keys was a default for more than one utility.

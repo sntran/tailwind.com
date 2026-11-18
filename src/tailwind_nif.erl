@@ -29,11 +29,11 @@ option `timeout` stops a run after a time.
 The module needs Erlang/OTP 29 or later. `docs/NIF.md` has more.
 """.
 
--export([available/0, load/1, run/2, run/4, versions/0]).
+-export([available/0, load/1, run/2, run/4, open/2, write/2, close/1, stop/1, versions/0]).
 %% The functions of the NIF.
--export([nif_start/6, nif_stop/1, nif_versions/0]).
+-export([nif_start/6, nif_open/6, nif_write/2, nif_close/1, nif_stop/1, nif_versions/0]).
 
--nifs([nif_start/6, nif_stop/1, nif_versions/0]).
+-nifs([nif_start/6, nif_open/6, nif_write/2, nif_close/1, nif_stop/1, nif_versions/0]).
 
 %% The key of persistent_term when the default NIF is not there.
 -define(MISSING, {?MODULE, missing}).
@@ -45,7 +45,8 @@ The module needs Erlang/OTP 29 or later. `docs/NIF.md` has more.
     colors => boolean(),
     timeout => timeout()
 }.
--export_type([options/0, stream/0]).
+-opaque run() :: reference().
+-export_type([options/0, stream/0, run/0]).
 
 -doc """
 True when the NIF is loaded. The first call loads the NIF from the
@@ -132,6 +133,53 @@ and the last `Acc` when the option `timeout` stopped the run.
     {non_neg_integer() | timeout, Acc}.
 run(Args, Options, Fun, Acc) when is_list(Args), is_map(Options), is_function(Fun, 3) ->
     ensure(),
+    {Cwd, Env, Id, Colors} = prepare(Options),
+    Deadline =
+        case maps:get(timeout, Options, infinity) of
+            infinity -> infinity;
+            Time when is_integer(Time), Time >= 0 -> erlang:monotonic_time(millisecond) + Time;
+            Time -> erlang:error(badarg, [{timeout, Time}])
+        end,
+    Run = nif_start([binary(Arg) || Arg <- Args], binary(Cwd), Env, self(), Id, Colors),
+    loop(Run, Id, Fun, Acc, Deadline).
+
+-doc """
+Start a run with a standard input, and give the run and its number `Id`.
+The options are the options of `run/2`, with no `timeout`. The calling
+process gets the messages of the run:
+
+    {tailwind_nif, Id, stdout | stderr, Binary}
+    {tailwind_nif, Id, exit, Status}
+
+`write/2` gives data to the standard input, `close/1` ends it, and
+`stop/1` stops the run. The run also stops when the process that keeps
+the run ends. The command `canonicalize --stream` reads the input; the
+other commands read no input.
+""".
+-spec open([string() | binary()], options()) -> {run(), pos_integer()}.
+open(Args, Options) when is_list(Args), is_map(Options) ->
+    ensure(),
+    {Cwd, Env, Id, Colors} = prepare(Options),
+    {nif_open([binary(Arg) || Arg <- Args], binary(Cwd), Env, self(), Id, Colors), Id}.
+
+-doc "Give data to the standard input of a run of `open/2`. The result is `false` after `close/1`, or when the run ended.".
+-spec write(run(), iodata()) -> boolean().
+write(Run, Data) ->
+    nif_write(Run, iolist_to_binary(Data)).
+
+-doc "End the standard input of a run of `open/2`.".
+-spec close(run()) -> ok.
+close(Run) ->
+    nif_close(Run).
+
+-doc "Stop a run of `open/2`. After this call, the process gets no more message of the run.".
+-spec stop(run()) -> ok.
+stop(Run) ->
+    nif_stop(Run).
+
+%% The working directory, the environment, the number and the colors of
+%% a run.
+prepare(Options) ->
     Cwd =
         case maps:find(cd, Options) of
             {ok, Dir} ->
@@ -141,16 +189,7 @@ run(Args, Options, Fun, Acc) when is_list(Args), is_map(Options), is_function(Fu
                 Dir
         end,
     Env = packages([{binary(Name), value(Value)} || {Name, Value} <- env(maps:get(env, Options, []))]),
-    Id = erlang:unique_integer([positive]),
-    Colors = maps:get(colors, Options, false),
-    Deadline =
-        case maps:get(timeout, Options, infinity) of
-            infinity -> infinity;
-            Time when is_integer(Time), Time >= 0 -> erlang:monotonic_time(millisecond) + Time;
-            Time -> erlang:error(badarg, [{timeout, Time}])
-        end,
-    Run = nif_start([binary(Arg) || Arg <- Args], binary(Cwd), Env, self(), Id, Colors),
-    loop(Run, Id, Fun, Acc, Deadline).
+    {Cwd, Env, erlang:unique_integer([positive]), maps:get(colors, Options, false)}.
 
 %% `Run` is the resource of the run: while this process keeps it, the run
 %% goes on. When the garbage collector frees it, the run stops.
@@ -228,6 +267,18 @@ binary(Value) ->
 
 -doc false.
 nif_start(_Args, _Cwd, _Env, _Pid, _Id, _Colors) ->
+    erlang:nif_error(nif_not_loaded).
+
+-doc false.
+nif_open(_Args, _Cwd, _Env, _Pid, _Id, _Colors) ->
+    erlang:nif_error(nif_not_loaded).
+
+-doc false.
+nif_write(_Run, _Data) ->
+    erlang:nif_error(nif_not_loaded).
+
+-doc false.
+nif_close(_Run) ->
     erlang:nif_error(nif_not_loaded).
 
 -doc false.

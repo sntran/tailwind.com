@@ -59,13 +59,22 @@ pub fn create_css_utility_shared(node: SharedAtRule) -> Option<RegisterUtility> 
 
     if is_valid_functional_utility_name(&name) {
         return Some(Box::new(move |design_system: &mut DesignSystem| {
-            normalize_declarations(&mut node.borrow_mut().nodes, &mut design_system.warnings.borrow_mut());
+            let mut usage = Usage::default();
+            normalize_declarations(&mut node.borrow_mut().nodes, &mut design_system.warnings.borrow_mut(), &mut usage);
             let node = node.clone();
+            let root = &name[..name.len() - 2];
             design_system.utilities.functional_full(
-                &name[..name.len() - 2],
+                root,
                 move |candidate, design_system| compile_functional(&node.borrow(), candidate, design_system),
                 None,
             );
+            design_system.utilities.suggest(root, move |design_system| {
+                vec![super::SuggestionGroup {
+                    supports_negative: false,
+                    values: usage.value.suggestions(&design_system.theme).into_iter().map(Some).collect(),
+                    modifiers: usage.modifier.suggestions(&design_system.theme),
+                }]
+            });
         }));
     }
 
@@ -82,10 +91,105 @@ pub fn create_css_utility_shared(node: SharedAtRule) -> Option<RegisterUtility> 
 // ---------------------------------------------------------------------------
 // The work at the registration.
 
+/// What the `--value(…)` or the `--modifier(…)` functions of a utility
+/// use, for the suggestions: the `storage` of `createCssUtility`.
+#[derive(Default, Clone)]
+struct FunctionUsage {
+    used_spacing_integer: bool,
+    used_spacing_number: bool,
+    theme_keys: crate::hash::IndexSet<String>,
+    literals: crate::hash::IndexSet<String>,
+}
+
+#[derive(Default, Clone)]
+struct Usage {
+    value: FunctionUsage,
+    modifier: FunctionUsage,
+}
+
+impl Usage {
+    fn of(&mut self, function: &str) -> &mut FunctionUsage {
+        if function == "--modifier" {
+            &mut self.modifier
+        } else {
+            &mut self.value
+        }
+    }
+}
+
+impl FunctionUsage {
+    /// The suggested values: the literals, the spacing scale, then the
+    /// keys of the theme.
+    fn suggestions(&self, theme: &crate::theme::Theme) -> Vec<String> {
+        let mut target: Vec<String> = self.literals.iter().cloned().collect();
+        if self.used_spacing_number {
+            target.extend(super::DEFAULT_SPACING_SUGGESTIONS.iter().map(|v| v.to_string()));
+        } else if self.used_spacing_integer {
+            target.extend(
+                super::DEFAULT_SPACING_SUGGESTIONS
+                    .iter()
+                    .filter(|v| crate::utils::infer_data_type::is_positive_integer(v))
+                    .map(|v| v.to_string()),
+            );
+        }
+        let keys: Vec<&str> = self.theme_keys.iter().map(String::as_str).collect();
+        target.extend(super::resolve_suggestion_keys(theme, &keys));
+        target
+    }
+}
+
+/// The `--value(…)` and `--modifier(…)` functions in a `--spacing(…)`
+/// function: a bare `integer` or `number` uses the spacing scale.
+fn track_spacing(nodes: &[ValueAstNode], usage: &mut Usage) -> bool {
+    for node in nodes {
+        let ValueAstNode::Function(function) = node else { continue };
+        if function.value == "--value" || function.value == "--modifier" {
+            for arg in &function.nodes {
+                let ValueAstNode::Word(word) = arg else { continue };
+                if word.value == "integer" {
+                    usage.of(&function.value).used_spacing_integer = true;
+                } else if word.value == "number" {
+                    usage.of(&function.value).used_spacing_number = true;
+                    // With the full scale for the two functions, no more work.
+                    if usage.modifier.used_spacing_number && usage.value.used_spacing_number {
+                        return false;
+                    }
+                }
+            }
+        }
+        if !track_spacing(&function.nodes, usage) {
+            return false;
+        }
+    }
+    true
+}
+
+/// The literals and the theme keys of a `--value(…)` or `--modifier(…)`
+/// function with regular arguments.
+fn track_arguments(function: &ValueFunctionNode, usage: &mut Usage) {
+    for node in &function.nodes {
+        let ValueAstNode::Word(word) = node else { continue };
+        let value = word.value.as_str();
+        let first = value.chars().next();
+        if matches!(first, Some('"' | '\'')) && value.chars().next_back() == first {
+            // A literal. (A text of one quote gives an empty literal.)
+            let literal = if value.len() >= 2 { &value[1..value.len() - 1] } else { "" };
+            usage.of(&function.value).literals.insert(literal.to_string());
+        } else if value.starts_with("--") {
+            // A theme key: the text before the first `-*`.
+            let key = match value.find("-*") {
+                Some(index) => &value[..index],
+                None => value,
+            };
+            usage.of(&function.value).theme_keys.insert(key.to_string());
+        }
+    }
+}
+
 /// Make the arguments of each `--value(…)` and `--modifier(…)` regular, in
 /// each declaration of the tree. `warnings` gets the texts that upstream
 /// gives to `console.warn` for a data type that a bare value cannot have.
-fn normalize_declarations(nodes: &mut [AstNode], warnings: &mut Vec<String>) {
+fn normalize_declarations(nodes: &mut [AstNode], warnings: &mut Vec<String>, usage: &mut Usage) {
     for node in nodes {
         match node {
             AstNode::Declaration(declaration) => {
@@ -94,28 +198,31 @@ fn normalize_declarations(nodes: &mut [AstNode], warnings: &mut Vec<String>) {
                     continue;
                 }
                 let mut value_ast = value_parser::parse(value);
-                normalize_value_functions(&mut value_ast, warnings);
+                normalize_value_functions(&mut value_ast, warnings, usage);
                 declaration.value = Some(value_parser::to_css(&value_ast));
             }
             other => {
                 if let Some(children) = other.children_mut() {
-                    normalize_declarations(children, warnings);
+                    normalize_declarations(children, warnings, usage);
                 }
             }
         }
     }
 }
 
-fn normalize_value_functions(nodes: &mut [ValueAstNode], warnings: &mut Vec<String>) {
+fn normalize_value_functions(nodes: &mut [ValueAstNode], warnings: &mut Vec<String>, usage: &mut Usage) {
     for node in nodes {
         let ValueAstNode::Function(function) = node else { continue };
-        if function.value == "--value" || function.value == "--modifier" {
+        if function.value == "--spacing" && !(usage.modifier.used_spacing_number && usage.value.used_spacing_number) {
+            track_spacing(&function.nodes, usage);
+        } else if function.value == "--value" || function.value == "--modifier" {
             let css = value_parser::to_css(&function.nodes);
             let args: Vec<String> = segment(&css, b',').into_iter().map(normalize_argument).collect();
             function.nodes = value_parser::parse(&args.join(","));
+            track_arguments(function, usage);
             warn_about_bare_value_data_types(function, warnings);
         }
-        normalize_value_functions(&mut function.nodes, warnings);
+        normalize_value_functions(&mut function.nodes, warnings, usage);
     }
 }
 

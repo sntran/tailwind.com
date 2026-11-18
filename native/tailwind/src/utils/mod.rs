@@ -14,6 +14,7 @@ pub mod infer_data_type;
 pub mod is_color;
 pub mod is_valid_arbitrary;
 pub mod js;
+pub mod locale_compare;
 pub mod math_operators;
 pub mod replace_shadow_colors;
 pub mod segment;

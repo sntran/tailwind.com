@@ -96,6 +96,13 @@ global.__tw_utility = (text: string) => {
   return result === undefined ? undefined : encode(result)
 }
 
+// The suggestions of a utility or the completions of a variant, for the
+// class list.
+global.__tw_suggest = (text: string) => {
+  let { id } = decode(text)
+  return encode(withCauses(() => callbacks[id]()))
+}
+
 // The function of a variant. It changes the rule in place.
 global.__tw_variant = (text: string) => {
   let { id, rule, variant } = decode(text)

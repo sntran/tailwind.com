@@ -10,6 +10,7 @@ use crate::hash::HashMap;
 /// class with no rule (not a class of Tailwind CSS) has `None`. The result
 /// has the classes of the input in their sequence, also a class two times.
 pub fn get_class_order(design_system: &DesignSystem, classes: &[String]) -> Vec<(String, Option<u64>)> {
+    let _version = crate::version::enter(design_system.version);
     // Make the rules in the order of the output.
     let sorted = compile_candidates(classes, design_system, &mut |_| {}, false);
 

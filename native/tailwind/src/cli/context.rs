@@ -35,10 +35,70 @@ pub struct Context {
     /// `FORCE_COLOR` of `env` still apply.
     pub terminal: bool,
     /// The run stops when this is true: a watch at its next tick, and a
-    /// build at its next check (`stop.rs`). There is no standard input:
-    /// the end of the standard input does not stop the watch, and the
-    /// input `-` is empty.
+    /// build at its next check (`stop.rs`). The end of the standard input
+    /// does not stop the watch, and the input `-` is empty.
     pub stop: Arc<AtomicBool>,
+    /// The standard input of the command `canonicalize`: the lists of
+    /// classes. `None` is no input (an empty input).
+    pub stdin: Option<Box<dyn std::io::Read>>,
+}
+
+/// The standard input of the run: the input of the context in a run of
+/// `run_with`, else the standard input of the process.
+pub struct Stdin;
+
+impl std::io::Read for Stdin {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let embedded = CURRENT.with(|current| {
+            current.borrow_mut().as_mut().map(|context| match context.stdin.as_mut() {
+                Some(stdin) => stdin.read(buf),
+                None => Ok(0),
+            })
+        });
+        match embedded {
+            Some(result) => result,
+            None => std::io::stdin().read(buf),
+        }
+    }
+}
+
+/// A standard input from a channel: each message is a part of the input,
+/// and the end of the channel is the end of the input. The reader checks
+/// `stop` each 100 ms, so a stopped run does not wait for ever.
+pub struct ChannelInput {
+    receiver: std::sync::mpsc::Receiver<Vec<u8>>,
+    stop: Arc<AtomicBool>,
+    buffer: Vec<u8>,
+    position: usize,
+}
+
+impl ChannelInput {
+    pub fn new(receiver: std::sync::mpsc::Receiver<Vec<u8>>, stop: Arc<AtomicBool>) -> Self {
+        Self { receiver, stop, buffer: Vec::new(), position: 0 }
+    }
+}
+
+impl std::io::Read for ChannelInput {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        use std::sync::mpsc::RecvTimeoutError;
+        while self.position >= self.buffer.len() {
+            if self.stop.load(Ordering::SeqCst) {
+                return Ok(0);
+            }
+            match self.receiver.recv_timeout(std::time::Duration::from_millis(100)) {
+                Ok(data) => {
+                    self.buffer = data;
+                    self.position = 0;
+                }
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => return Ok(0),
+            }
+        }
+        let count = buf.len().min(self.buffer.len() - self.position);
+        buf[..count].copy_from_slice(&self.buffer[self.position..self.position + count]);
+        self.position += count;
+        Ok(count)
+    }
 }
 
 thread_local! {
@@ -74,6 +134,11 @@ pub fn args() -> Option<Vec<String>> {
 /// True in a run of `run_with`: the program is not a process of its own.
 pub fn embedded() -> bool {
     CURRENT.with(|current| current.borrow().is_some())
+}
+
+/// True when the context of the run has a standard input.
+pub fn has_stdin() -> bool {
+    CURRENT.with(|current| current.borrow().as_ref().is_some_and(|context| context.stdin.is_some()))
 }
 
 /// The working directory.
