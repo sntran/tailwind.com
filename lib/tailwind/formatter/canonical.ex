@@ -139,9 +139,14 @@ defmodule Tailwind.Formatter.Canonical do
   # the mailbox.
   defp receive_output(%{program: {:nif, _, id}} = state, count, lines) do
     receive do
-      {:tailwind_nif, ^id, :stdout, data} -> read(%{state | buffer: state.buffer <> data}, count, lines)
-      {:tailwind_nif, ^id, :stderr, data} -> read(%{state | errors: [state.errors, data]}, count, lines)
-      {:tailwind_nif, ^id, :exit, status} -> {:error, failure(state, status), state}
+      {:tailwind_nif, ^id, :stdout, data} ->
+        read(%{state | buffer: state.buffer <> data}, count, lines)
+
+      {:tailwind_nif, ^id, :stderr, data} ->
+        read(%{state | errors: [state.errors, data]}, count, lines)
+
+      {:tailwind_nif, ^id, :exit, status} ->
+        {:error, failure(state, status), state}
     end
   end
 

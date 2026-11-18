@@ -88,7 +88,9 @@ defmodule Tailwind.Formatter do
 
     canonical =
       if Keyword.get(config, :canonicalize, false) do
-        values = for {:attribute, range} <- slots, value = text.(range), canonical?(value), do: value
+        values =
+          for {:attribute, range} <- slots, value = text.(range), canonical?(value), do: value
+
         canonical_forms(profile, values)
       else
         %{}
@@ -137,6 +139,7 @@ defmodule Tailwind.Formatter do
   # A value with classes, no Mustache text and no `...`.
   defp canonical?(value) do
     group = group(value)
+
     group != "" and not String.contains?(value, "{{") and
       not Enum.any?(String.split(group, " "), &(&1 in ["...", "…"]))
   end
@@ -165,7 +168,10 @@ defmodule Tailwind.Formatter do
         _, acc -> acc
       end)
 
-    if input, do: if(cwd, do: Path.join(to_string(cwd), to_string(input)), else: to_string(input)) |> String.to_charlist()
+    if input,
+      do:
+        if(cwd, do: Path.join(to_string(cwd), to_string(input)), else: to_string(input))
+        |> String.to_charlist()
   end
 
   # `--name=value` is `--name value`.

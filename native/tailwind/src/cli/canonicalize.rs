@@ -272,13 +272,23 @@ fn default_sort(mut entries: Vec<(String, Option<u64>)>) -> Vec<String> {
 fn load_design_system(css_file: Option<&str>) -> Result<DesignSystem, String> {
     let selection = engine::select()?;
     // The Rust compiler has the utilities and the variants of each
-    // version. The official compiler of a package (the script engine)
-    // has its own canonical form, or none: this command does not run it.
+    // version up to its own. The command uses it also when the builds use
+    // the script engine (`TAILWIND_COM_ENGINE=script`). A version newer
+    // than the Rust compiler has only the script engine, and the official
+    // compiler of its package has its own canonical form: the command
+    // does not run it.
     let version = match &selection {
         engine::Selection::Native { version, .. } => *version,
-        engine::Selection::Script(_) => {
-            return Err("The canonicalize command uses the Rust compiler. It does not run with the script engine.".into())
-        }
+        engine::Selection::Script(package) => match crate::Version::parse(package.version()) {
+            Some(version) if version <= crate::Version::NATIVE => version,
+            _ => {
+                return Err(format!(
+                    "The canonicalize command uses the Rust compiler, which follows Tailwind CSS up to v{}, and this project uses v{}.",
+                    crate::Version::NATIVE,
+                    package.version()
+                ))
+            }
+        },
     };
 
     let cwd = context::cwd();

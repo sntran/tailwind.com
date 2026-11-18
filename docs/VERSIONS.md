@@ -204,9 +204,10 @@ it is not always the result of the official command of that version:
 | 4.2.2 | 53 lists are different: this program makes one class of more classes in more cases (`w-[16px] h-[16px]` is `size-[16px]`) |
 | 4.0.0 to 4.2.1 | The official program has no such command. This program has it |
 
-The command does not run with the script engine
-(`TAILWIND_COM_ENGINE=script`, or a version that only a package has):
-the official compiler of a package has its own canonical form, or none.
+With `TAILWIND_COM_ENGINE=script`, the builds use the script engine, and
+the command still uses the Rust compiler of the version. A version newer
+than the Rust compiler (a version that only a package has) gives an
+error: the official compiler of its package has its own canonical form.
 
 `native/tailwind/tests/canonicalize_versions.rs` checks, for 400 lists
 and five versions from 4.0.0, that each class of a result is a class of

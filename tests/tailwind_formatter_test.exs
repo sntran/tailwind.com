@@ -184,7 +184,8 @@ defmodule TailwindFormatterTest do
            """
 
     # With no option, only the sort.
-    assert format(dir, ~s|<div class="py-3 p-1 px-3"></div>\n|) == ~s|<div class="p-1 px-3 py-3"></div>\n|
+    assert format(dir, ~s|<div class="py-3 p-1 px-3"></div>\n|) ==
+             ~s|<div class="p-1 px-3 py-3"></div>\n|
   end
 
   test "a build that fails gives its messages", %{dir: dir} do
