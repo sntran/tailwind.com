@@ -180,12 +180,77 @@ pub fn vars() -> Vec<(String, String)> {
     vars
 }
 
-/// True when the standard error is a terminal.
+/// True when the standard output is a terminal (`process.stdout.isTTY`).
+/// In a run of `run_with`, the `terminal` of the context.
 pub fn terminal() -> bool {
     use std::io::IsTerminal;
     CURRENT
         .with(|current| current.borrow().as_ref().map(|context| context.terminal))
-        .unwrap_or_else(|| std::io::stderr().is_terminal())
+        .unwrap_or_else(|| std::io::stdout().is_terminal())
+}
+
+/// A stream of the output of the process.
+#[derive(Clone, Copy)]
+pub enum Stream {
+    Stdout,
+    Stderr,
+}
+
+/// `columns` of `process.stdout` or `process.stderr` of Node.js: the width
+/// of the terminal. `None` when the stream is not a terminal, and in a run
+/// of `run_with`.
+pub fn columns(stream: Stream) -> Option<usize> {
+    use std::io::IsTerminal;
+    if embedded() {
+        return None;
+    }
+    let (fd, terminal) = match stream {
+        Stream::Stdout => (1, std::io::stdout().is_terminal()),
+        Stream::Stderr => (2, std::io::stderr().is_terminal()),
+    };
+    if !terminal {
+        return None;
+    }
+    terminal_columns(fd).filter(|&columns| columns > 0)
+}
+
+/// The width of the terminal of the file descriptor `fd`. In the file
+/// tailwind.com, the system is known at run time only: `cosmo_rust.c`
+/// asks Cosmopolitan.
+#[cfg(feature = "ape")]
+fn terminal_columns(fd: std::os::raw::c_int) -> Option<usize> {
+    extern "C" {
+        fn tw_terminal_columns(fd: std::os::raw::c_int) -> std::os::raw::c_int;
+    }
+    // SAFETY: the function reads the size of the terminal only.
+    usize::try_from(unsafe { tw_terminal_columns(fd) }).ok()
+}
+
+#[cfg(all(not(feature = "ape"), any(target_os = "linux", target_os = "android", target_vendor = "apple", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd")))]
+fn terminal_columns(fd: std::os::raw::c_int) -> Option<usize> {
+    #[repr(C)]
+    struct WinSize {
+        rows: u16,
+        cols: u16,
+        x_pixels: u16,
+        y_pixels: u16,
+    }
+    extern "C" {
+        fn ioctl(fd: std::os::raw::c_int, request: std::os::raw::c_ulong, ...) -> std::os::raw::c_int;
+    }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    const TIOCGWINSZ: std::os::raw::c_ulong = 0x5413;
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    const TIOCGWINSZ: std::os::raw::c_ulong = 0x4008_7468;
+    let mut size = WinSize { rows: 0, cols: 0, x_pixels: 0, y_pixels: 0 };
+    // SAFETY: TIOCGWINSZ writes one `struct winsize`.
+    let status = unsafe { ioctl(fd, TIOCGWINSZ, &mut size as *mut WinSize) };
+    (status == 0).then_some(size.cols as usize)
+}
+
+#[cfg(all(not(feature = "ape"), not(any(target_os = "linux", target_os = "android", target_vendor = "apple", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))))]
+fn terminal_columns(_fd: std::os::raw::c_int) -> Option<usize> {
+    None
 }
 
 /// True when the caller asks the run to stop.

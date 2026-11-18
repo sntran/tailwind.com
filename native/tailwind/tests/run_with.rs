@@ -32,6 +32,22 @@ impl Buffer {
     fn text(&self) -> String {
         String::from_utf8_lossy(&self.0.borrow()).into_owned()
     }
+
+    /// The text with no color codes. As in the official program, the
+    /// messages have colors also when the variable `CI` is set.
+    fn plain(&self) -> String {
+        let text = self.text();
+        let mut plain = String::new();
+        let mut rest = text.as_str();
+        while let Some(start) = rest.find("\x1b[") {
+            plain.push_str(&rest[..start]);
+            let code = &rest[start + 2..];
+            let end = code.find('m').map_or(code.len(), |end| end + 1);
+            rest = &code[end..];
+        }
+        plain.push_str(rest);
+        plain
+    }
 }
 
 /// A new project directory: `app.css` and `index.html`.
@@ -70,7 +86,7 @@ fn a_build_reads_the_working_directory_of_the_context() {
     let css = std::fs::read_to_string(dir.join("out.css")).unwrap();
     assert!(css.contains(".flex {") && css.contains(".p-4 {"), "{css}");
     // The messages go to the standard error of the context.
-    assert!(stderr.text().starts_with("≈ tailwindcss v"), "{}", stderr.text());
+    assert!(stderr.plain().starts_with("≈ tailwindcss v"), "{}", stderr.text());
     assert!(stderr.text().contains("Done in "), "{}", stderr.text());
     assert_eq!(stdout.text(), "");
     // The process keeps its working directory.
@@ -273,4 +289,22 @@ fn a_channel_input_gives_its_messages_and_ends_with_the_channel() {
     let mut input = tailwind::cli::context::ChannelInput::new(receiver, stop.clone());
     stop.store(true, std::sync::atomic::Ordering::SeqCst);
     assert_eq!(input.read(&mut [0; 8]).unwrap(), 0);
+}
+
+#[test]
+fn a_warning_comes_before_the_error_of_the_compile() {
+    let dir = project("warning-error", "");
+    std::fs::write(
+        dir.join("app.css"),
+        "@import \"tailwindcss\" source(none);\n@utility tab-* {\n  tab-size: --value(nope);\n}\n@utility bad {\n  @apply does-not-exist;\n}\n",
+    )
+    .unwrap();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let status = run_with(args(&["-i", "app.css"]), context(&dir, &[], &stdout, &stderr, Arc::default()));
+    assert_ne!(status, 0);
+    // The official program prints the warning, then the error.
+    let text = stderr.text();
+    let warning = text.find("Unsupported bare value data type: \"nope\".").expect("the warning");
+    let error = text.find("Cannot apply unknown utility class `does-not-exist`").expect("the error");
+    assert!(warning < error, "{text}");
 }

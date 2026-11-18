@@ -46,6 +46,29 @@ canonical form of class lists in `mix format`.
 
 ### Fixed
 
+- A warning of the compiler (a data type that `--value()` of `@utility`
+  cannot have) comes before the error of the same stylesheet, as in the
+  official program. Before, the error removed the warning. A compile with
+  a module loader gives each warning to its `console` at once.
+- The help text is the text of the official program: the same layout,
+  the dots, the defaults, and the width of the terminal. With no
+  arguments on a terminal, the program and `tailwind.com build` show the
+  help, as the official program. `-v, --version` still works, and the
+  help does not show it.
+- The colors of the messages follow the rules of the official program:
+  the error box always has its colors, `Done in` has the color of its
+  time, and the other colors follow `NO_COLOR`, `FORCE_COLOR`, `CI`,
+  `TERM=dumb` and a standard output that is a terminal. A long error
+  message wraps at the width of the terminal.
+- The watch prints `Done in` after each change of a source file, also
+  when the output stays the same, and also after an error, as the
+  official program. Before, it printed it only for a new output.
+- `--watch --poll` shows `Polling for changes…` on the last line, and
+  hides the cursor until the watch ends, as the official program. The
+  cursor comes back at the end of the watch, and for Ctrl+C (the exit
+  status 130) and SIGTERM (143).
+- The first argument is an invalid command only when it is not an option,
+  as in the official program: `tailwind.com build extra` builds.
 - The compiler keeps no result of a compile that a plugin made throw, as
   upstream: the next compile of the candidate throws again.
 - The Rust crate has the class list of the editor tools

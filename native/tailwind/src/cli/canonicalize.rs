@@ -12,7 +12,8 @@
 //! with the utilities, the variants and the theme of the selected version
 //! (`crate::canonicalize`).
 
-use super::{args, context, engine, header, modules, resolve, Style};
+use super::help::{help, Arg, Style};
+use super::{args, context, engine, modules, resolve};
 use crate::canonicalize::CanonicalizeOptions;
 use crate::design_system::DesignSystem;
 use crate::utils::compare::compare;
@@ -60,34 +61,37 @@ fn text(value: &str) -> String {
     serde_json::to_string(value).unwrap_or_default()
 }
 
+/// The options of the command (`options` and `sharedOptions` of
+/// `commands/canonicalize`).
+const OPTIONS: &[Arg] = &[
+    Arg {
+        flag: "--css",
+        alias: None,
+        description: "CSS entry file used to load the Tailwind design system (defaults to `@import \"tailwindcss\";`)",
+        default: None,
+        values: &[],
+    },
+    Arg { flag: "--format", alias: None, description: "Output format", default: Some("text"), values: &["text", "json", "jsonl"] },
+    Arg {
+        flag: "--stream",
+        alias: None,
+        description: "Read candidate groups from stdin line by line and write results to stdout",
+        default: Some("false"),
+        values: &[],
+    },
+    Arg { flag: "--help", alias: Some("-h"), description: "Display usage information", default: Some("false"), values: &[] },
+];
+
+/// `helpMessage`: the text, with no line end at the end.
 fn help_text(style: &Style) -> String {
-    let mut out = header(style);
-    out.push_str("\n\n");
-    out.push_str(&style.dim("Usage:"));
-    out.push('\n');
-    for usage in USAGE {
-        out.push_str(&format!("  {usage}\n"));
-    }
-    out.push('\n');
-    out.push_str(&style.dim("Options:"));
-    out.push('\n');
-    for (flags, description) in [
-        ("    --css", "CSS entry file used to load the Tailwind design system (defaults to `@import \"tailwindcss\";`)"),
-        ("    --format", "Output format: `text`, `json` or `jsonl` [default: `text`]"),
-        ("    --stream", "Read candidate groups from stdin line by line and write results to stdout"),
-        ("-h, --help", "Display usage information"),
-    ] {
-        out.push_str(&format!("  {flags:<16} {description}\n"));
-    }
-    out
+    help(style, &engine::requested_version(), None, &USAGE, OPTIONS)
 }
 
 /// Run the command with the arguments after `canonicalize`. The result
 /// is the exit status. As upstream, the result goes to the standard
 /// output with a line end, and an error to the standard error.
-pub fn run(argv: Vec<String>) -> i32 {
-    let style = Style::new();
-    let (status, stdout, stderr) = run_command_line(&argv, &style);
+pub fn run(argv: Vec<String>, style: &Style) -> i32 {
+    let (status, stdout, stderr) = run_command_line(&argv, style);
     if !stdout.is_empty() {
         context::out(&format!("{stdout}\n"));
     }
@@ -126,7 +130,7 @@ fn run_command_line(argv: &[String], style: &Style) -> (i32, String, String) {
         };
 
         if (stdout_is_terminal() && argv.is_empty()) || parsed.flag("help", Some("h")) {
-            return Ok((0, help_text(style).trim_end().to_string(), String::new()));
+            return Ok((0, help_text(style), String::new()));
         }
 
         let css = parsed.get("css", None).map(|_| parsed.text("css", None).unwrap_or_default());
@@ -139,7 +143,7 @@ fn run_command_line(argv: &[String], style: &Style) -> (i32, String, String) {
 
         let inputs: Vec<String> = if !parsed.rest.is_empty() { parsed.rest.clone() } else { read_candidate_groups() };
         if inputs.is_empty() {
-            return Ok((1, help_text(style).trim_end().to_string(), "No candidate groups provided".into()));
+            return Ok((1, help_text(style), "No candidate groups provided".into()));
         }
 
         let design_system = load_design_system(css.as_deref())?;

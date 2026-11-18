@@ -101,8 +101,12 @@ The workloads:
   of its time.
 - **tailwind.com and native.** The APE file is about 5% slower than the
   native program on the large project, and 25% slower with daisyUI. The
-  two programs have the same Rust code. Thus the difference is in the C
-  library and the memory allocator of Cosmopolitan.
+  two programs have the same Rust code, and the Rust code of each one
+  uses mimalloc. On a second machine (4 CPUs, Intel Xeon at 2.10 GHz),
+  the difference with daisyUI is 6%: 124 ms and 117 ms (the median of
+  41 runs). There, the memory of QuickJS from mimalloc, and not from the
+  C library, gives the same times in the two programs (123 ms and
+  117 ms). Thus the allocator of QuickJS is not the cause.
 - **tailwind.wasm.** Node.js compiles the module of 9.0 MB again for
   each run: this is about 130 ms of each cell (`preflight only`). With
   JavaScript plugins, QuickJS also runs as WebAssembly, and this is

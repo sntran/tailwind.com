@@ -13,6 +13,7 @@ pub mod css_math;
 pub mod css_mixins;
 pub mod engine;
 pub mod events;
+pub mod help;
 pub mod modules;
 #[cfg(feature = "optimize")]
 pub mod optimize_css;
@@ -25,6 +26,7 @@ use crate::{Error, Result};
 use args::{Parsed, Value};
 use context::{errln, outln};
 use engine::{AnyCompiler, Selection};
+use help::{Arg, Style};
 use source_maps::SourceMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -45,73 +47,71 @@ const DEFAULT_INPUT: &str = "@import 'tailwindcss';";
 /// a full build of the watch: see `wait_until_stable`.
 const STABLE_MS: u64 = 10;
 
-/// The text styles of the messages. They are empty when stderr is not a
-/// terminal, or when `NO_COLOR` is set.
-struct Style {
-    on: bool,
-}
-
-impl Style {
-    fn new() -> Self {
-        let forced = context::var("FORCE_COLOR").is_some_and(|v| v != "0");
-        let on = forced || (context::var("NO_COLOR").is_none() && context::terminal());
-        Self { on }
-    }
-    fn wrap(&self, open: &str, close: &str, text: &str) -> String {
-        if self.on {
-            format!("\x1b[{open}m{text}\x1b[{close}m")
-        } else {
-            text.to_string()
-        }
-    }
-    fn dim(&self, text: &str) -> String {
-        self.wrap("2", "22", text)
-    }
-    fn red(&self, text: &str) -> String {
-        self.wrap("31", "39", text)
-    }
-    fn blue(&self, text: &str) -> String {
-        self.wrap("34", "39", text)
-    }
-    fn highlight(&self, text: &str) -> String {
-        format!("{}{}{}", self.dim(&self.blue("`")), self.blue(text), self.dim(&self.blue("`")))
-    }
-}
-
 /// The first line of the output: the name and the version of Tailwind CSS.
-/// The Elixir package `tailwind` reads the version from this line.
 fn header(style: &Style) -> String {
-    format!("{} tailwindcss {}", style.blue("\u{2248}"), style.blue(&format!("v{}", engine::requested_version())))
+    style.header(&engine::requested_version())
 }
 
-fn help_text(style: &Style) -> String {
-    let mut out = String::new();
-    out.push_str(&header(style));
-    out.push_str("\n\n");
-    out.push_str(&style.dim("Usage:"));
-    out.push_str("\n  tailwindcss [--input input.css] [--output output.css] [--watch] [--poll=ms] [options…]\n");
-    out.push_str("  tailwindcss build [--input input.css] [--output output.css] [--watch] [--poll=ms] [options…]\n");
+/// The options of the command `build` (`options` of `commands/build`),
+/// and `--help` (`sharedOptions`). The help text does not show
+/// `-v, --version`: it is an option of this program only, and the text
+/// is the text of the official program.
+const BUILD_OPTIONS: &[Arg] = &[
+    Arg { flag: "--input", alias: Some("-i"), description: "Input file", default: None, values: &[] },
+    Arg { flag: "--output", alias: Some("-o"), description: "Output file", default: Some("-"), values: &[] },
+    Arg {
+        flag: "--watch",
+        alias: Some("-w"),
+        description: "Watch for changes and rebuild as needed, and use `always` to keep watching when stdin is closed",
+        default: None,
+        values: &["always"],
+    },
+    Arg {
+        flag: "--poll",
+        alias: None,
+        description: "Use polling instead of filesystem events when watching",
+        default: Some("false"),
+        values: &["ms"],
+    },
+    Arg { flag: "--minify", alias: Some("-m"), description: "Optimize and minify the output", default: None, values: &[] },
+    Arg { flag: "--optimize", alias: None, description: "Optimize the output without minifying", default: None, values: &[] },
+    Arg { flag: "--cwd", alias: None, description: "The current working directory", default: Some("."), values: &[] },
+    Arg { flag: "--map", alias: None, description: "Generate a source map", default: Some("false"), values: &[] },
+    Arg { flag: "--silent", alias: None, description: "Suppress non-error output", default: None, values: &[] },
+    Arg { flag: "--help", alias: Some("-h"), description: "Display usage information", default: None, values: &[] },
+];
+
+fn build_usage(command: &str) -> String {
+    format!("{command} [--input input.css] [--output output.css] [--watch] [--poll=ms] [options…]")
+}
+
+/// `rootHelp` of the official program, with each line and its line end.
+fn root_help(style: &Style, invalid: Option<&str>) -> String {
+    let root = build_usage("tailwindcss");
+    let build = build_usage("tailwindcss build");
+    #[allow(unused_mut)]
+    let mut usage = vec![root.as_str(), build.as_str()];
     #[cfg(feature = "canonicalize")]
-    out.push_str(&format!("  {}\n", canonicalize::USAGE[0]));
-    out.push('\n');
-    out.push_str(&style.dim("Options:"));
-    out.push('\n');
-    for (flags, description) in [
-        ("-i, --input", "Input file"),
-        ("-o, --output", "Output file [default: `-`]"),
-        ("-w, --watch", "Watch for changes and rebuild as needed, and use `always` to keep watching when stdin is closed"),
-        ("    --poll", "Use polling instead of filesystem events when watching"),
-        ("-m, --minify", "Optimize and minify the output"),
-        ("    --optimize", "Optimize the output without minifying"),
-        ("    --map", "Generate a source map"),
-        ("    --cwd", "The current working directory [default: `.`]"),
-        ("    --silent", "Suppress non-error output"),
-        ("-h, --help", "Display usage information"),
-        ("-v, --version", "Display the versions of this program and of Tailwind CSS"),
-    ] {
-        out.push_str(&format!("  {flags:<16} {description}\n"));
+    usage.push(canonicalize::USAGE[0]);
+    format!("{}\n", help::help(style, &engine::requested_version(), invalid, &usage, BUILD_OPTIONS))
+}
+
+/// The help of the command `build`.
+fn build_help(style: &Style) -> String {
+    let usage = build_usage("tailwindcss build");
+    format!("{}\n", help::help(style, &engine::requested_version(), None, &[usage.as_str()], BUILD_OPTIONS))
+}
+
+/// `formatDuration` of the renderer: the duration, in a color for its
+/// length.
+fn styled_duration(style: &Style, duration: Duration) -> String {
+    let text = format_duration(duration);
+    match duration.as_nanos() {
+        0..=50_000_000 => style.green(&text),
+        50_000_001..=300_000_000 => style.blue(&text),
+        300_000_001..=1_000_000_000 => style.yellow(&text),
+        _ => style.red(&text),
     }
-    out
 }
 
 /// A duration as the official program prints it: the largest unit that
@@ -128,24 +128,31 @@ pub fn format_duration(duration: Duration) -> String {
 }
 
 /// An error in the box of the official program (`formatError`): the
-/// error, and then each cause of its `cause` chain, one level deeper.
-fn format_error(style: &Style, error: &Error) -> String {
+/// error, and then each cause of its `cause` chain, one level deeper. The
+/// box has its colors also when the standard error is not a terminal, and
+/// the lines wrap at the width of the terminal of the standard error.
+fn format_error(error: &Error) -> String {
     // The official program prints the error object of JavaScript, whose
     // text starts with the name of the error: `Error`, `CssSyntaxError`,
     // or the name of an exception of a plugin.
     let first = if error.name.is_empty() { error.message.clone() } else { format!("{}: {}", error.name, error.message) };
+    let columns = context::columns(context::Stream::Stderr);
     let mut lines = Vec::new();
     for (depth, text) in std::iter::once(&first).chain(error.causes.iter()).enumerate() {
         let indent = "  ".repeat(depth);
-        lines.push(format!("{indent}{}", style.red(if depth == 0 { "Error:" } else { "Caused by:" })));
-        lines.push(format!("{indent}{}", style.dim("\u{250c}")));
+        let width = columns.map_or(i64::MAX, |columns| columns as i64 - 2 * (depth as i64 + 1));
+        lines.push(format!("{indent}{}", help::always_red(if depth == 0 { "Error:" } else { "Caused by:" })));
+        lines.push(format!("{indent}{}", help::always_dim("\u{250c}")));
         for line in text.split('\n') {
-            // The word wrap of the official program removes the spaces at
-            // the start of a line.
-            let line = line.trim_start_matches(' ');
-            lines.push(format!("{indent}{} {line}", style.dim("\u{2502}")));
+            let mut wrapped = help::word_wrap(line, width);
+            if wrapped.is_empty() {
+                wrapped.push(String::new());
+            }
+            for chunk in wrapped {
+                lines.push(format!("{indent}{} {chunk}", help::always_dim("\u{2502}")));
+            }
         }
-        lines.push(format!("{indent}{}", style.dim("\u{2514}")));
+        lines.push(format!("{indent}{}", help::always_dim("\u{2514}")));
     }
     lines.join("\n")
 }
@@ -375,10 +382,6 @@ fn create_build_with(options: &Options, (css, input_stamp): &(String, Stamp), fr
         #[cfg(not(tw_js))]
         Selection::Script(_) => return Err(Error::new("This build of the program has no JavaScript engine.")),
     };
-    // `console.warn` of the compiler writes to the standard error.
-    for warning in compiler.take_warnings() {
-        errln!("{warning}");
-    }
     ensure_source_detection_root_exists(compiler.root())?;
 
     let mut sources: Vec<PublicSourceEntry> = Vec::new();
@@ -717,6 +720,7 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
 
     let mut events = events::Events::start(options.poll.is_none());
     watch_paths(&mut build, &events);
+    let log = Log::start(options);
 
     loop {
         if stdin_closed.load(std::sync::atomic::Ordering::SeqCst) {
@@ -770,13 +774,133 @@ fn watch(mut build: Build, options: &Options, previous: &mut Previous, style: &S
             watch_paths(&mut build, &events);
         }
 
-        if matches!(result, Ok(true)) {
+        // A tick with a changed file is a build of the official program:
+        // it ends with `Done in`, also after an error, and also when the
+        // output stays the same.
+        let changed = full || changed_files(&build, options);
+        if changed {
             events.debug(if woke { "build (event)" } else { "build (interval)" });
         }
-        match result {
-            Ok(true) if !options.silent => errln!("Done in {}", format_duration(start.elapsed())),
-            Ok(_) => {}
-            Err(e) => errln!("{}", format_error(style, &e)),
+        if let Err(e) = &result {
+            log.message(&format_error(e));
+        }
+        if changed && !options.silent {
+            log.message(&format!("Done in {}", styled_duration(style, start.elapsed())));
+        }
+    }
+}
+
+/// True when the last scan read a source file, other than the output and
+/// the source map (`scannedFiles` of the poll of the official program).
+/// A change of the input or of an imported stylesheet is a full build:
+/// the tick of the change counts it.
+fn changed_files(build: &Build, options: &Options) -> bool {
+    let other = |path: &Path| {
+        let same = |file: &Path| path == file || std::fs::canonicalize(file).is_ok_and(|real| real == path);
+        options.output.as_deref().is_some_and(same)
+            || matches!(&options.map, MapOption::File(map) if same(map))
+            || build.full_rebuild_paths.iter().any(|(file, _)| same(file))
+    };
+    build.scanner.get_scanned_files().iter().any(|file| !other(Path::new(file)))
+}
+
+/// The messages of the watch. With `--poll`, the official program shows
+/// `Polling for changes…` on the last line of the standard error, and
+/// hides the cursor until the watch ends (`logPollingMessage`).
+struct Log {
+    polling: bool,
+    silent: bool,
+}
+
+impl Log {
+    fn start(options: &Options) -> Self {
+        let log = Log { polling: options.poll.is_some(), silent: options.silent };
+        if log.polling && !log.silent {
+            cursor::hide();
+            context::err(&format!("\r\x1b[2K{}", help::always_dim("Polling for changes\u{2026}")));
+        }
+        log
+    }
+
+    fn message(&self, text: &str) {
+        if !self.polling {
+            errln!("{text}");
+            return;
+        }
+        if !self.silent {
+            context::err("\r\x1b[2K");
+        }
+        errln!("{text}");
+        if !self.silent {
+            context::err(&format!("\r\x1b[2K{}", help::always_dim("Polling for changes\u{2026}")));
+        }
+    }
+}
+
+impl Drop for Log {
+    fn drop(&mut self) {
+        if self.polling && !self.silent {
+            cursor::show();
+        }
+    }
+}
+
+/// The cursor of the terminal in the poll of the watch. The official
+/// program shows the cursor again at the end of the watch, and for the
+/// signals SIGINT (the exit status 130) and SIGTERM (143). A system with
+/// no signals here (Windows with no Cosmopolitan, WASI) keeps the cursor.
+mod cursor {
+    use super::context;
+
+    const SHOW: &str = "\r\x1b[2K\x1b[?25h";
+
+    #[cfg(unix)]
+    pub fn hide() {
+        // In a run of `run_with`, the signals are for the program of the
+        // caller.
+        if !context::embedded() {
+            signals::install();
+        }
+        context::err("\x1b[?25l");
+    }
+
+    #[cfg(not(unix))]
+    pub fn hide() {}
+
+    pub fn show() {
+        if cfg!(unix) {
+            context::err(SHOW);
+        }
+    }
+
+    #[cfg(unix)]
+    mod signals {
+        use std::os::raw::c_int;
+
+        extern "C" {
+            fn signal(signum: c_int, handler: extern "C" fn(c_int)) -> usize;
+            fn write(fd: c_int, buf: *const u8, count: usize) -> isize;
+            fn _exit(status: c_int) -> !;
+        }
+
+        const SIGINT: c_int = 2;
+        const SIGTERM: c_int = 15;
+
+        extern "C" fn restore(signum: c_int) {
+            // Only calls that a signal handler can make: write and _exit.
+            // SAFETY: the text is a static buffer.
+            unsafe {
+                write(2, super::SHOW.as_ptr(), super::SHOW.len());
+                _exit(128 + signum)
+            }
+        }
+
+        pub fn install() {
+            // SAFETY: `restore` makes only the calls of a signal handler.
+            unsafe {
+                signal(SIGINT, restore);
+                signal(SIGTERM, restore);
+            }
         }
     }
 }
@@ -807,35 +931,48 @@ pub fn run_with(argv: Vec<String>, context: context::Context) -> i32 {
 
 /// Run the program. The result is the exit status.
 pub fn run(mut argv: Vec<String>) -> i32 {
-    let style = Style::new();
+    use std::io::IsTerminal;
+    let style = Style::new(&argv);
+    // `process.stdout.isTTY`. A run of `run_with` has no terminal.
+    let stdout_is_terminal = !context::embedded() && std::io::stdout().is_terminal();
 
     let command = argv.first().cloned();
-    if command.as_deref() == Some("build") {
+    let parsed = if command.as_deref() == Some("build") {
         argv.remove(0);
+        let parsed = args::parse(&argv);
+        if parsed.flag("version", Some("v")) {
+            return print_version();
+        }
+        if (stdout_is_terminal && argv.is_empty()) || parsed.flag("help", Some("h")) {
+            context::out(&build_help(&style));
+            return 0;
+        }
+        parsed
     } else if command.as_deref() == Some("canonicalize") {
         argv.remove(0);
         #[cfg(feature = "canonicalize")]
-        return canonicalize::run(argv);
+        return canonicalize::run(argv, &style);
         #[cfg(not(feature = "canonicalize"))]
         {
             errln!("This build of the program has no command canonicalize. The program for a browser has no such command: give it to tailwind.wasm.");
             return 1;
         }
-    }
-    let parsed = args::parse(&argv);
-
-    if parsed.flag("version", Some("v")) {
-        return print_version();
-    }
-    if parsed.flag("help", Some("h")) {
-        context::out(&help_text(&style));
-        return 0;
-    }
-    if let Some(invalid) = parsed.rest.first() {
-        outln!("{}\n\n{} {invalid}", header(&style), style.dim("Invalid command:"));
-        context::out(help_text(&style).split_once("\n\n").map_or("", |(_, rest)| rest));
-        return 1;
-    }
+    } else {
+        let parsed = args::parse(&argv);
+        if parsed.flag("version", Some("v")) {
+            return print_version();
+        }
+        if (stdout_is_terminal && command.is_none()) || parsed.flag("help", Some("h")) {
+            context::out(&root_help(&style, None));
+            return 0;
+        }
+        // A first argument that is not an option is a command.
+        if let Some(invalid) = command.filter(|command| !command.starts_with('-')) {
+            context::out(&root_help(&style, Some(&invalid)));
+            return 1;
+        }
+        parsed
+    };
 
     let options = match parse_options(&parsed, &style) {
         Ok(options) => options,
@@ -873,12 +1010,12 @@ pub fn run(mut argv: Vec<String>) -> i32 {
     let build = match first {
         Ok(build) => build,
         Err(e) => {
-            errln!("{}", format_error(&style, &e));
+            errln!("{}", format_error(&e));
             return 1;
         }
     };
     if !options.silent {
-        errln!("Done in {}", format_duration(start.elapsed()));
+        errln!("Done in {}", styled_duration(&style, start.elapsed()));
     }
 
     if options.watch.is_some() {

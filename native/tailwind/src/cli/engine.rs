@@ -355,16 +355,6 @@ impl AnyCompiler {
         }
     }
 
-    /// The warnings of the native compiler since the last call. The
-    /// script engine prints its warnings itself (`console.warn`).
-    pub fn take_warnings(&self) -> Vec<String> {
-        match self {
-            AnyCompiler::Native(compiler) => compiler.take_warnings(),
-            #[cfg(tw_js)]
-            AnyCompiler::Script(_) => Vec::new(),
-        }
-    }
-
     pub fn try_build(&mut self, candidates: &[String]) -> Result<String> {
         match self {
             AnyCompiler::Native(compiler) => compiler.try_build(candidates),

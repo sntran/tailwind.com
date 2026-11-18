@@ -126,7 +126,9 @@ for (const name of names) {
           .replace(/\x1b\[[0-9;]*m/g, '')
           .split('\n')
           .filter((line) => line.startsWith('│'))
-    const stderr = result.stderr.toString()
+    // The error box has its colors also when the output is not a
+    // terminal, as in the official program.
+    const stderr = result.stderr.toString().replace(/\x1b\[[0-9;]*m/g, '')
     for (let line of lines) {
       line = line.replaceAll('<project>/', '/').replaceAll('<project>', '/')
       if (line !== '' && !stderr.includes(line)) missing.push(line)

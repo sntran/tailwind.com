@@ -84,8 +84,9 @@ for cpu in x86_64 aarch64; do
     log "Building the Rust library for $cpu"
     rust_staticlib "$cpu" tailwind_nif tailwind_nif "$d/libtailwind_nif.a"
     log "Building the C files for $cpu"
-    cflags=
-    [ "$cpu" = aarch64 ] && cflags=-mcmodel=large
+    # TW_NO_TERMINAL: see tw_terminal_columns of c_src/cosmo_rust.c.
+    cflags=-DTW_NO_TERMINAL
+    [ "$cpu" = aarch64 ] && cflags="$cflags -mcmodel=large"
     c_objects "$cpu" "$d" -DTW_WATCH_INOTIFY_ONLY "$cflags"
     # shellcheck disable=SC2086
     RUST_LINK_SCRIPT=$root/native/nif/sections.ld \

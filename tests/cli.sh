@@ -221,8 +221,11 @@ for name in "$@"; do
             MINGW*|MSYS*|CYGWIN*) sed "s|<project>|\n|g" "$work/$name/expected.raw" | sed "s/^│ *$//" | grep -v '^$' > "$work/$name/expected.txt" || true ;;
             *) sed "s|<project>|$project|g" "$work/$name/expected.raw" > "$work/$name/expected.txt" ;;
         esac
+        # The error box has its colors also when the output is not a
+        # terminal, as in the official program.
+        sed "s/$esc\[[0-9;]*m//g" "$work/$name/stderr.txt" > "$work/$name/stderr.box"
         while IFS= read -r line; do
-            if ! grep -qF -- "$line" "$work/$name/stderr.txt"; then
+            if ! grep -qF -- "$line" "$work/$name/stderr.box"; then
                 echo "cli.sh: $name: the error output does not have: $line" >&2
                 ok=0
             fi

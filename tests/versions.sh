@@ -106,7 +106,9 @@ for version in $(grep -v '^#' "$root/PACKAGES" | cut -d' ' -f1); do
         *) fail "$version: --version gives: $line" ;;
     esac
     choose "$version" "" -i app.css -o out.css 2> out.log || { cat out.log >&2; fail "$version: the build failed"; }
-    grep -q "tailwindcss v$version" out.log || fail "$version: the header has another version"
+    # The header has colors when the variable CI is set, as in the
+    # official program.
+    sed "s/$(printf '\033')\[[0-9;]*m//g" out.log | grep -q "tailwindcss v$version" || fail "$version: the header has another version"
     [ "$(head -n 1 out.css)" = "/*! tailwindcss v$version | MIT License | https://tailwindcss.com */" ] ||
         fail "$version: the license comment has another version"
     # The form of the rules is not the same in each version: 4.3.3 and

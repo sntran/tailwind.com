@@ -434,7 +434,8 @@ try {
       else if (fs.existsSync(path.join(dir, 'stderr.txt'))) {
         lines = fs.readFileSync(path.join(dir, 'stderr.txt'), 'utf8').replace(/\x1b\[[0-9;]*m/g, '').split('\n').filter((line) => line.startsWith('│'))
       }
-      const missing = lines.map((line) => line.replaceAll('<project>/', '/').replaceAll('<project>', '/')).filter((line) => line !== '' && !result.stderr.includes(line))
+      const stderr = result.stderr.replace(/\x1b\[[0-9;]*m/g, '')
+      const missing = lines.map((line) => line.replaceAll('<project>/', '/').replaceAll('<project>', '/')).filter((line) => line !== '' && !stderr.includes(line))
       if (result.status !== status || result.stdout !== expected || missing.length > 0) {
         failures.push(`${name}: status ${result.status} (${status}), output ${result.stdout === expected ? 'same' : 'different'}${missing.length ? `, no "${missing[0]}"` : ''}\n${result.stderr.split('\n').slice(0, 6).join('\n')}`)
       }

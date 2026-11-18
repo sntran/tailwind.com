@@ -131,7 +131,7 @@ defmodule TailwindTest do
     test "run/2 compiles with the configured version of Tailwind CSS", %{dir: dir} do
       Application.put_env(:tailwind, :version, "4.1.0")
       output = capture_io(fn -> assert Tailwind.run(:default, []) == 0 end)
-      assert output =~ "tailwindcss v4.1.0"
+      assert plain(output) =~ "tailwindcss v4.1.0"
       css = File.read!(Path.join(dir, "priv/app.css"))
       assert String.starts_with?(css, "/*! tailwindcss v4.1.0 ")
       assert css =~ ".flex {"
@@ -148,7 +148,7 @@ defmodule TailwindTest do
       )
 
       output = capture_io(fn -> assert Tailwind.run(:default, []) == 0 end)
-      assert output =~ "tailwindcss v#{@version}"
+      assert plain(output) =~ "tailwindcss v#{@version}"
     end
 
     test "run/2 stops for a version that the file does not have" do
@@ -159,7 +159,7 @@ defmodule TailwindTest do
 
     test "run/2 builds the CSS of the profile", %{dir: dir} do
       output = capture_io(fn -> assert Tailwind.run(:default, []) == 0 end)
-      assert output =~ "tailwindcss v#{@version}"
+      assert plain(output) =~ "tailwindcss v#{@version}"
       css = File.read!(Path.join(dir, "priv/app.css"))
       assert css =~ ".flex {"
       assert css =~ ".underline {"
@@ -368,6 +368,10 @@ defmodule TailwindTest do
       end
     end
   end
+
+  # The text with no color codes. As in the official program, the
+  # messages have colors when the variable CI is set.
+  defp plain(text), do: String.replace(text, ~r/\e\[[0-9;]*m/, "")
 
   defp wait_until(fun, tries \\ 100) do
     cond do
