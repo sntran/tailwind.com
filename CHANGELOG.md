@@ -67,6 +67,12 @@ CI also tests the file on Windows 11 on ARM64.
   runs its x86_64 code in its x64 emulation. Each case of the official
   program, the plugins, the versions, the script engine and the watch
   (the file events and the poll) give the same result as on x86_64.
+- CI also tests `tailwind.com` on macOS 27 on arm64 (`xcode-27`), and
+  starts it 2000 times on macOS 26 and 27 on arm64 (`tests/starts.sh`).
+  There, the APE loader maps the program at fixed addresses, and BEAM.com
+  patches its loader for two faults of macOS. The first measurement gave
+  no failure in 2000 starts on each system, so `tailwind.com` keeps the
+  loader of cosmocc with no patch.
 
 ### Fixed
 

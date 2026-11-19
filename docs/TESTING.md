@@ -120,8 +120,14 @@ when its status is not 0, when it takes more than 60 s (the test stops
 it), when its CSS is not the CSS of the first start, or when it writes an
 unexpected message. The job `starts` runs it on macOS 26 and macOS 27 on
 arm64, where the APE loader maps the program at fixed addresses with
-`MAP_FIXED` (BEAM.com saw faults there: C51 and C57 of its
-`docs/UPSTREAM.md`), and on macOS on x86_64 for comparison.
+`MAP_FIXED`. BEAM.com saw faults there (C51 and C57 of its
+`docs/UPSTREAM.md`), and it patches the loader. `tailwind.com` has the
+loader of cosmocc with no patch. The first measurement gave 2000 starts
+with no failure on each system: macOS 26.7.2 and 27.0.1 on arm64 (134 ms
+and 143 ms on average), and macOS 15.7.9 on x86_64 (257 ms, a system
+with no such loader). Thus the program does not have the faults of
+BEAM.com: its rate of failure is less than 1 in about 670 starts, with a
+confidence of 95%. The job `systems` also runs on macOS 27 (`xcode-27`).
 
 `TAILWIND_RUN` in the environment is a program that starts `PROGRAM`,
 with an absolute path, for `tests/cli.sh` and `tests/watch.sh`: the APE

@@ -343,11 +343,12 @@ program. For example, the Phoenix project: 12 ms with `tailwind.com`,
 project with daisyUI: 182 ms, 310 ms and 251 ms, with 13 MB of memory in
 place of 103 MB and 89 MB.
 
-CI runs `tailwind.com` on Linux (x86_64 and aarch64), macOS (arm64 and
-x86_64), Windows (x86_64, and ARM64 in the x64 emulation of Windows 11),
-FreeBSD, NetBSD and OpenBSD 7.3 (x86_64, in a VM): the projects of the
-official program, and the watch with the file events of each system
-(inotify, kqueue, `ReadDirectoryChangesW`) and with the poll.
+CI runs `tailwind.com` on Linux (x86_64 and aarch64), macOS (26 and 27
+on arm64, and x86_64), Windows (x86_64, and ARM64 in the x64 emulation
+of Windows 11), FreeBSD, NetBSD and OpenBSD 7.3 (x86_64, in a VM): the
+projects of the official program, and the watch with the file events of
+each system (inotify, kqueue, `ReadDirectoryChangesW`) and with the
+poll.
 
 A differential fuzzer also compares the two compilers live on new random
 stylesheets, classes and projects, in CI for each change of the compiler

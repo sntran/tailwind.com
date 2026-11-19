@@ -403,8 +403,9 @@ jobs:
   # macOS arm64, the APE loader maps the program at fixed addresses with
   # MAP_FIXED: BEAM.com saw a rare hang there on macOS 26, and another
   # layout of the address space on macOS 27 (C51 and C57 of its
-  # docs/UPSTREAM.md). macos-15-intel has no such loader: it is the
-  # comparison.
+  # docs/UPSTREAM.md), and it patches the loader. The file has the loader
+  # of cosmocc with no patch: 2000 starts on each of these systems gave no
+  # failure. This job keeps that true.
   starts:
     name: Starts of tailwind.com on ${{ matrix.os }}
     needs: build
@@ -413,7 +414,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-26, xcode-27, macos-15-intel]
+        os: [macos-26, xcode-27]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
