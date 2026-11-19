@@ -113,6 +113,16 @@ for Windows (its PE header is for AMD64): on Windows on ARM64, Windows 11
 runs the x86_64 code in its x64 emulation. There, the cases take about
 2.7 times the time of `windows-2025`.
 
+`tests/starts.sh PROGRAM [COUNT]` starts the program COUNT times (default
+2000), one after the other, on the Phoenix project with daisyUI: the
+shell header, the APE loader, the scanner and the plugins. A start fails
+when its status is not 0, when it takes more than 60 s (the test stops
+it), when its CSS is not the CSS of the first start, or when it writes an
+unexpected message. The job `starts` runs it on macOS 26 and macOS 27 on
+arm64, where the APE loader maps the program at fixed addresses with
+`MAP_FIXED` (BEAM.com saw faults there: C51 and C57 of its
+`docs/UPSTREAM.md`), and on macOS on x86_64 for comparison.
+
 `TAILWIND_RUN` in the environment is a program that starts `PROGRAM`,
 with an absolute path, for `tests/cli.sh` and `tests/watch.sh`: the APE
 loader of cosmocc (`ape-x86_64.elf`) on NetBSD, where `sh` cannot start

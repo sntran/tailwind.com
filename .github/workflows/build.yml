@@ -346,10 +346,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # xcode-27: macOS 27 on arm64 (GitHub gives it the label of its
+        # Xcode). Its address space is not the one of macOS 26 (C57 of
+        # docs/UPSTREAM.md of BEAM.com).
         # windows-11-arm: the file has no ARM64 code for Windows (its PE
         # header is for AMD64), so Windows 11 runs the x86_64 code in its
         # x64 emulation. This job tests the file there.
-        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-26, macos-15-intel, windows-2025, windows-11-arm]
+        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-26, xcode-27, macos-15-intel, windows-2025, windows-11-arm]
     defaults:
       run:
         shell: bash
@@ -395,6 +398,34 @@ jobs:
         run: WATCH_EXPECT=events sh tests/watch.sh build/tailwind.com
       - name: The watch, with the poll
         run: WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100
+
+  # Many starts of tailwind.com, one after the other (tests/starts.sh). On
+  # macOS arm64, the APE loader maps the program at fixed addresses with
+  # MAP_FIXED: BEAM.com saw a rare hang there on macOS 26, and another
+  # layout of the address space on macOS 27 (C51 and C57 of its
+  # docs/UPSTREAM.md). macos-15-intel has no such loader: it is the
+  # comparison.
+  starts:
+    name: Starts of tailwind.com on ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, xcode-27, macos-15-intel]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: tailwind.com
+          path: build
+      - name: 2000 starts of the Phoenix project with daisyUI
+        run: |
+          chmod +x build/tailwind.com
+          uname -a
+          sw_vers
+          sh tests/starts.sh build/tailwind.com 2000
 
   # FreeBSD, NetBSD and OpenBSD in a VM of QEMU, as the job test-bsd of
   # BEAM.com. The VM has the work directory of the job. The file is for
