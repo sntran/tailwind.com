@@ -1,8 +1,9 @@
 # tailwind.com
 
 Tailwind CSS 4 in one executable file, with no Node.js. The same file
-runs on Linux, macOS, Windows, FreeBSD, NetBSD and OpenBSD, on x86_64 and
-aarch64.
+runs on Linux, macOS, FreeBSD, NetBSD and OpenBSD, on x86_64 and
+aarch64, and on Windows: on x86_64, and on ARM64 in the x64 emulation of
+Windows 11.
 
 `tailwind.com` is a Tailwind CSS compiler in Rust, as one
 [Actually Portable Executable](https://justine.lol/ape.html) made with
@@ -343,10 +344,10 @@ project with daisyUI: 182 ms, 310 ms and 251 ms, with 13 MB of memory in
 place of 103 MB and 89 MB.
 
 CI runs `tailwind.com` on Linux (x86_64 and aarch64), macOS (arm64 and
-x86_64), Windows (x86_64), FreeBSD, NetBSD and OpenBSD 7.3 (x86_64, in
-a VM): the projects of the official program, and the watch with the
-file events of each system (inotify, kqueue, `ReadDirectoryChangesW`)
-and with the poll.
+x86_64), Windows (x86_64, and ARM64 in the x64 emulation of Windows 11),
+FreeBSD, NetBSD and OpenBSD 7.3 (x86_64, in a VM): the projects of the
+official program, and the watch with the file events of each system
+(inotify, kqueue, `ReadDirectoryChangesW`) and with the poll.
 
 A differential fuzzer also compares the two compilers live on new random
 stylesheets, classes and projects, in CI for each change of the compiler

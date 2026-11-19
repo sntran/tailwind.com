@@ -107,8 +107,11 @@ A case can have more files than the output and the exit status:
 | `standalone.txt` | The record comes from the npm program with the module rules of the standalone program: see `tests/standalone.sh` below.
 
 CI runs the cases with `tailwind.com` on Linux and macOS (x86_64 and
-aarch64), on Windows, and in a VM on FreeBSD, NetBSD and OpenBSD 7.3
-(x86_64).
+aarch64), on Windows (x86_64, and ARM64: `windows-11-arm`), and in a VM
+on FreeBSD, NetBSD and OpenBSD 7.3 (x86_64). The file has no ARM64 code
+for Windows (its PE header is for AMD64): on Windows on ARM64, Windows 11
+runs the x86_64 code in its x64 emulation. There, the cases take about
+2.7 times the time of `windows-2025`.
 
 `TAILWIND_RUN` in the environment is a program that starts `PROGRAM`,
 with an absolute path, for `tests/cli.sh` and `tests/watch.sh`: the APE

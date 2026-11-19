@@ -14,6 +14,7 @@ plugins is faster: the program reads the bytecode of the plugin layer,
 and a Phoenix project with daisyUI builds in about 120 ms, not 142 ms.
 The messages are the messages of the official program: the help text,
 the colors, the error box, the watch, and a warning before an error.
+CI also tests the file on Windows 11 on ARM64.
 
 ### Added
 
@@ -61,6 +62,11 @@ the colors, the error box, the watch, and a warning before an error.
   of an older version: a full build of the watch (after a change of the
   input) and a run of the NIF do not compile the same text again. With
   daisyUI, a full build of the watch takes about 111 ms, not 145 ms.
+- CI also tests `tailwind.com` on Windows 11 on ARM64
+  (`windows-11-arm`). The file has no ARM64 code for Windows: Windows 11
+  runs its x86_64 code in its x64 emulation. Each case of the official
+  program, the plugins, the versions, the script engine and the watch
+  (the file events and the poll) give the same result as on x86_64.
 
 ### Fixed
 
