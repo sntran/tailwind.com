@@ -44,6 +44,20 @@ canonical form of class lists in `mix format`.
   its size stays the same; `runWasm` gives `canonicalize` to
   `tailwind.wasm` with the option `wasm`, as for `--minify`.
 
+### Changed
+
+- A build with `@plugin` or `@config` is faster. The build makes the
+  bytecode of the plugin layer of Tailwind CSS (`assets/compat.js`), and
+  the program reads it at each start, in place of a compile of its text
+  (about 15 ms). The bytecode is not in the repository: a port of a new
+  version needs no step for it. A Phoenix project with daisyUI builds in
+  about 120 ms, not 142 ms, and a stylesheet with one small plugin in
+  48 ms, not 64 ms (`docs/BENCHMARKS.md`).
+- The process keeps the bytecode of each plugin and of the plugin layer
+  of an older version: a full build of the watch (after a change of the
+  input) and a run of the NIF do not compile the same text again. With
+  daisyUI, a full build of the watch takes about 111 ms, not 145 ms.
+
 ### Fixed
 
 - A warning of the compiler (a data type that `--value()` of `@utility`

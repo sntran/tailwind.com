@@ -123,9 +123,11 @@ impl JsRuntime {
         *slot.borrow_mut() = Rc::downgrade(&runtime);
         // The plugin layer of the version that the compiler follows now.
         let version = crate::version::current();
-        let compat_js = super::bundles::compat_js(version)
-            .ok_or_else(|| Error::new(format!("The plugin layer of Tailwind CSS v{version} is not in this program.")))?;
-        runtime.engine.eval(&compat_js, "tailwindcss/compat.js").map_err(to_error)?;
+        if !super::bundles::eval_bytecode(&runtime.engine, version).map_err(to_error)? {
+            let compat_js = super::bundles::compat_js(version)
+                .ok_or_else(|| Error::new(format!("The plugin layer of Tailwind CSS v{version} is not in this program.")))?;
+            runtime.engine.eval(&compat_js, "tailwindcss/compat.js").map_err(to_error)?;
+        }
         Ok(runtime)
     }
 

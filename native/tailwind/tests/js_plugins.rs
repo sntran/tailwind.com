@@ -596,3 +596,35 @@ fn a_configuration_removes_the_default_values_of_a_theme_with_a_prefix_before_4_
     let old = build(Some(tailwind::Version(4, 0, 4)));
     assert!(!old.contains(".tw\\:bg-blue {") && old.contains(".tw\\:bg-only {"), "{old}");
 }
+
+#[test]
+fn a_second_compile_of_the_same_modules_gives_the_same_css() {
+    // The process keeps the bytecode of each text (c_src/js.c): the second
+    // compile reads it, and an ES module from the bytecode resolves its
+    // imports again.
+    let files = [
+        ("/app/css/plugin.mjs", "import { shade } from './lib/shade.mjs'\nimport common from './common.cjs'\nexport default ({ addUtilities }) => addUtilities({ '.cached': { color: `red-${shade}`, top: common.top } })"),
+        ("/app/css/lib/shade.mjs", "export const shade = 'from-the-cache-test'"),
+        ("/app/css/common.cjs", "module.exports = { top: '3px' }"),
+    ];
+    let css = format!("{HEAD}@plugin './plugin.mjs';");
+    let first = build(&css, &files, &["cached"]);
+    assert!(first.contains("color: red-from-the-cache-test;") && first.contains("top: 3px;"), "{first}");
+    assert_eq!(build(&css, &files, &["cached"]), first);
+
+    // A new text of a file, with the same name, is compiled again.
+    let mut changed = files;
+    changed[1].1 = "export const shade = 'changed'";
+    changed[2].1 = "module.exports = { top: '4px' }";
+    let css_changed = build(&css, &changed, &["cached"]);
+    assert!(css_changed.contains("color: red-changed;") && css_changed.contains("top: 4px;"), "{css_changed}");
+    assert_eq!(build(&css, &files, &["cached"]), first);
+}
+
+#[test]
+fn a_syntax_error_from_the_cache_is_the_same_error() {
+    let files = [("/app/css/plugin.mjs", "export default (")];
+    let css = format!("{HEAD}@plugin './plugin.mjs';");
+    let first = error(&css, &files);
+    assert_eq!(error(&css, &files), first);
+}

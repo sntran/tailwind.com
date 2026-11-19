@@ -148,6 +148,39 @@ engines give the same output in each cell.
   output of 4.0.17 is 0.35 MB, and the output of 4.3.5 is 1.9 MB. Thus
   the times of the 4.0 line are smaller.
 
+## The start of the plugin layer
+
+A stylesheet with `@plugin` or `@config` starts the plugin layer of
+Tailwind CSS in QuickJS. Before the program had its bytecode
+([`INTERNALS.md`](INTERNALS.md), "The bytecode of the plugin layer"),
+each such build compiled the text of `assets/compat.js` (136 KB), also
+for a plugin that does nothing. Linux x86_64, 4 CPUs (Intel Xeon at
+2.10 GHz). The median of 21 runs (9 runs for `tailwind.wasm`), with the
+runs of the two programs in alternation. The two programs give the same
+CSS in each row.
+
+| Stylesheet | Program | Text | Bytecode |
+|---|---|---:|---:|
+| No plugin | native | 10 ms | 10 ms |
+| One plugin that does nothing | native | 64 ms | 48 ms |
+| One plugin that does nothing | `tailwind.com` | 64 ms | 48 ms |
+| One plugin that does nothing | `tailwind.wasm` in Node.js | 308 ms | 262 ms |
+| A Phoenix project with daisyUI | native | 142 ms | 120 ms |
+| A Phoenix project with daisyUI | `tailwind.com` | 145 ms | 128 ms |
+| A Phoenix project with daisyUI: a full build of the watch | native | 145 ms | 111 ms |
+
+- **The compile of the text** of the plugin layer takes about 15 ms, and
+  the read of its bytecode about 1 ms (QuickJS, `-O2`).
+- **The watch** also keeps the bytecode of the plugins (the cache of
+  `c_src/js.c`): a change of the input starts a full build, and that
+  build does not compile daisyUI again. The row is the median of 10
+  edits.
+- **The rest of the start** (about 38 ms in the native program) is the
+  plugin layer at work, and the messages between Rust and JavaScript.
+- **The size.** The bytecode has the source text of the plugin layer:
+  0.49 MB more in each program, and two times that in `tailwind.com`
+  (one for each CPU).
+
 ## Run the benchmarks
 
 ```sh

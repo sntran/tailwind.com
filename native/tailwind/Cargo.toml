@@ -21,6 +21,7 @@ include = [
     "/assets/**",
     "/c_src/js.c",
     "/c_src/js.h",
+    "/c_src/bytecode.c",
     "/c_src/wasi/setjmp.h",
     "/c_src/quickjs/quickjs.c",
     "/c_src/quickjs/libregexp.c",

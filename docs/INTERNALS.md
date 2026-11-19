@@ -166,6 +166,7 @@ bindings:
 |---|---|
 | `tw_js_new`, `tw_js_free` | An engine: one runtime and one context, with a memory limit and a stack limit. |
 | `tw_js_eval` | Evaluate a script or an ES module from text. |
+| `tw_js_eval_bytecode` | Evaluate a script from its bytecode: the plugin layer of the version of the port (see "The bytecode of the plugin layer"). |
 | `tw_js_call` | Call a global function with one string, and get a string or nothing. |
 | `tw_js_run_jobs` | Run the pending jobs of promises until none is left. |
 | `tw_js_platform` | `process.platform` for the system that runs the file. `tailwind.com` is one file for all the systems, so Cosmopolitan gives the answer at run time. |
@@ -181,7 +182,22 @@ function `__tw_run_timer` of the bundle: this is the clock of
 `setTimeout` (`js/timers.ts`). The loader of ES modules of QuickJS asks
 the host for the name of a module (`module.resolve`) and for its source
 (`module.load`), and gives the module `import.meta.url`,
-`import.meta.dirname` and `import.meta.filename`. An exception comes back as its message, its name and
+`import.meta.dirname` and `import.meta.filename`.
+
+The process keeps the bytecode of each script and each ES module that it
+compiles (`compile_text` of `js.c`): `tw_js_eval`, `__compile` and the
+loader of ES modules use it. A new engine compiles the same texts again:
+the plugin layer of an older version, and the plugins, in each full build
+of the watch and in each run of the NIF. An entry is used only for the
+same name and the same text, byte for byte (the cache has a copy of the
+text), so a change of a file compiles it again. The cache has 32
+entries, and a new text of a name takes the place of the old one. A
+module from the cache resolves its imports, as the compile of its text
+does. The bytecode has the source and the debug information: a function
+from the cache has the same `toString` and the same stack as a function
+from the text.
+
+An exception comes back as its message, its name and
 its stack. Each side frees its own text: text from C is from `malloc`
 and Rust gives it back with `tw_js_free_text`, and C gives the text of a
 host result back to Rust.
@@ -243,6 +259,36 @@ of each older version that the Rust compiler serves is a patch file in
 `assets/compat/` (`scripts/compat.sh`): `compat/js/bundles.rs` gives the
 file of the version that the compiler follows (`SWITCHES.md`, "The
 plugin layer").
+
+### The bytecode of the plugin layer
+
+A compile with `@plugin` or `@config` starts the plugin layer, and the
+compile of the text of `assets/compat.js` took about 15 ms of each such
+build. The build makes its bytecode: `build.rs` compiles
+`c_src/bytecode.c` and QuickJS for the computer of the build (with the
+C compiler of the computer, also when the program is for another
+system), and the tool writes `compat.bc` in the directory of the build.
+`compat/js/bundles.rs` includes it, and a start of the plugin layer of
+the version of the port reads it (about 1 ms). The bytecode is not in
+the repository: a port of a new version (`scripts/compat.sh`) changes
+`assets/compat.js`, and the next build makes its bytecode.
+
+- The format of QuickJS has little-endian numbers and the version of
+  the format, so the same bytes are good on each CPU and in the WASI
+  program. When the engine cannot read the bytes (no bytes, or another
+  version of QuickJS), nothing runs, and the program compiles the text,
+  with the same result.
+- When the computer of the build cannot make the bytecode (for example,
+  its C compiler is MSVC), the build gives a warning, and the program
+  compiles the text.
+- The other versions start from their text (a patch of
+  `assets/compat.js`). The cache of `js.c` keeps their bytecode in the
+  process.
+- The engine of the host (`tailwind-browser.wasm`) has no bytecode: the
+  host evaluates the text.
+- The bytecode has the source text, as a compile of the text keeps it
+  (`Function.prototype.toString`): 486 KB in each program. With no
+  source, it has 209 KB.
 
 The bundle has these modules of Tailwind CSS as they are: all of
 `compat/` except `legacy-utilities.ts`, `plugin.ts`, the constructors

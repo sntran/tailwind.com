@@ -33,7 +33,12 @@ extern "C" {
     fn tw_js_run_jobs(js: *mut TwJs, out: *mut *mut c_char, stack: *mut *mut c_char) -> c_int;
     fn tw_js_memory_used(js: *mut TwJs) -> usize;
     fn tw_js_platform() -> *const c_char;
+    fn tw_js_eval_bytecode(js: *mut TwJs, bytecode: *const u8, length: usize, out: *mut *mut c_char, stack: *mut *mut c_char) -> c_int;
 }
+
+/// `TW_JS_NO_BYTECODE` of `c_src/js.h`.
+#[cfg(not(tw_host_js))]
+const NO_BYTECODE: c_int = -1;
 
 // The engine of the host (the feature `host-js`): the JavaScript engine of
 // a browser, through the imports of the module "tailwind_js"
@@ -225,6 +230,24 @@ impl Engine {
     /// Evaluate a script. The result is the value, when it is a string.
     pub fn eval(&self, source: &str, filename: &str) -> Result<Option<String>, JsError> {
         self.eval_as(source, filename, false)
+    }
+
+    /// Evaluate a script from its bytecode (`c_src/bytecode.c`). The
+    /// result is `Ok(false)` when the engine cannot read the bytecode: then
+    /// nothing ran, and the caller evaluates the text.
+    #[cfg(not(tw_host_js))]
+    pub fn eval_bytecode(&self, bytecode: &'static [u8]) -> Result<bool, JsError> {
+        if bytecode.is_empty() {
+            return Ok(false);
+        }
+        let (mut out, mut stack) = (std::ptr::null_mut(), std::ptr::null_mut());
+        // SAFETY: the bytes are static, as the engine needs them, and `out`
+        // and `stack` get text from malloc or NULL.
+        let status = unsafe { tw_js_eval_bytecode(self.raw, bytecode.as_ptr(), bytecode.len(), &mut out, &mut stack) };
+        if status == NO_BYTECODE {
+            return Ok(false);
+        }
+        finish(status, out, stack).map(|_| true)
     }
 
     /// Evaluate an ES module, with its pending jobs.

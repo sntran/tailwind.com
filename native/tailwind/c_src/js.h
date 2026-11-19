@@ -56,9 +56,17 @@ const char *tw_js_platform(void);
 
 /* Evaluate a script (is_module 0) or an ES module (is_module 1). The
  * result of a script is in `*out` when it is a string. If not, `*out` is
- * NULL. A module runs to its end, with the pending jobs. */
+ * NULL. A module runs to its end, with the pending jobs. The process
+ * keeps the bytecode of each text (also of `__compile` and of the
+ * modules), and a later compile of the same text uses it. */
 int tw_js_eval(TwJs *js, const char *source, size_t length, const char *filename, int is_module,
                char **out, char **stack);
+/* Evaluate a script from its bytecode: the output of JS_WriteObject of
+ * the same QuickJS (c_src/bytecode.c). The engine takes a copy. The
+ * result is TW_JS_NO_BYTECODE when the engine cannot read the bytes
+ * (another version of QuickJS, or no bytes): then nothing ran. */
+#define TW_JS_NO_BYTECODE (-1)
+int tw_js_eval_bytecode(TwJs *js, const unsigned char *bytecode, size_t length, char **out, char **stack);
 /* Call the global function `name` with one string argument. The result is
  * in `*out` when it is a string. If not, `*out` is NULL. */
 int tw_js_call(TwJs *js, const char *name, const char *text, char **out, char **stack);
