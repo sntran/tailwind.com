@@ -8,6 +8,9 @@
 //!   cosmocc and links them. This script compiles nothing.
 //! - For `wasm32-wasip1`, this script uses the clang of a wasi-sdk
 //!   (`WASI_SDK_PATH`). With no wasi-sdk, the program has no JavaScript.
+//!
+//! For each build with QuickJS, this script also makes the bytecode of
+//! `assets/compat.js` (`compat_bytecode`).
 
 /// Write `compat_patches.rs`: the table of the patch files of
 /// `assets/compat` (the plugin layer of each older version that the Rust
@@ -69,9 +72,113 @@ fn embedded_packages() {
     std::fs::write(out, text).unwrap();
 }
 
+/// Write `compat.bc`: the bytecode of `assets/compat.js`, the plugin layer
+/// of the version of the port (`src/compat/js/bundles.rs`). The program
+/// then does not compile its text at each start. `c_src/bytecode.c` and
+/// QuickJS compile for the computer of the build, and the tool writes the
+/// bytecode. The file is empty for a build with no QuickJS, and when the
+/// computer of the build cannot make it (a warning): the program then
+/// compiles the text, with the same result.
+fn compat_bytecode() {
+    use std::path::PathBuf;
+    let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let output = out.join("compat.bc");
+    let c_src = manifest.join("c_src");
+    let quickjs = c_src.join("quickjs");
+    let input = manifest.join("assets/compat.js");
+    let sources = [
+        c_src.join("bytecode.c"),
+        quickjs.join("quickjs.c"),
+        quickjs.join("libregexp.c"),
+        quickjs.join("libunicode.c"),
+        quickjs.join("cutils.c"),
+        quickjs.join("dtoa.c"),
+    ];
+    for file in sources.iter().chain([&input, &quickjs.join("quickjs.h"), &quickjs.join("VERSION")]) {
+        println!("cargo:rerun-if-changed={}", file.display());
+    }
+
+    let wasi = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("wasi");
+    let quickjs_in_program = std::env::var_os("CARGO_FEATURE_JS").is_some()
+        && std::env::var_os("CARGO_FEATURE_HOST_JS").is_none()
+        && (!wasi || std::env::var_os("WASI_SDK_PATH").is_some());
+    if !quickjs_in_program {
+        std::fs::write(&output, b"").unwrap();
+        return;
+    }
+    if let Err(message) = make_bytecode(&c_src, &sources, &input, &out, &output) {
+        println!("cargo:warning=No bytecode of assets/compat.js: {message}. The program compiles its text at each start.");
+        std::fs::write(&output, b"").unwrap();
+    }
+}
+
+/// Compile `c_src/bytecode.c` and QuickJS for the computer of the build,
+/// and write the bytecode of `input` to `output`.
+#[cfg(feature = "js")]
+fn make_bytecode(
+    c_src: &std::path::Path,
+    sources: &[std::path::PathBuf],
+    input: &std::path::Path,
+    out: &std::path::Path,
+    output: &std::path::Path,
+) -> Result<(), String> {
+    let host = std::env::var("HOST").map_err(|error| error.to_string())?;
+    let compiler = cc::Build::new()
+        .target(&host)
+        .host(&host)
+        .opt_level(0)
+        .cargo_metadata(false)
+        .warnings(false)
+        .try_get_compiler()
+        .map_err(|error| error.to_string())?;
+    if compiler.is_like_msvc() {
+        return Err("the C compiler of this computer is MSVC".into());
+    }
+    let version = std::fs::read_to_string(c_src.join("quickjs/VERSION")).map_err(|error| error.to_string())?;
+    let tool = out.join("compat-bytecode-tool");
+    let status = compiler
+        .to_command()
+        .args(["-w", "-D_GNU_SOURCE", "-fwrapv", "-funsigned-char"])
+        .arg(format!("-DCONFIG_VERSION=\"{}\"", version.trim()))
+        .arg("-I")
+        .arg(c_src)
+        .arg("-o")
+        .arg(&tool)
+        .args(sources)
+        .args(["-lm", "-lpthread"])
+        .status()
+        .map_err(|error| format!("{}: {error}", compiler.path().display()))?;
+    if !status.success() {
+        return Err(format!("the compile of c_src/bytecode.c failed ({status})"));
+    }
+    let status = std::process::Command::new(&tool)
+        .arg(input)
+        .arg("tailwindcss/compat.js")
+        .arg(output)
+        .status()
+        .map_err(|error| format!("{}: {error}", tool.display()))?;
+    if !status.success() {
+        return Err(format!("c_src/bytecode.c failed ({status})"));
+    }
+    Ok(())
+}
+
+#[cfg(not(feature = "js"))]
+fn make_bytecode(
+    _: &std::path::Path,
+    _: &[std::path::PathBuf],
+    _: &std::path::Path,
+    _: &std::path::Path,
+    _: &std::path::Path,
+) -> Result<(), String> {
+    Err("the build has no feature js".into())
+}
+
 fn main() {
     compat_patches();
     embedded_packages();
+    compat_bytecode();
     println!("cargo:rustc-check-cfg=cfg(tw_js)");
     println!("cargo:rustc-check-cfg=cfg(tw_host_js)");
     println!("cargo:rerun-if-changed=build.rs");

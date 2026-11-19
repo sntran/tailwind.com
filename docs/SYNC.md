@@ -81,7 +81,9 @@ the version of the new release in `switches.rs`. Add a case to
 `tests/upstream/switches.jsonl` and record it with the official packages
 of the two versions. The plugin layer needs no switch: `apply` makes the
 plugin layer of the version before as a patch file
-(`scripts/compat.sh`). A change in the files of
+(`scripts/compat.sh`). The bytecode of the new `assets/compat.js` needs
+no step: the build makes it (`INTERNALS.md`, "The bytecode of the plugin
+layer"). A change in the files of
 `native/tailwind/src/compat/` that are Rust needs a switch as each other
 code. Then add the version before to the job `switches` of
 `.github/workflows/fuzz.yml`.

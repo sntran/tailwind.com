@@ -65,6 +65,129 @@ static char *text_of_string(JSContext *ctx, JSValueConst value) {
     return copy;
 }
 
+/*
+ * The compiled scripts and modules of the process. A new engine compiles
+ * the same text again: the plugin layer of Tailwind CSS in each compile,
+ * and the plugins in each full build of the watch, and in each run of the
+ * NIF. The cache keeps the bytecode of each text, with a copy of the text:
+ * an entry is used only for the same name and the same text, byte for
+ * byte. The bytecode has the source and the debug information, so a
+ * function from the cache is the same as a function from the text.
+ */
+#define CACHE_SIZE 32
+
+typedef struct {
+    char *name;
+    char *source;
+    size_t length;
+    int is_module;
+    uint8_t *bytecode;
+    size_t bytecode_length;
+} CacheEntry;
+
+static CacheEntry cache[CACHE_SIZE];
+static unsigned cache_next;
+
+#if defined(__wasi__)
+/* The WASI program has one thread. */
+static void cache_lock(void) {}
+static void cache_unlock(void) {}
+#else
+#include <pthread.h>
+static pthread_mutex_t cache_mutex = PTHREAD_MUTEX_INITIALIZER;
+static void cache_lock(void) { pthread_mutex_lock(&cache_mutex); }
+static void cache_unlock(void) { pthread_mutex_unlock(&cache_mutex); }
+#endif
+
+static void cache_clear_entry(CacheEntry *entry) {
+    free(entry->name);
+    free(entry->source);
+    free(entry->bytecode);
+    memset(entry, 0, sizeof(*entry));
+}
+
+/* The function or the module of the bytecode of this text, or
+ * JS_UNINITIALIZED when the cache does not have it. */
+static JSValue cache_read(JSContext *ctx, const char *source, size_t length, const char *name, int is_module) {
+    JSValue value = JS_UNINITIALIZED;
+    cache_lock();
+    for (int i = 0; i < CACHE_SIZE; i++) {
+        CacheEntry *entry = &cache[i];
+        if (!entry->name || entry->is_module != is_module || entry->length != length) continue;
+        if (strcmp(entry->name, name) != 0 || memcmp(entry->source, source, length) != 0) continue;
+        value = JS_ReadObject(ctx, entry->bytecode, entry->bytecode_length, JS_READ_OBJ_BYTECODE);
+        if (JS_IsException(value)) {
+            /* The text compiles again. */
+            JSValue ignored = JS_GetException(ctx);
+            JS_FreeValue(ctx, ignored);
+            cache_clear_entry(entry);
+            value = JS_UNINITIALIZED;
+        }
+        break;
+    }
+    cache_unlock();
+    /* The compile of a module also resolves its imports: here too. This
+     * can load other modules, so the cache is not locked. */
+    if (is_module && !JS_IsUninitialized(value) && JS_ResolveModule(ctx, value) < 0) {
+        JS_FreeValue(ctx, value);
+        return JS_EXCEPTION;
+    }
+    return value;
+}
+
+/* Keep the bytecode of a compiled text. A new text of the same name takes
+ * the place of the old one. */
+static void cache_write(JSContext *ctx, const char *source, size_t length, const char *name, int is_module,
+                        JSValueConst compiled) {
+    size_t bytecode_length;
+    uint8_t *bytecode = JS_WriteObject(ctx, &bytecode_length, compiled, JS_WRITE_OBJ_BYTECODE);
+    CacheEntry entry = {0};
+    CacheEntry *slot = NULL;
+
+    if (!bytecode) {
+        JSValue ignored = JS_GetException(ctx);
+        JS_FreeValue(ctx, ignored);
+        return;
+    }
+    entry.name = malloc(strlen(name) + 1);
+    entry.source = malloc(length + 1);
+    entry.bytecode = malloc(bytecode_length);
+    if (!entry.name || !entry.source || !entry.bytecode) {
+        cache_clear_entry(&entry);
+        js_free(ctx, bytecode);
+        return;
+    }
+    strcpy(entry.name, name);
+    memcpy(entry.source, source, length);
+    entry.source[length] = 0;
+    entry.length = length;
+    entry.is_module = is_module;
+    memcpy(entry.bytecode, bytecode, bytecode_length);
+    entry.bytecode_length = bytecode_length;
+    js_free(ctx, bytecode);
+
+    cache_lock();
+    for (int i = 0; i < CACHE_SIZE && !slot; i++)
+        if (cache[i].name && cache[i].is_module == is_module && strcmp(cache[i].name, name) == 0) slot = &cache[i];
+    for (int i = 0; i < CACHE_SIZE && !slot; i++)
+        if (!cache[i].name) slot = &cache[i];
+    if (!slot) slot = &cache[cache_next++ % CACHE_SIZE];
+    cache_clear_entry(slot);
+    *slot = entry;
+    cache_unlock();
+}
+
+/* Compile a script or a module (JS_EVAL_FLAG_COMPILE_ONLY), with the
+ * cache of the process. */
+static JSValue compile_text(JSContext *ctx, const char *source, size_t length, const char *name, int is_module) {
+    JSValue compiled = cache_read(ctx, source, length, name, is_module);
+    if (!JS_IsUninitialized(compiled)) return compiled;
+    compiled = JS_Eval(ctx, source, length, name,
+                       (is_module ? JS_EVAL_TYPE_MODULE : JS_EVAL_TYPE_GLOBAL) | JS_EVAL_FLAG_COMPILE_ONLY);
+    if (!JS_IsException(compiled)) cache_write(ctx, source, length, name, is_module, compiled);
+    return compiled;
+}
+
 /* Take the pending exception: the message to `*out`, the stack to `*stack`. */
 static int take_exception(JSContext *ctx, char **out, char **stack) {
     JSValue exception = JS_GetException(ctx);
@@ -199,10 +322,11 @@ static JSValue js_compile(JSContext *ctx, JSValueConst this_val, int argc, JSVal
         JS_FreeCString(ctx, source);
         return JS_EXCEPTION;
     }
-    value = JS_Eval(ctx, source, length, filename, JS_EVAL_TYPE_GLOBAL);
+    value = compile_text(ctx, source, length, filename, 0);
     JS_FreeCString(ctx, filename);
     JS_FreeCString(ctx, source);
-    return value;
+    if (JS_IsException(value)) return value;
+    return JS_EvalFunction(ctx, value);
 }
 
 /* __await(promise) */
@@ -283,7 +407,7 @@ static JSModuleDef *module_loader(JSContext *ctx, const char *name, void *opaque
     text = JS_ToCStringLen(ctx, &length, source);
     JS_FreeValue(ctx, source);
     if (!text) return NULL;
-    function = JS_Eval(ctx, text, length, name, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    function = compile_text(ctx, text, length, name, 1);
     JS_FreeCString(ctx, text);
     if (JS_IsException(function)) return NULL;
 
@@ -432,7 +556,8 @@ int tw_js_eval(TwJs *js, const char *source, size_t length, const char *filename
     if (out) *out = NULL;
     if (stack) *stack = NULL;
     enter(js);
-    value = JS_Eval(ctx, source, length, filename, is_module ? JS_EVAL_TYPE_MODULE : JS_EVAL_TYPE_GLOBAL);
+    value = compile_text(ctx, source, length, filename, is_module);
+    if (!JS_IsException(value)) value = JS_EvalFunction(ctx, value);
     if (JS_IsException(value)) {
         status = take_exception(ctx, out, stack);
     } else if (is_module) {
@@ -442,6 +567,36 @@ int tw_js_eval(TwJs *js, const char *source, size_t length, const char *filename
             JS_Throw(ctx, JS_PromiseResult(ctx, value));
             status = take_exception(ctx, out, stack);
         }
+    } else if (out) {
+        *out = text_of_string(ctx, value);
+    }
+    JS_FreeValue(ctx, value);
+    leave(js);
+    return status;
+}
+
+int tw_js_eval_bytecode(TwJs *js, const unsigned char *bytecode, size_t length, char **out, char **stack) {
+    JSContext *ctx = js->ctx;
+    JSValue value;
+    int status = 0;
+
+    if (out) *out = NULL;
+    if (stack) *stack = NULL;
+    enter(js);
+    /* A copy: with JS_READ_OBJ_ROM_DATA, QuickJS can write into the bytes,
+     * and the bytes of the program are read-only. */
+    value = JS_ReadObject(ctx, bytecode, length, JS_READ_OBJ_BYTECODE);
+    if (JS_IsException(value) || JS_VALUE_GET_TAG(value) != JS_TAG_FUNCTION_BYTECODE) {
+        /* Another version of QuickJS, or no bytecode: nothing ran. */
+        JSValue ignored = JS_GetException(ctx);
+        JS_FreeValue(ctx, ignored);
+        JS_FreeValue(ctx, value);
+        leave(js);
+        return TW_JS_NO_BYTECODE;
+    }
+    value = JS_EvalFunction(ctx, value);
+    if (JS_IsException(value)) {
+        status = take_exception(ctx, out, stack);
     } else if (out) {
         *out = text_of_string(ctx, value);
     }
