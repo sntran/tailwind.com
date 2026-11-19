@@ -10,7 +10,7 @@ aarch64.
 [BEAM.com](https://github.com/sntran/BEAM.com). It takes the place of:
 
 - **The official `tailwindcss` program**: the same options, the same
-  output, in one file of about 20 MB for all the systems and both CPUs.
+  output, in one file of about 23 MB for all the systems and both CPUs.
 - **The Hex package `tailwind`** in a Phoenix project: this repository
   is also an Erlang and Elixir project with the application name
   `tailwind`, the module `Tailwind`, and the tasks `mix tailwind` and
@@ -60,7 +60,7 @@ tailwind.com [--input input.css] [--output output.css] [--watch] [--poll=ms] [op
 In `mix.exs`, replace the Hex package `tailwind`:
 
 ```elixir
-{:tailwind, github: "sntran/tailwind.com", tag: "v0.5.0", runtime: Mix.env() == :dev}
+{:tailwind, github: "sntran/tailwind.com", tag: "v0.6.0", runtime: Mix.env() == :dev}
 ```
 
 The modules of a release download the `tailwind.com` of that release.
@@ -169,7 +169,7 @@ The input CSS can be a file, as for a build on the disk:
 
 ```html
 <link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">
-<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>
+<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.6"></script>
 ```
 
 - The browser does not apply a stylesheet with the type
@@ -193,7 +193,7 @@ The input CSS can be a file, as for a build on the disk:
 The input CSS can also be in the page, as for the Play CDN:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>
+<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.6"></script>
 <style type="text/tailwindcss">
   @plugin "@tailwindcss/typography";
   @theme { --color-brand: #0d9488; }

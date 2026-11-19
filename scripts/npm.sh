@@ -8,7 +8,7 @@
 #
 # TAILWIND_COM and TAILWIND_WASM: the files of the release, with
 # tailwind-browser.wasm in the directory of TAILWIND_WASM. TAG: the tag of
-# the GitHub release that has the file, for example v0.5.0.
+# the GitHub release that has the file, for example v0.6.0.
 set -eu
 [ $# -eq 3 ] || { echo "usage: $0 TAILWIND_COM TAILWIND_WASM TAG" >&2; exit 2; }
 com=$1 wasm=$2 tag=$3

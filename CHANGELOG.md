@@ -6,10 +6,14 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
-## Unreleased
+## 0.6.0 - 2026-11-19
 
 The second command of the official program, `canonicalize`, and the
-canonical form of class lists in `mix format`.
+canonical form of class lists in `mix format`. A build with JavaScript
+plugins is faster: the program reads the bytecode of the plugin layer,
+and a Phoenix project with daisyUI builds in about 120 ms, not 142 ms.
+The messages are the messages of the official program: the help text,
+the colors, the error box, the watch, and a warning before an error.
 
 ### Added
 
