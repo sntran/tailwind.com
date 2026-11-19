@@ -44,7 +44,7 @@ on:
         type: number
         default: 60
   push:
-    branches: ["feat/**", "fix/**", "ci/**"]
+    branches: ["feat/**", "fix/**", "perf/**", "ci/**"]
     paths: [.github/remote-ssh.request]
 
 permissions:

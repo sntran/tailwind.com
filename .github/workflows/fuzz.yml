@@ -10,11 +10,11 @@ name: Fuzz
 # A push or a pull request runs it only when a file that the fuzzer tests
 # changes: the compiler, the fuzzer, the records, the packages. The run of
 # each night tests each version with a longer time. A pull request from a
-# work branch of this repository (feat/, fix/, ci/) runs no job: the push
-# of that branch already ran each job on the same commit.
+# work branch of this repository (feat/, fix/, perf/, ci/) runs no job:
+# the push of that branch already ran each job on the same commit.
 on:
   push:
-    branches: [main, "feat/**", "fix/**", "ci/**"]
+    branches: [main, "feat/**", "fix/**", "perf/**", "ci/**"]
     paths:
       - "native/**"
       - "tests/fuzz/**"
@@ -60,7 +60,7 @@ concurrency:
 jobs:
   fuzz:
     name: Differential fuzz against the official Tailwind CSS
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'perf/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 75
     steps:
@@ -98,7 +98,7 @@ jobs:
   # another scanner and another optimizer.
   script:
     name: The script engine with Tailwind CSS ${{ matrix.version }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'perf/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 40
     strategy:
@@ -137,7 +137,7 @@ jobs:
   # its versions.
   programs:
     name: Build the program and the builder
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'ci/'))
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !(startsWith(github.head_ref, 'feat/') || startsWith(github.head_ref, 'fix/') || startsWith(github.head_ref, 'perf/') || startsWith(github.head_ref, 'ci/'))
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
