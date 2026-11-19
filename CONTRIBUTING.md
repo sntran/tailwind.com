@@ -26,8 +26,8 @@ make                   # build/tailwind.com, for all the systems
 make test              # all the tests: Rust, the program, TLC, Erlang and Elixir
 ```
 
-CI runs the tests for each push to `main`, `feat/**`, `fix/**` and
-`ci/**`, and for each pull request from a fork. A pull request from one
+CI runs the tests for each push to `main`, `feat/**`, `fix/**`,
+`perf/**` and `ci/**`, and for each pull request from a fork. A pull request from one
 of these branches of this repository runs no job: the push of the branch
 already tested the same commit. The fuzzer runs only when a push changes
 a file that it tests (`docs/TESTING.md`).
