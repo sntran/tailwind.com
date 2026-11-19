@@ -346,7 +346,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-26, macos-15-intel, windows-2025]
+        # windows-11-arm: the file has no ARM64 code for Windows (its PE
+        # header is for AMD64), so Windows 11 runs the x86_64 code in its
+        # x64 emulation. This job tests the file there.
+        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-26, macos-15-intel, windows-2025, windows-11-arm]
     defaults:
       run:
         shell: bash
