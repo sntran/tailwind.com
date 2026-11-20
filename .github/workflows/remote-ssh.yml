@@ -1,5 +1,5 @@
 # SSH to a runner of CI, for tests and debugging on a system that a person
-# does not have: Windows, macOS, Linux on arm64, or a BSD in a VM on a
+# does not have: Windows (x86_64 and ARM64), macOS, Linux on arm64, or a BSD in a VM on a
 # Linux runner. This is the method of the workflow of BEAM.com, with the
 # OpenSSH server of the runner (scripts/remote_ssh_runner.sh) behind a
 # quick tunnel of Cloudflare. The job puts the URL, the user and the host
@@ -24,7 +24,7 @@ on:
       os:
         description: The runner
         type: choice
-        options: [windows-2025, macos-26, macos-15-intel, ubuntu-26.04, ubuntu-26.04-arm]
+        options: [windows-2025, windows-11-arm, macos-26, macos-15-intel, ubuntu-26.04, ubuntu-26.04-arm]
         default: windows-2025
       vm:
         description: A BSD in a VM (the runner must be ubuntu-26.04)
@@ -87,7 +87,7 @@ jobs:
           fi
           vm=${vm:-none} branch=${branch:-debug/ssh} minutes=${minutes:-60}
           case $os in
-            windows-2025|macos-26|macos-15-intel|ubuntu-26.04|ubuntu-26.04-arm) ;;
+            windows-2025|windows-11-arm|macos-26|macos-15-intel|ubuntu-26.04|ubuntu-26.04-arm) ;;
             *) echo "The runner is not in the list: $os" >&2; exit 1 ;;
           esac
           case $vm in

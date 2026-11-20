@@ -48,7 +48,9 @@ cloudflared() {
             s=02f3edfd87684dd5b705607688e4eb4b323f6e777b81e7b3a85af556aa356848 ;;
         Darwin-arm64) f=cloudflared-darwin-arm64.tgz
             s=3586ccf397e98e5f437e60e7c307ca6ac463e110580503af8bb8e6f9ebf831bd ;;
-        MINGW*-x86_64|MSYS*-x86_64) f=cloudflared-windows-amd64.exe
+        # Windows on ARM64 runs the x86_64 program in its x64 emulation.
+        MINGW*-x86_64|MSYS*-x86_64|MINGW*-aarch64|MSYS*-aarch64|MINGW*-arm64|MSYS*-arm64)
+            f=cloudflared-windows-amd64.exe
             s=2493dbc168923bb3e59e5e7716f71deced92992eea9acd6e9d74f84ac7751343 ;;
         *) echo "remote ssh: no cloudflared for $(uname -s) $(uname -m)" >&2; return 1 ;;
     esac

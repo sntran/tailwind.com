@@ -32,8 +32,8 @@ of these branches of this repository runs no job: the push of the branch
 already tested the same commit. The fuzzer runs only when a push changes
 a file that it tests (`docs/TESTING.md`).
 
-For tests on a system that you do not have (Windows, macOS, Linux on
-arm64, or FreeBSD, NetBSD and OpenBSD in a VM), use SSH to a runner of
+For tests on a system that you do not have (Windows on x86_64 and
+ARM64, macOS, Linux on arm64, or FreeBSD, NetBSD and OpenBSD in a VM), use SSH to a runner of
 CI. You need `ssh`, and `cargo` or `cloudflared` for the bridge to the
 tunnel:
 
