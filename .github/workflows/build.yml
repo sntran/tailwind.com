@@ -25,7 +25,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  COSMOCC_VERSION: "4.0.2"
+  # The cosmocc of sntran/cosmopolitan (scripts/cosmo.sh has its SHA-256).
+  COSMOCC_VERSION: "4.0.2-patched.1"
   # The C compiler for the JavaScript engine of the WASI program.
   WASI_SDK_VERSION: "27"
   WASI_SDK_SHA256: b7d4d944c88503e4f21d84af07ac293e3440b1b6210bfd7fe78e0afd92c23bc2
@@ -455,10 +456,10 @@ jobs:
       - name: The APE loader
         if: matrix.vm != 'freebsd'
         run: |
-          sha=$(sed -n 's/^COSMOCC_SHA256=${COSMOCC_SHA256:-\(.*\)}$/\1/p' scripts/cosmo.sh)
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/cosmocc.zip" \
-            "https://github.com/jart/cosmopolitan/releases/download/$COSMOCC_VERSION/cosmocc-$COSMOCC_VERSION.zip"
-          echo "$sha  $RUNNER_TEMP/cosmocc.zip" | sha256sum -c -
+          root=$PWD
+          . scripts/cosmo.sh
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/cosmocc.zip" "$COSMOCC_URL"
+          echo "$COSMOCC_SHA256  $RUNNER_TEMP/cosmocc.zip" | sha256sum -c -
           unzip -q -j "$RUNNER_TEMP/cosmocc.zip" bin/ape-x86_64.elf -d build
           chmod +x build/ape-x86_64.elf
 

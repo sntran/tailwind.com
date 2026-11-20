@@ -12,7 +12,8 @@
 # Environment:
 #   COSMOCC          Directory of an unpacked cosmocc (default build/cosmocc;
 #                    this script downloads it when it is not there)
-#   COSMOCC_VERSION  cosmocc release to download (default 4.0.2)
+#   COSMOCC_VERSION  cosmocc release to download (default: the release of
+#                    sntran/cosmopolitan in scripts/cosmo.sh)
 #   RUST_NIGHTLY     The nightly Rust for aarch64 (default nightly-2026-11-01)
 #   CPUS             The CPUs of the file (default "x86_64 aarch64")
 #   PACKAGES         The versions of Tailwind CSS whose npm package goes into
