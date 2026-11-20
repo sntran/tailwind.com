@@ -10,6 +10,7 @@
 #   - an other loader at $TMPDIR/.ape-VERSION (the name of cosmocc) and
 #     at $TMPDIR/.ape-VERSION-OTHERHASH does not run;
 #   - the program extracts its loader one time, and uses it after that;
+#   - each segment of the x86_64 loader can be read (Linux on Rosetta);
 #   - on Linux x86_64, `--assimilate` still makes an ELF file that runs.
 # The last line is "ape_loader: ok".
 # The patterns are text of the header: $ is not an expansion here.
@@ -45,11 +46,43 @@ version=$(echo "$name" | sed 's/^\.ape-//; s/-.*//')
 sed -n 's/^dd if="\$o" skip=\([0-9]*\) *count=\([0-9]*\) *bs=1 .*| gzip -dc.*/\1 \2/p' "$tmp/head" |
     awk '!seen[$0]++' > "$tmp/loaders"
 : > "$tmp/all"
+n=0
 while read -r skip count; do
-    tail -c +$((skip + 1)) "$program" | head -c "$count" | gzip -dc >> "$tmp/all"
+    n=$((n + 1))
+    tail -c +$((skip + 1)) "$program" | head -c "$count" | gzip -dc > "$tmp/loader$n"
+    cat "$tmp/loader$n" >> "$tmp/all"
 done < "$tmp/loaders"
 hash=$(sha256 < "$tmp/all" | cut -c1-12)
 [ "$name" = ".ape-$version-$hash" ] || fail "the header names $name, not .ape-$version-$hash"
+
+# Linux on Rosetta (a container for x86_64 on Apple silicon) reads the
+# code of the x86_64 loader to translate it. Thus each PT_LOAD segment of
+# that loader must have PF_R (C49 in docs/UPSTREAM.md of BEAM.com).
+# u SIZE OFFSET FILE: the unsigned integer of SIZE bytes at OFFSET.
+u() {
+    od -An -tu"$1" -j "$2" -N "$1" "$3" | tr -d ' \n'
+}
+x86_64_loaders=0
+i=0
+while [ $i -lt $n ]; do
+    i=$((i + 1))
+    f=$tmp/loader$i
+    # An ELF file for x86_64 (EM_X86_64 is 62).
+    if [ "$(od -An -c -N4 "$f" | tr -d ' ')" != '177ELF' ] || [ "$(u 2 18 "$f")" != 62 ]; then
+        continue
+    fi
+    x86_64_loaders=$((x86_64_loaders + 1))
+    phoff=$(u 8 32 "$f") phentsize=$(u 2 54 "$f") phnum=$(u 2 56 "$f")
+    k=0
+    while [ $k -lt "$phnum" ]; do
+        at=$((phoff + k * phentsize))
+        if [ "$(u 4 "$at" "$f")" = 1 ] && [ $(($(u 4 $((at + 4)) "$f") & 4)) = 0 ]; then
+            fail "the segment $k of the x86_64 loader cannot be read (Linux on Rosetta)"
+        fi
+        k=$((k + 1))
+    done
+done
+[ "$x86_64_loaders" -ge 1 ] || fail "the header has no x86_64 loader"
 
 # Two other loaders, which fail.
 dir=$tmp/tmpdir
