@@ -441,6 +441,16 @@ jobs:
           uname -a
           if [ "$RUNNER_OS" = macOS ]; then sw_vers; fi
           sh tests/starts.sh build/tailwind.com 2000
+      # The x86_64 half continues in the x64 emulation when it cannot start
+      # the loader. A copy with another name for the loader in its ZIP
+      # (the same length, so no offset changes) tests that path, and its
+      # times are a comparison for the starts of the aarch64 half.
+      - name: 500 starts in the x64 emulation, with no loader
+        if: matrix.os == 'windows-11-arm'
+        run: |
+          perl -0777 -pe 's{(?<!/zip/)ape-arm64\.exe}{ape-arm64.ex_}g' build/tailwind.com > build/emulated.com
+          sh tests/arch.sh build/emulated.com x64
+          sh tests/starts.sh build/emulated.com 500
 
   # FreeBSD, NetBSD and OpenBSD in a VM of QEMU, as the job test-bsd of
   # BEAM.com. The VM has the work directory of the job. The file is for

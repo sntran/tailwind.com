@@ -38,7 +38,15 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 cp -R "$root/tests/upstream/cli-js/phoenix-deps/project" "$work/project"
 cd "$work/project"
-export NODE_PATH="$work/project/deps:$work/project/_build/dev"
+# NODE_PATH as Node.js reads it: on Windows, paths of Windows with the
+# separator ";".
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        NODE_PATH="$(cygpath -w "$work/project/deps");$(cygpath -w "$work/project/_build/dev")" ;;
+    *)
+        NODE_PATH="$work/project/deps:$work/project/_build/dev" ;;
+esac
+export NODE_PATH
 # The messages have no colors, so the test can compare them.
 export NO_COLOR=1
 unset CI FORCE_COLOR
