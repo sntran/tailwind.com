@@ -154,6 +154,17 @@ jobs:
           release: "7.3"
           run: uname -a
 
+      # The Git of windows-11-arm has no sshd. The OpenSSH server of
+      # Windows (a capability of the system) takes its place, and the
+      # runner script uses it.
+      - name: The OpenSSH server of Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ((Test-Path 'C:\Program Files\Git\usr\bin\sshd.exe') -or (Get-Command sshd -ErrorAction SilentlyContinue)) { exit 0 }
+          Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 | Out-Null
+          Get-Command sshd
+
       - name: Run the SSH server
         shell: bash
         env:
