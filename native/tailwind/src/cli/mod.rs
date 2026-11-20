@@ -158,8 +158,13 @@ fn format_error(error: &Error) -> String {
 }
 
 /// `path.resolve(base, path)` of Node.js, with no access to the file
-/// system: `.` and `..` are removed.
+/// system: `.` and `..` are removed. On Windows, a path of Windows is
+/// also absolute (see `system_path`).
 pub fn resolve_path(base: &Path, path: &str) -> PathBuf {
+    let windows = modules::windows();
+    let base = if windows { PathBuf::from(system_path(&base.to_string_lossy(), true).as_ref()) } else { base.to_path_buf() };
+    let path = system_path(path, windows);
+    let path = path.as_ref();
     let joined = if Path::new(path).is_absolute() { PathBuf::from(path) } else { base.join(path) };
     let mut result = PathBuf::new();
     for part in joined.components() {
@@ -172,6 +177,31 @@ pub fn resolve_path(base: &Path, path: &str) -> PathBuf {
         }
     }
     result
+}
+
+/// On Windows, a path of Windows in the form of the paths of the program.
+/// The program has the paths of Cosmopolitan: `/C/dir/file` for
+/// `C:\dir\file`, and `/` between the names. At the start, Cosmopolitan
+/// gives this form to the current directory and to each argument that
+/// names a file that is there, but not to a file that is not there yet
+/// (an output), and not to a value after `=` (`--output=C:\dir\a.css`).
+/// So on Windows, `C:\a` and `C:/a` become `/C/a`, and `\` becomes `/`, as
+/// `path.resolve()` of Node.js reads them there.
+fn system_path(path: &str, windows: bool) -> std::borrow::Cow<'_, str> {
+    if !windows {
+        return path.into();
+    }
+    let bytes = path.as_bytes();
+    let drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    if drive && (bytes.len() == 2 || bytes[2] == b'/' || bytes[2] == b'\\') {
+        let rest = path[2..].replace('\\', "/");
+        let rest = rest.strip_prefix('/').unwrap_or(&rest);
+        return format!("/{}/{rest}", &path[..1]).into();
+    }
+    if path.contains('\\') {
+        return path.replace('\\', "/").into();
+    }
+    path.into()
 }
 
 /// The path for a message, relative to the current directory when it is
@@ -1045,4 +1075,25 @@ pub unsafe extern "C" fn tailwind_main(argc: std::os::raw::c_int, argv: *const *
     // A panic must not cross into C. The run has a thread with a large
     // stack, as in `main.rs` (`nesting.rs`).
     std::panic::catch_unwind(|| crate::nesting::with_stack(|| run(args))).unwrap_or(101)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_path_of_windows_has_the_form_of_the_program_on_windows() {
+        assert_eq!(system_path(r"C:\a\b.css", true), "/C/a/b.css");
+        assert_eq!(system_path("c:/a/b.css", true), "/c/a/b.css");
+        assert_eq!(system_path(r"C:\", true), "/C/");
+        assert_eq!(system_path(r"css\app.css", true), "css/app.css");
+        assert_eq!(system_path("/C/a", true), "/C/a");
+        assert_eq!(system_path(r"C:\a", false), r"C:\a");
+    }
+
+    #[test]
+    fn resolve_path_removes_dot_parts() {
+        assert_eq!(resolve_path(Path::new("/p/q"), "../r/./s.css"), PathBuf::from("/p/r/s.css"));
+        assert_eq!(resolve_path(Path::new("/p"), "/x/y"), PathBuf::from("/x/y"));
+    }
 }

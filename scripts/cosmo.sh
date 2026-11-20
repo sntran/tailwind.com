@@ -23,7 +23,7 @@ COSMOCC_URL=${COSMOCC_URL:-https://github.com/sntran/cosmopolitan/releases/downl
 SYMS="syscall clock_gettime clock_nanosleep __errno_location pthread_attr_init
 pthread_attr_destroy pthread_attr_setstacksize pthread_attr_getstack
 pthread_attr_getguardsize pthread_getattr_np pthread_create open openat mmap
-getauxval sched_getaffinity fstat stat lstat fstatat"
+getauxval sched_getaffinity fstat stat lstat fstatat __xpg_strerror_r"
 
 # cosmo_check: QuickJS is there, and cosmocc is in C (else download it).
 # The file VERSION in C has the version of the download. When COSMOCC is
