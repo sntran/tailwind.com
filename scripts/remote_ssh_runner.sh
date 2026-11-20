@@ -168,9 +168,12 @@ sftp=internal-sftp
 force=$dir/command.sh
 if [ $win32_sshd = 1 ]; then
     # Paths of Windows in the configuration, only the user of the job in
-    # the access list of each key file, and bash for the command.
+    # the access list of each key file, and bash for the command. chmod of
+    # Git gives a file explicit entries (also for Authenticated Users), and
+    # sshd refuses a key that another user can read: /reset removes them.
     wdir=$(cygpath -m "$dir")
     for f in host_key authorized_keys; do
+        icacls "$(cygpath -w "$dir/$f")" //reset > /dev/null
         icacls "$(cygpath -w "$dir/$f")" //inheritance:r //grant:r "$(id -un):F" > /dev/null
     done
     force="C:/PROGRA~1/Git/bin/bash.exe $wdir/command.sh"
