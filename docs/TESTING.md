@@ -142,6 +142,11 @@ starts directly gives `--version` in 60 ms, and a program that does
 nothing takes 52 ms there: the start through the x86_64 half costs
 about 44 ms.
 
+In CI, with the loaders of the `cosmocc` of sntran/cosmopolitan, the
+job gave 2000 starts with no failure on each system: Windows 11 on ARM64
+(511 ms on average, and 754 ms for 500 starts in the emulation), and
+macOS 26.7.2 and 27.0.1 on arm64 (128 ms and 147 ms on average).
+
 `TAILWIND_RUN` in the environment is a program that starts `PROGRAM`,
 with an absolute path, for `tests/cli.sh` and `tests/watch.sh`: the APE
 loader of cosmocc (`ape-x86_64.elf`) on NetBSD, where `sh` cannot start
