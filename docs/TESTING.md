@@ -102,7 +102,7 @@ A case can have more files than the output and the exit status:
 |---|---|
 | `stderr.txt` | For an error: each line of the message of the official program must be in the error output. |
 | `stderr-contains.txt` | With the exit status 0: the warning lines of the official program, with no color codes. Each line must be in the error output. With an error: the lines that must be there, for a message that another JavaScript engine cannot repeat. |
-| `env.txt` | The environment variables for the program, one `NAME=VALUE` for each line. `<project>` is the path of the project. These cases do not run on Windows. With `TAILWINDCSS_VERSION`, the record comes from the official program of that version, and the case is skipped when the program does not have that version (a program of `cargo build` with no `TAILWIND_COM_PACKAGES`). |
+| `env.txt` | The environment variables for the program, one `NAME=VALUE` for each line. `<project>` is the path of the project. On Windows, `NODE_PATH` gets the form of Windows (paths of Windows, with `;`). With `TAILWINDCSS_VERSION`, the record comes from the official program of that version, and the case is skipped when the program does not have that version (a program of `cargo build` with no `TAILWIND_COM_PACKAGES`). |
 | `project.txt` | In place of `project/`: the name of another case. The two cases use one project. |
 | `standalone.txt` | The record comes from the npm program with the module rules of the standalone program: see `tests/standalone.sh` below.
 
