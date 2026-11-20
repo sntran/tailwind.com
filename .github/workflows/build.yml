@@ -350,9 +350,10 @@ jobs:
         # xcode-27: macOS 27 on arm64 (GitHub gives it the label of its
         # Xcode). Its address space is not the one of macOS 26 (C57 of
         # docs/UPSTREAM.md of BEAM.com).
-        # windows-11-arm: the file has no ARM64 code for Windows (its PE
-        # header is for AMD64), so Windows 11 runs the x86_64 code in its
-        # x64 emulation. This job tests the file there.
+        # windows-11-arm: the PE header of the file is for AMD64, so
+        # Windows 11 starts the x86_64 half in its x64 emulation. That
+        # half starts the aarch64 half as native code, with the loader
+        # ape-arm64.exe of the ZIP of the file (native/tailwind/c_src/main.c).
         os: [ubuntu-26.04, ubuntu-26.04-arm, macos-26, xcode-27, macos-15-intel, windows-2025, windows-11-arm]
     defaults:
       run:
@@ -372,6 +373,15 @@ jobs:
           # shell starts it.
           if [ "$RUNNER_OS" = Windows ]; then ./build/tailwind.com --version; else sh build/tailwind.com --version; fi
           sh tests/cli.sh build/tailwind.com
+      # The file runs the code for the CPU of the runner: arm64 on each
+      # ARM64 runner, also on Windows on ARM64.
+      - name: The half of the file for the CPU of the system
+        run: |
+          case $RUNNER_ARCH in
+            ARM64) arch=arm64 ;;
+            *) arch=x64 ;;
+          esac
+          sh tests/arch.sh build/tailwind.com "$arch"
       # The shell header runs only its own APE loader (issue #28). Windows
       # does not use the shell header.
       - name: The APE loader of the shell header
@@ -401,21 +411,24 @@ jobs:
         run: WATCH_EXPECT=poll sh tests/watch.sh build/tailwind.com --poll=100
 
   # Many starts of tailwind.com, one after the other (tests/starts.sh). On
-  # macOS arm64, the APE loader maps the program at fixed addresses with
-  # MAP_FIXED: BEAM.com saw a rare hang there on macOS 26, and another
-  # layout of the address space on macOS 27 (C51 and C57 of its
-  # docs/UPSTREAM.md), and it patches the loader. The file has the loader
-  # of cosmocc with no patch: 2000 starts on each of these systems gave no
-  # failure. This job keeps that true.
+  # macOS arm64 and on Windows on ARM64, a loader maps the aarch64 half at
+  # its fixed addresses. BEAM.com saw rare failures there: a hang on
+  # macOS 26, another layout of the address space on macOS 27, and on
+  # Windows a block of memory at those addresses (C51, C57 and C58 of its
+  # docs/UPSTREAM.md). The loaders of the cosmocc of scripts/cosmo.sh
+  # have the fixes. This job keeps the starts free of these failures.
   starts:
     name: Starts of tailwind.com on ${{ matrix.os }}
     needs: build
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-26, xcode-27]
+        os: [macos-26, xcode-27, windows-11-arm]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -426,7 +439,7 @@ jobs:
         run: |
           chmod +x build/tailwind.com
           uname -a
-          sw_vers
+          if [ "$RUNNER_OS" = macOS ]; then sw_vers; fi
           sh tests/starts.sh build/tailwind.com 2000
 
   # FreeBSD, NetBSD and OpenBSD in a VM of QEMU, as the job test-bsd of

@@ -9,11 +9,14 @@
 # the scanner and its threads, and the plugins in QuickJS. COUNT is the
 # number of starts (default 2000).
 #
-# On macOS arm64, the APE loader of cosmocc maps the program at fixed
-# addresses with MAP_FIXED. BEAM.com saw two faults there (C51 and C57 of
-# its docs/UPSTREAM.md): memory of the malloc of libSystem under the
-# program (a rare hang or a crash), and the address space of macOS 27.
-# This test counts the starts that fail:
+# On macOS arm64, the APE loader maps the program at fixed addresses
+# with MAP_FIXED. BEAM.com saw two faults there (C51 and C57 of its
+# docs/UPSTREAM.md): memory of the malloc of libSystem under the program
+# (a rare hang or a crash), and the address space of macOS 27. On Windows
+# on ARM64, the loader ape-arm64.exe maps the aarch64 half at its fixed
+# addresses too, and BEAM.com saw a block of memory of Windows there
+# (C58). The loaders of the cosmocc of scripts/cosmo.sh check these
+# addresses. This test counts the starts that fail:
 #   - a status that is not 0, or a signal;
 #   - a start that takes more than LIMIT seconds (default 60): the test
 #     stops it;
