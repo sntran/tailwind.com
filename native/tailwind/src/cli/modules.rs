@@ -43,8 +43,30 @@ impl FileSystem {
 /// of the build, and is not there for WASI.)
 pub fn node_path() -> Vec<PathBuf> {
     let Some(paths) = super::context::var("NODE_PATH") else { return Vec::new() };
-    let separator = if windows() { ';' } else { ':' };
-    paths.split(separator).filter(|path| !path.is_empty()).map(PathBuf::from).collect()
+    split_node_path(&paths, windows())
+}
+
+/// The directories of a value of `NODE_PATH`.
+///
+/// On Windows, Cosmopolitan changes each variable of the environment
+/// that starts with a path of Windows (`C:\` or `C:/`) when the program
+/// starts: `C:\a;D:\b` becomes `/C/a:/D/b`. So on Windows, a part between
+/// two `;` that does not start with a drive (`C:`) is also split at `:`.
+/// A part with a drive keeps its `:`.
+fn split_node_path(paths: &str, windows: bool) -> Vec<PathBuf> {
+    let parts: Vec<&str> = if windows {
+        paths
+            .split(';')
+            .flat_map(|part| {
+                let bytes = part.as_bytes();
+                let drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+                if drive { vec![part] } else { part.split(':').collect() }
+            })
+            .collect()
+    } else {
+        paths.split(':').collect()
+    };
+    parts.into_iter().filter(|path| !path.is_empty()).map(PathBuf::from).collect()
 }
 
 /// True when the system at run time is Windows (`process.platform` is
@@ -155,5 +177,30 @@ impl ModuleLoader for FileSystem {
         let mut argv = vec![program.clone(), program];
         argv.extend(args);
         argv
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn split(paths: &str, windows: bool) -> Vec<String> {
+        split_node_path(paths, windows).into_iter().map(|path| path.to_string_lossy().into_owned()).collect()
+    }
+
+    #[test]
+    fn node_path_has_the_separator_of_the_system() {
+        assert_eq!(split("/a/deps:/a/_build/dev", false), ["/a/deps", "/a/_build/dev"]);
+        assert_eq!(split("::/a:", false), ["/a"]);
+        assert_eq!(split(r"C:\a\deps;D:\b", true), [r"C:\a\deps", r"D:\b"]);
+        assert_eq!(split("c:/a/deps;c:/a/_build/dev", true), ["c:/a/deps", "c:/a/_build/dev"]);
+        assert_eq!(split(r"deps;C:\b", true), ["deps", r"C:\b"]);
+    }
+
+    #[test]
+    fn node_path_on_windows_after_the_change_of_cosmopolitan() {
+        // `C:\a\deps;D:\b` and `C:\a;deps` at the start of the program.
+        assert_eq!(split("/C/a/deps:/D/b", true), ["/C/a/deps", "/D/b"]);
+        assert_eq!(split("/C/a:deps", true), ["/C/a", "deps"]);
     }
 }

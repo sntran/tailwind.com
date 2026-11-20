@@ -27,9 +27,9 @@ import { createEngine, hasPromiseIntegration, needsEngine } from './engine.mjs';
 import { Files, run } from './wasi.mjs';
 
 // The package root in the URL of a file of the package on a CDN:
-// "https://cdn.jsdelivr.net/npm/tailwind.com@0.5.0/+esm",
-// "https://esm.sh/tailwind.com@0.5.0/es2022/tailwind.com.mjs", or only the
-// root for the default file, "https://cdn.jsdelivr.net/npm/tailwind.com@0.5".
+// "https://cdn.jsdelivr.net/npm/tailwind.com@0.6.0/+esm",
+// "https://esm.sh/tailwind.com@0.6.0/es2022/tailwind.com.mjs", or only the
+// root for the default file, "https://cdn.jsdelivr.net/npm/tailwind.com@0.6".
 function packageRoot(from) {
   const url = new URL(from);
   const found = url.pathname.match(/^(.*\/tailwind\.com(?:@[^/]*)?)(?:\/|$)/);

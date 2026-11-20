@@ -21,7 +21,8 @@
 # line of the file must be in the error output of the program, without
 # the color codes. A case can have env.txt: the environment variables for
 # the program, one NAME=VALUE for each line, with <project> at the place
-# of the path of the project. A case with TAILWINDCSS_VERSION in env.txt
+# of the path of the project. On Windows, NODE_PATH gets the form of
+# Windows (paths of Windows, with ";"). A case with TAILWINDCSS_VERSION in env.txt
 # is for that version: when the program does not have that version, the
 # case is skipped. The program
 # runs on a copy of project/ outside this repository, as the record was
@@ -111,16 +112,23 @@ run() {
     esac
 }
 
+# NODE_PATH as Node.js reads it: on Windows, paths of Windows with the
+# separator ";". env.txt has the form of the other systems.
+node_path() {
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            printf "%s\n" "$1" | tr ':' '\n' | while IFS= read -r path; do
+                [ -n "$path" ] && cygpath -w "$path"
+            done | paste -s -d ';' - ;;
+        *) printf "%s" "$1" ;;
+    esac
+}
+
 failed=0
 count=0
 for name in "$@"; do
     [ -f "$cases/$name/args.txt" ] || continue
-    # A list of paths in the environment (NODE_PATH) has another form on
-    # Windows, and the shell changes it: these cases do not run there.
     if [ -f "$cases/$name/env.txt" ]; then
-        case "$(uname -s)" in
-            MINGW*|MSYS*|CYGWIN*) echo "cli.sh: $name: not on Windows (env.txt)"; continue ;;
-        esac
         # A case for another version of Tailwind CSS needs the package of
         # that version. A program of `cargo build` has no packages in its
         # file: TAILWIND_COM_PACKAGES gives them.
@@ -151,7 +159,10 @@ for name in "$@"; do
         if [ -f "$cases/$name/env.txt" ]; then
             while IFS= read -r line || [ -n "$line" ]; do
                 line=$(printf "%s" "$line" | tr -d "\r" | sed "s|<project>|$project|g")
-                case "$line" in *=*) export "${line%%=*}=${line#*=}" ;; esac
+                case "$line" in
+                    NODE_PATH=*) export "NODE_PATH=$(node_path "${line#*=}")" ;;
+                    *=*) export "${line%%=*}=${line#*=}" ;;
+                esac
             done < "$cases/$name/env.txt"
         fi
         export NO_COLOR=1

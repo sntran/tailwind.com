@@ -677,6 +677,39 @@ the method of BEAM.com for Rust:
   keeps its size: the script takes the bytes from the padding of the
   numbers of the `dd` commands. `tests/ape_loader.sh` checks the file.
 
+### Windows on ARM64
+
+The PE header of an APE file is for AMD64, so Windows on ARM64 starts
+the x86_64 half of the file in its x64 emulation. The `cosmocc` of
+`scripts/cosmo.sh` gives the aarch64 libc a Windows layer, and a native
+loader for Windows on ARM64, `ape-arm64.exe` (7 KB, C58 in
+`docs/UPSTREAM.md` of BEAM.com). The loader maps the aarch64 ELF half of
+the file at its fixed addresses, and starts it.
+
+- `scripts/build.sh` puts the loader into the ZIP of the file.
+- At the start, the x86_64 half asks Windows for the CPU of the system
+  (`IsWow64Process2()`). On ARM64, `native/tailwind/c_src/main.c` writes
+  the loader to the directory of the temporary files as
+  `.ape-arm64-HASH.exe` (HASH: the FNV-1a hash of the loader), and the
+  process becomes the loader (`execv()`), with the path of the file and
+  the arguments. `execv()` of Cosmopolitan gives the status of the
+  loader to the parent process.
+- Each start compares the file of the loader with the loader of the
+  ZIP, and writes a file that is different again: a changed file does
+  not run. Two starts at the same time write two temporary files. Each
+  one gives its file the name of the loader. When Windows refuses the
+  name (the other loader runs), the start uses the file of the other
+  start, if its contents are the loader.
+- When the write or the start of the loader fails, the x86_64 half
+  continues in the x64 emulation.
+- The aarch64 half uses `ReadDirectoryChangesW()` for the watch, as the
+  x86_64 half does.
+
+`tests/arch.sh` checks the half that runs on each system: a plugin puts
+`process.arch` into the CSS. The job `starts` starts the file 2000 times
+on `windows-11-arm`, and a copy with no loader in its ZIP (the x64
+emulation) 500 times.
+
 ### The allocator
 
 A build spends about a third of its instructions in `malloc` and `free`

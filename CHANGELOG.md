@@ -6,10 +6,16 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
-## Unreleased
+## 0.6.0 - 2026-11-19
 
 The second command of the official program, `canonicalize`, and the
-canonical form of class lists in `mix format`.
+canonical form of class lists in `mix format`. A build with JavaScript
+plugins is faster: the program reads the bytecode of the plugin layer,
+and a Phoenix project with daisyUI builds in about 120 ms, not 142 ms.
+The messages are the messages of the official program: the help text,
+the colors, the error box, the watch, and a warning before an error.
+The file runs as native code on Windows on ARM64, and is built with the
+`cosmocc` of sntran/cosmopolitan, which has the patches of BEAM.com.
 
 ### Added
 
@@ -37,6 +43,16 @@ canonical form of class lists in `mix format`.
   gives each class list of a template its canonical form, with the
   command `canonicalize`. One run of `canonicalize --stream` serves all
   the files of a run of `mix format`.
+- Windows on ARM64: the file runs its aarch64 half as native code. The
+  ZIP of the file has the loader `ape-arm64.exe` (7 KB). Windows starts
+  the x86_64 half in its x64 emulation, and that half writes the loader
+  to the directory of the temporary files (`.ape-arm64-HASH.exe`) and
+  starts the aarch64 half with it. When the loader cannot run, the file
+  continues in the x64 emulation. On `windows-11-arm`, a small build
+  takes 116 ms in place of 189 ms, and the Phoenix project with daisyUI
+  479 ms in place of 726 ms; the start through the x86_64 half costs
+  about 44 ms. The watch uses the file events of Windows in the aarch64
+  half too.
 - `tailwind_nif:open/2`, `write/2`, `close/1` and `stop/1`: a run of the
   NIF with a standard input, for `canonicalize --stream`.
 - The Cargo feature `canonicalize` (in `cli`): the command, the class
@@ -57,6 +73,28 @@ canonical form of class lists in `mix format`.
   of an older version: a full build of the watch (after a change of the
   input) and a run of the NIF do not compile the same text again. With
   daisyUI, a full build of the watch takes about 111 ms, not 145 ms.
+- The build uses the `cosmocc` 4.0.2-patched.1 of
+  [sntran/cosmopolitan](https://github.com/sntran/cosmopolitan): the
+  official `cosmocc` 4.0.2 with the patches of BEAM.com. The compilers
+  are the same. The patches give the aarch64 libc a Windows layer and
+  the loader of Windows on ARM64 (C58 in `docs/UPSTREAM.md` of
+  BEAM.com), a loader for macOS on arm64 that checks its fixed addresses
+  (C51, C57), and an x86_64 loader with segments that can be read, so
+  the file can start in a Linux container for x86_64 on Apple silicon
+  (Rosetta, C49). On Windows, `close()` of a written file no longer
+  waits for the disk (C64). `scripts/cosmo.sh` checks the SHA-256 of the
+  release, and `tests/ape_loader.sh` checks the segments of the x86_64
+  loader in the file.
+- CI also tests `tailwind.com` on Windows 11 on ARM64
+  (`windows-11-arm`) and on macOS 27 on arm64 (`xcode-27`).
+  `tests/arch.sh` checks that each system runs the code for its CPU.
+  The job `starts` starts the file 2000 times on macOS 26 and 27 on
+  arm64 and on Windows 11 on ARM64 (`tests/starts.sh`), where a loader
+  maps the aarch64 half at fixed addresses. On Windows on ARM64, it also
+  starts a copy in the x64 emulation 500 times.
+- The workflow Remote SSH can start a session on `windows-11-arm`. It
+  installs the OpenSSH server of Windows when the Git of the runner has
+  no `sshd`.
 
 ### Fixed
 
@@ -85,6 +123,22 @@ canonical form of class lists in `mix format`.
   as in the official program: `tailwind.com build extra` builds.
 - The compiler keeps no result of a compile that a plugin made throw, as
   upstream: the next compile of the candidate throws again.
+- On Windows, `NODE_PATH` with paths of Windows
+  (`C:\app\deps;C:\app\_build\dev`, as Node.js reads it) finds the
+  packages. Cosmopolitan changes such a variable at the start of the
+  program to `/C/app/deps:/C/app/_build/dev`, and the program then
+  found no directory: an `@import` from `NODE_PATH` failed (the Phoenix
+  project with `phoenix-colocated`). The cases with `env.txt` now also
+  run on Windows.
+- On Windows, a path of Windows in `--input`, `--output`, `--cwd` and
+  `--map` is absolute (`C:\dir\a.css`, `C:/dir/a.css`), as in Node.js.
+  Before, `-o C:/dir/out.css` for a file that was not there yet went
+  below the current directory, and the write failed.
+- The text of an I/O error no longer stops the program with the panic
+  `strerror_r failure`. The standard library of Rust for Linux targets
+  expects the `strerror_r()` of XSI, and the `__xpg_strerror_r()` of
+  Cosmopolitan gives a pointer: the result was negative when bit 31 of
+  the address of the buffer was set (on Windows on ARM64).
 - The Rust crate has the class list of the editor tools
   (`DesignSystem::get_class_list`), the completions of the variants, and
   `DesignSystem::canonicalize_candidates`, as `getClassList`,

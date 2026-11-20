@@ -1,16 +1,19 @@
 # tailwind.com
 
 Tailwind CSS 4 in one executable file, with no Node.js. The same file
-runs on Linux, macOS, Windows, FreeBSD, NetBSD and OpenBSD, on x86_64 and
-aarch64.
+runs on Linux, macOS, Windows, FreeBSD, NetBSD and OpenBSD, on x86_64
+and aarch64 (ARM64).
 
 `tailwind.com` is a Tailwind CSS compiler in Rust, as one
 [Actually Portable Executable](https://justine.lol/ape.html) made with
 [Cosmopolitan Libc](https://github.com/jart/cosmopolitan), in the way of
-[BEAM.com](https://github.com/sntran/BEAM.com). It takes the place of:
+[BEAM.com](https://github.com/sntran/BEAM.com). The build uses the
+`cosmocc` of [sntran/cosmopolitan](https://github.com/sntran/cosmopolitan):
+the official `cosmocc` 4.0.2 with the patches of BEAM.com, for Windows
+on ARM64, macOS on arm64 and Linux on Rosetta. It takes the place of:
 
 - **The official `tailwindcss` program**: the same options, the same
-  output, in one file of about 20 MB for all the systems and both CPUs.
+  output, in one file of about 23 MB for all the systems and both CPUs.
 - **The Hex package `tailwind`** in a Phoenix project: this repository
   is also an Erlang and Elixir project with the application name
   `tailwind`, the module `Tailwind`, and the tasks `mix tailwind` and
@@ -60,7 +63,7 @@ tailwind.com [--input input.css] [--output output.css] [--watch] [--poll=ms] [op
 In `mix.exs`, replace the Hex package `tailwind`:
 
 ```elixir
-{:tailwind, github: "sntran/tailwind.com", tag: "v0.5.0", runtime: Mix.env() == :dev}
+{:tailwind, github: "sntran/tailwind.com", tag: "v0.6.0", runtime: Mix.env() == :dev}
 ```
 
 The modules of a release download the `tailwind.com` of that release.
@@ -169,7 +172,7 @@ The input CSS can be a file, as for a build on the disk:
 
 ```html
 <link rel="stylesheet" type="text/tailwindcss" href="/assets/app.css">
-<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>
+<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.6"></script>
 ```
 
 - The browser does not apply a stylesheet with the type
@@ -193,7 +196,7 @@ The input CSS can be a file, as for a build on the disk:
 The input CSS can also be in the page, as for the Play CDN:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.5"></script>
+<script src="https://cdn.jsdelivr.net/npm/tailwind.com@0.6"></script>
 <style type="text/tailwindcss">
   @plugin "@tailwindcss/typography";
   @theme { --color-brand: #0d9488; }
@@ -342,11 +345,12 @@ program. For example, the Phoenix project: 12 ms with `tailwind.com`,
 project with daisyUI: 182 ms, 310 ms and 251 ms, with 13 MB of memory in
 place of 103 MB and 89 MB.
 
-CI runs `tailwind.com` on Linux (x86_64 and aarch64), macOS (arm64 and
-x86_64), Windows (x86_64), FreeBSD, NetBSD and OpenBSD 7.3 (x86_64, in
-a VM): the projects of the official program, and the watch with the
-file events of each system (inotify, kqueue, `ReadDirectoryChangesW`)
-and with the poll.
+CI runs `tailwind.com` on Linux (x86_64 and aarch64), macOS (26 and 27
+on arm64, and x86_64), Windows (x86_64 and ARM64), FreeBSD, NetBSD and
+OpenBSD 7.3 (x86_64, in a VM): the projects of the official program,
+and the watch with the file events of each system (inotify, kqueue,
+`ReadDirectoryChangesW`) and with the poll. A test checks that each
+system runs the code for its CPU.
 
 A differential fuzzer also compares the two compilers live on new random
 stylesheets, classes and projects, in CI for each change of the compiler
@@ -408,6 +412,16 @@ differences.
   path `/$tailwindcss/NAME.css`. With `node_modules/tailwindcss` in the
   project, the path is the path of the file, as with the official
   program.
+- **Windows on ARM64**: the PE header of an APE file is for AMD64, so
+  Windows starts the x86_64 half in its x64 emulation. That half writes
+  the loader of the aarch64 half (`.ape-arm64-HASH.exe`, 7 KB) to the
+  directory of the temporary files, and starts the aarch64 half with
+  it. This costs about 44 ms for each start, and a build is faster:
+  116 ms in place of 189 ms for a small project, and 479 ms in place of
+  726 ms for the Phoenix project with daisyUI. When Windows does not
+  let the loader run there (for example, a policy that blocks programs
+  in the directory of the temporary files), the file runs in the x64
+  emulation.
 - **NetBSD and OpenBSD**: the `sh` of NetBSD cannot read an APE file.
   Start the file there with the APE loader of cosmocc
   (`ape-x86_64.elf tailwind.com`). Cosmopolitan supports OpenBSD 7.3 or

@@ -7,27 +7,40 @@
 #   nightly  The nightly Rust for aarch64
 #   log      A function that writes a message
 
-COSMOCC_VERSION=${COSMOCC_VERSION:-4.0.2}
-COSMOCC_SHA256=${COSMOCC_SHA256:-85b8c37a406d862e656ad4ec14be9f6ce474c1b436b9615e91a55208aced3f44}
+# The cosmocc of sntran/cosmopolitan: the official cosmocc 4.0.2, with
+# the libc, the tools and the loaders of the patches of BEAM.com (its
+# PATCHES.md). These patches give the aarch64 libc a Windows layer and
+# the loader bin/ape-arm64.exe: the file then runs as native code on
+# Windows on ARM64 (native/tailwind/c_src/main.c). They also give a
+# loader for macOS arm64 that checks its fixed addresses (C51 and C57 in
+# docs/UPSTREAM.md of BEAM.com).
+COSMOCC_VERSION=${COSMOCC_VERSION:-4.0.2-patched.1}
+COSMOCC_SHA256=${COSMOCC_SHA256:-9393ba3beba565c6007edadfd29cfaa16f31e80ad9f1d65b7cbb6ad0740b6bec}
+COSMOCC_URL=${COSMOCC_URL:-https://github.com/sntran/cosmopolitan/releases/download/$COSMOCC_VERSION/cosmocc-$COSMOCC_VERSION.zip}
 
 # The calls of the Rust library that native/tailwind/c_src/cosmo_rust.c
 # translates.
 SYMS="syscall clock_gettime clock_nanosleep __errno_location pthread_attr_init
 pthread_attr_destroy pthread_attr_setstacksize pthread_attr_getstack
 pthread_attr_getguardsize pthread_getattr_np pthread_create open openat mmap
-getauxval sched_getaffinity fstat stat lstat fstatat"
+getauxval sched_getaffinity fstat stat lstat fstatat __xpg_strerror_r"
 
 # cosmo_check: QuickJS is there, and cosmocc is in C (else download it).
+# The file VERSION in C has the version of the download. When COSMOCC is
+# not set, a cosmocc of another version in C goes away first.
 cosmo_check() {
     if [ ! -f "$root/native/tailwind/c_src/quickjs/quickjs.c" ]; then
         log "native/tailwind/c_src/quickjs is empty: run git submodule update --init"
         exit 1
     fi
+    if [ -z "${COSMOCC:-}" ] && [ -e "$C" ] && [ "$(cat "$C/VERSION" 2>/dev/null)" != "$COSMOCC_VERSION" ]; then
+        log "$C is not cosmocc $COSMOCC_VERSION: removing it"
+        rm -rf "$C"
+    fi
     if [ ! -x "$C/bin/cosmocc" ]; then
         log "Downloading cosmocc $COSMOCC_VERSION"
         mkdir -p "$C"
-        curl -fsSL -o "$C.zip" \
-            "https://github.com/jart/cosmopolitan/releases/download/$COSMOCC_VERSION/cosmocc-$COSMOCC_VERSION.zip"
+        curl -fsSL --retry 3 -o "$C.zip" "$COSMOCC_URL"
         sum=$(sha256sum "$C.zip" | cut -d' ' -f1)
         if [ "$sum" != "$COSMOCC_SHA256" ]; then
             log "cosmocc-$COSMOCC_VERSION.zip has the SHA-256 $sum, not $COSMOCC_SHA256"
@@ -35,6 +48,7 @@ cosmo_check() {
         fi
         (cd "$C" && unzip -q "$C.zip")
         rm -f "$C.zip"
+        echo "$COSMOCC_VERSION" > "$C/VERSION"
     fi
 }
 

@@ -29,9 +29,9 @@
 #include <unistd.h>
 
 
-/* errno: the value of Cosmopolitan for this system, as a number of Linux. */
-static int linux_errno(int e) {
-  static const struct { const errno_t *host; int linux; } map[] = {
+/* errno: the values of Cosmopolitan for this system, and the numbers of
+ * Linux. */
+static const struct { const errno_t *host; int linux; } errno_map[] = {
       {&EPERM, 1},    {&ENOENT, 2},   {&ESRCH, 3},      {&EINTR, 4},     {&EIO, 5},
       {&ENXIO, 6},    {&E2BIG, 7},    {&ENOEXEC, 8},    {&EBADF, 9},     {&ECHILD, 10},
       {&EAGAIN, 11},  {&ENOMEM, 12},  {&EACCES, 13},    {&EFAULT, 14},   {&EBUSY, 16},
@@ -42,10 +42,31 @@ static int linux_errno(int e) {
       {&ENOSYS, 38},  {&ENOTEMPTY, 39}, {&ELOOP, 40},   {&EOVERFLOW, 75},
       {&ENOTSUP, 95}, {&EADDRINUSE, 98}, {&ECONNREFUSED, 111},
       {&ETIMEDOUT, 110}, {&EINPROGRESS, 115},
-  };
-  for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++)
-    if (*map[i].host == e) return map[i].linux;
+};
+
+/* errno: the value of Cosmopolitan for this system, as a number of Linux. */
+static int linux_errno(int e) {
+  for (size_t i = 0; i < sizeof(errno_map) / sizeof(errno_map[0]); i++)
+    if (*errno_map[i].host == e) return errno_map[i].linux;
   return e;
+}
+
+/* errno: a number of Linux, as the value of Cosmopolitan for this system. */
+static int host_errno(int linux) {
+  for (size_t i = 0; i < sizeof(errno_map) / sizeof(errno_map[0]); i++)
+    if (errno_map[i].linux == linux) return *errno_map[i].host;
+  return linux;
+}
+
+/* The text of an error. On Linux targets, std calls __xpg_strerror_r(),
+ * the strerror_r() of XSI: it gives 0, or an error number. The
+ * __xpg_strerror_r() of Cosmopolitan gives the buffer (a char *), and std
+ * read the low 32 bits of its address as the result. When bit 31 of the
+ * address was set, the result was negative, and std stopped with the
+ * panic "strerror_r failure" (on Windows on ARM64, the stack of a thread
+ * was at such an address). The number is a number of Linux. */
+int tw_rs___xpg_strerror_r(int linux, char *buf, size_t size) {
+  return strerror_r(host_errno(linux), buf, size);
 }
 
 static _Thread_local int last_errno = -1;

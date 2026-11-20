@@ -102,13 +102,50 @@ A case can have more files than the output and the exit status:
 |---|---|
 | `stderr.txt` | For an error: each line of the message of the official program must be in the error output. |
 | `stderr-contains.txt` | With the exit status 0: the warning lines of the official program, with no color codes. Each line must be in the error output. With an error: the lines that must be there, for a message that another JavaScript engine cannot repeat. |
-| `env.txt` | The environment variables for the program, one `NAME=VALUE` for each line. `<project>` is the path of the project. These cases do not run on Windows. With `TAILWINDCSS_VERSION`, the record comes from the official program of that version, and the case is skipped when the program does not have that version (a program of `cargo build` with no `TAILWIND_COM_PACKAGES`). |
+| `env.txt` | The environment variables for the program, one `NAME=VALUE` for each line. `<project>` is the path of the project. On Windows, `NODE_PATH` gets the form of Windows (paths of Windows, with `;`). With `TAILWINDCSS_VERSION`, the record comes from the official program of that version, and the case is skipped when the program does not have that version (a program of `cargo build` with no `TAILWIND_COM_PACKAGES`). |
 | `project.txt` | In place of `project/`: the name of another case. The two cases use one project. |
 | `standalone.txt` | The record comes from the npm program with the module rules of the standalone program: see `tests/standalone.sh` below.
 
 CI runs the cases with `tailwind.com` on Linux and macOS (x86_64 and
-aarch64), on Windows, and in a VM on FreeBSD, NetBSD and OpenBSD 7.3
-(x86_64).
+aarch64), on Windows (x86_64, and ARM64: `windows-11-arm`), and in a VM
+on FreeBSD, NetBSD and OpenBSD 7.3 (x86_64). On Windows on ARM64, the
+x86_64 half starts the aarch64 half as native code
+([`INTERNALS.md`](INTERNALS.md), "Windows on ARM64").
+`tests/arch.sh PROGRAM ARCH` checks that the program runs the code for
+the CPU of the system: a plugin puts `process.arch` into the CSS. The
+job `systems` runs it on each system, with `arm64` on each ARM64
+runner.
+
+`tests/starts.sh PROGRAM [COUNT]` starts the program COUNT times (default
+2000), one after the other, on the Phoenix project with daisyUI: the
+shell header, the APE loader, the scanner and the plugins. A start fails
+when its status is not 0, when it takes more than 60 s (the test stops
+it), when its CSS is not the CSS of the first start, or when it writes an
+unexpected message. The job `starts` runs it on macOS 26 and macOS 27 on
+arm64, and on Windows 11 on ARM64. There, a loader maps the aarch64
+half at its fixed addresses. BEAM.com saw faults there (C51, C57 and
+C58 of its `docs/UPSTREAM.md`), and the loaders of the `cosmocc` of
+sntran/cosmopolitan have its fixes. With the loader of the official
+`cosmocc` 4.0.2, the first measurement gave 2000 starts with no failure
+on each system: macOS 26.7.2 and 27.0.1 on arm64 (134 ms and 143 ms on
+average), and macOS 15.7.9 on x86_64 (257 ms, a system with no such
+loader). The job `systems` also runs on macOS 27 (`xcode-27`).
+
+On `windows-11-arm`, the job `starts` also starts 500 times a copy of
+the file with another name for the loader in its ZIP: that copy runs in
+the x64 emulation. This tests the path of the emulation when the loader
+cannot run, and gives a comparison. On the same runner (an SSH session,
+40 starts of each), a start took 479 ms with the aarch64 half and
+726 ms in the emulation; a small build took 116 ms and 189 ms;
+`--version` took 104 ms and 84 ms. The aarch64 half that the loader
+starts directly gives `--version` in 60 ms, and a program that does
+nothing takes 52 ms there: the start through the x86_64 half costs
+about 44 ms.
+
+In CI, with the loaders of the `cosmocc` of sntran/cosmopolitan, the
+job gave 2000 starts with no failure on each system: Windows 11 on ARM64
+(511 ms on average, and 754 ms for 500 starts in the emulation), and
+macOS 26.7.2 and 27.0.1 on arm64 (128 ms and 147 ms on average).
 
 `TAILWIND_RUN` in the environment is a program that starts `PROGRAM`,
 with an absolute path, for `tests/cli.sh` and `tests/watch.sh`: the APE

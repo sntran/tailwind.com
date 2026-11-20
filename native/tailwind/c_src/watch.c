@@ -36,7 +36,7 @@
 #include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
-#if defined(__x86_64__) && !defined(TW_WATCH_INOTIFY_ONLY)
+#ifndef TW_WATCH_INOTIFY_ONLY
 #include "libc/nt/createfile.h"
 #include "libc/nt/dll.h"
 #include "libc/nt/enum/accessmask.h"
@@ -48,6 +48,7 @@
 #include "libc/nt/iocp.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/overlapped.h"
+#include "libc/nt/thunk/msabi.h"
 #endif
 
 /* The kinds of a path of tw_watch_add(). */
@@ -382,10 +383,11 @@ static void kq_events(const char *evs, int n)
  * new tree closes the handles below it.
  *
  * Cosmopolitan has no ReadDirectoryChangesW(): the address comes from
- * kernel32.dll, and the call has the calling convention of Microsoft.
- * Cosmopolitan runs on Windows only on x86_64.
+ * kernel32.dll. On x86_64 the call has the calling convention of
+ * Microsoft (__msabi). On Windows on ARM64, the aarch64 half of the file
+ * runs as native code (native/tailwind/c_src/main.c), and the call has
+ * the calling convention of ARM64.
  */
-#ifdef __x86_64__
 
 /* The values of winnt.h: FILE_NOTIFY_CHANGE_FILE_NAME, DIR_NAME, SIZE,
  * LAST_WRITE and CREATION. */
@@ -393,7 +395,7 @@ static void kq_events(const char *evs, int n)
 #define NT_BUFFER 4096 /* bytes; a network share accepts at most 64 KB */
 #define NT_MAX_DIRS 2048
 
-typedef int(__attribute__((__ms_abi__)) *nt_ReadDirectoryChangesW)(
+typedef int(__msabi *nt_ReadDirectoryChangesW)(
     int64_t dir, void *buffer, uint32_t size, int subtree, uint32_t filter,
     uint32_t *bytes, struct NtOverlapped *overlapped, void *routine);
 
@@ -599,15 +601,6 @@ static int nt_wait(int ms)
     }
 }
 
-#else /* Windows is x86_64 only. */
-
-static int nt_start(void)
-{
-    return 0;
-}
-
-#endif
-
 #else /* TW_WATCH_INOTIFY_ONLY */
 
 static int kq = -1;
@@ -667,11 +660,9 @@ void tw_watch_add(const char *path, int kind)
         if (kind != TW_TREE)
             kq_watch(path);
     }
-#ifdef __x86_64__
     else if (nt_on) {
         nt_watch(path, kind);
     }
-#endif
 #endif
 }
 
@@ -698,10 +689,8 @@ static int wait_once(int ms)
         kq_events(evs, n);
         return n > 0;
     }
-#ifdef __x86_64__
     if (nt_on)
         return nt_wait(ms);
-#endif
 #endif
     return -1;
 }

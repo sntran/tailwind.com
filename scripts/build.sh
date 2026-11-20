@@ -12,7 +12,8 @@
 # Environment:
 #   COSMOCC          Directory of an unpacked cosmocc (default build/cosmocc;
 #                    this script downloads it when it is not there)
-#   COSMOCC_VERSION  cosmocc release to download (default 4.0.2)
+#   COSMOCC_VERSION  cosmocc release to download (default: the release of
+#                    sntran/cosmopolitan in scripts/cosmo.sh)
 #   RUST_NIGHTLY     The nightly Rust for aarch64 (default nightly-2026-11-01)
 #   CPUS             The CPUs of the file (default "x86_64 aarch64")
 #   PACKAGES         The versions of Tailwind CSS whose npm package goes into
@@ -65,13 +66,26 @@ if [ "$cc" = cosmocc ]; then
     log "The APE loader of the shell header: $loader"
 fi
 
-# The packages of the script engine. An APE file is also a ZIP file: the
-# program reads the directory tailwindcss/ of its own file (/zip).
+# An APE file is also a ZIP file: the program reads its own file (/zip).
+# The ZIP has the loader of Windows on ARM64 (ape-arm64.exe of cosmocc,
+# for a file with the two CPUs: native/tailwind/c_src/main.c), and the
+# packages of the script engine in the directory tailwindcss/.
+entries=
+mkdir -p "$work/zip"
+if [ "$cc" = cosmocc ]; then
+    [ -f "$C/bin/ape-arm64.exe" ] || { log "$C has no bin/ape-arm64.exe: use the cosmocc of scripts/cosmo.sh"; exit 1; }
+    cp "$C/bin/ape-arm64.exe" "$work/zip/ape-arm64.exe"
+    entries=ape-arm64.exe
+fi
 if [ "${PACKAGES:-all}" != none ]; then
-    command -v zip >/dev/null 2>&1 || { log "The program zip is not there. Install it, or build with PACKAGES=none."; exit 1; }
     package_store "$work/zip/tailwindcss"
     log "Adding the packages of $store_count versions of Tailwind CSS"
-    (cd "$work/zip" && zip -q -9 -r -X "$work/tailwind.com" tailwindcss)
+    entries="$entries tailwindcss"
+fi
+if [ -n "$entries" ]; then
+    command -v zip >/dev/null 2>&1 || { log "The program zip is not there. Install it."; exit 1; }
+    # shellcheck disable=SC2086
+    (cd "$work/zip" && zip -q -9 -r -X "$work/tailwind.com" $entries)
 fi
 
 cp "$work/tailwind.com" "$OUT"
