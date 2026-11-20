@@ -49,9 +49,11 @@ You need, on Linux x86_64:
 - Rust (stable), with the target `x86_64-unknown-linux-musl`;
 - a nightly Rust with `rust-src` (default `nightly-2026-11-01`), for the
   aarch64 half of the file;
-- `curl` and `unzip`, for the download of `cosmocc` 4.0.2 (the script
-  checks its SHA-256);
-- `zip` and `tar`, for the packages of Tailwind CSS in the file.
+- `curl` and `unzip`, for the download of `cosmocc` 4.0.2-patched.1 of
+  [sntran/cosmopolitan](https://github.com/sntran/cosmopolitan) (the
+  script checks its SHA-256);
+- `zip` and `tar`, for the loader of Windows on ARM64 and the packages
+  of Tailwind CSS in the file.
 
 ```sh
 rustup target add x86_64-unknown-linux-musl
@@ -61,6 +63,16 @@ make                       # build/tailwind.com
 
 `cosmocc` also compiles QuickJS for each CPU: the C library of the file
 is Cosmopolitan, so the C compiler of the system is not used here.
+
+The `cosmocc` of sntran/cosmopolitan is the official `cosmocc` 4.0.2
+with the patches of BEAM.com (its `PATCHES.md`): the compilers are the
+same, and the libc, the tools and the loaders have the patches. The
+file needs three of them: the Windows layer of the aarch64 libc and the
+loader `ape-arm64.exe` (Windows on ARM64), the loader of macOS arm64
+that checks its fixed addresses, and the x86_64 loader with segments
+that can be read (Linux on Rosetta). `build/cosmocc/VERSION` has the
+version of the download. When `COSMOCC` is not set, the build removes a
+`cosmocc` of another version there, and downloads the correct one.
 
 After the link, the build downloads the npm package `tailwindcss` of
 each version of the file `PACKAGES` (`scripts/packages.sh`, with a
