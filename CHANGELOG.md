@@ -6,7 +6,20 @@ version of the package is in `mix.exs`, `package.json`,
 `src/tailwind.app.src` and `native/tailwind/Cargo.toml`. Each release
 also names its version of Tailwind CSS (see `UPSTREAM`).
 
-## 0.6.0 - 2026-11-19
+## Unreleased
+
+### Changed
+
+- The release job stages the npm package (`npm stage publish`, with
+  trusted publishing and no token), and the owner approves the version
+  on npmjs.com with 2FA. A version that npm or GitHub Packages has
+  already is not published again. The crates go to crates.io one at a
+  time, and the job waits until the index of crates.io lists each one
+  (cargo waits only 60 s, and for 0.6.0 crates.io was slower). So
+  "Re-run failed jobs" continues a release after a publication failed
+  (`docs/BUILDING.md`).
+
+## 0.6.0 - 2026-11-20
 
 The second command of the official program, `canonicalize`, and the
 canonical form of class lists in `mix format`. A build with JavaScript
