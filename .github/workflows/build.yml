@@ -761,36 +761,53 @@ jobs:
               --repo "$GITHUB_REPOSITORY" --generate-notes \
               --title "$GITHUB_REF_NAME (Tailwind CSS $oldest to $TAILWINDCSS_VERSION)"
           fi
-      # npm: trusted publishing (OIDC) needs no stored token. A token is
-      # accepted only to bootstrap this new package, then can be removed.
-      - name: Publish to npm
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # npm: trusted publishing (OIDC), with no stored token, and staged
+      # publishing: the job stages the version, and the owner approves it
+      # on npmjs.com with 2FA. Then the version is on npm. The trusted
+      # publisher of npmjs.com allows only `npm stage publish`. A version
+      # that npm has already is not staged again, so a run again of the
+      # job continues after a publication that failed. Staged publishing
+      # needs npm 11.15.0 or later.
+      - name: Stage the npm package
         run: |
-          if [ -n "$NPM_TOKEN" ]; then
-            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > "$RUNNER_TEMP/npmrc"
-            export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc"
+          version=${GITHUB_REF_NAME#v}
+          if [ "$(npm view "tailwind.com@$version" version 2> /dev/null)" = "$version" ]; then
+            echo "tailwind.com $version is on npm already."
+            exit 0
           fi
+          if ! printf '11.15.0\n%s\n' "$(npm --version)" | sort -V -C; then
+            npm install -g npm@11.15.0
+          fi
+          npm --version
           # npm treats a path without ./ as a GitHub repository shorthand.
-          npm publish ./dist/tailwind.com-*.tgz --access public --provenance
+          npm stage publish ./dist/tailwind.com-*.tgz --access public --provenance
+          echo "Approve tailwind.com $version on npmjs.com: then it is on npm."
       # GitHub Packages accepts only a name with the scope of the owner:
-      # the same package, with the name @OWNER/tailwind.com.
+      # the same package, with the name @OWNER/tailwind.com. A version that
+      # is there already is not published again.
       - name: Publish to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ github.token }}
         run: |
+          version=${GITHUB_REF_NAME#v}
           owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
           mkdir "$RUNNER_TEMP/ghp" && tar xzf dist/tailwind.com-*.tgz -C "$RUNNER_TEMP/ghp"
+          printf '@%s:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$owner" "$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/ghp/npmrc"
+          if [ "$(npm view "@$owner/tailwind.com@$version" version --userconfig "$RUNNER_TEMP/ghp/npmrc" --registry https://npm.pkg.github.com 2> /dev/null)" = "$version" ]; then
+            echo "@$owner/tailwind.com $version is on GitHub Packages already."
+            exit 0
+          fi
           cd "$RUNNER_TEMP/ghp/package"
           sed -i "s|^  \"name\": \"tailwind.com\",|  \"name\": \"@$owner/tailwind.com\",|" package.json
           grep -q "\"name\": \"@$owner/tailwind.com\"" package.json
-          printf '@%s:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$owner" "$NODE_AUTH_TOKEN" > "$RUNNER_TEMP/ghp/npmrc"
           npm publish --userconfig "$RUNNER_TEMP/ghp/npmrc" --registry https://npm.pkg.github.com
-      # crates.io: the four crates, in the order of their dependencies. The
-      # first version of a new crate needs a token (the secret
-      # CARGO_REGISTRY_TOKEN); with no token, this step does nothing. A
-      # crate that has this version already is not published again, so a
-      # run again of the job can end the publication.
+      # crates.io: the four crates, one at a time, in the order of their
+      # dependencies. The first version of a new crate needs a token (the
+      # secret CARGO_REGISTRY_TOKEN); with no token, this step does
+      # nothing. A crate that has this version already is not published
+      # again. Before the next crate, the index of crates.io must list the
+      # crate: cargo publish waits only 60 s, and for 0.6.0 crates.io was
+      # slower. So a run again of the job can end the publication.
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -800,16 +817,26 @@ jobs:
             exit 0
           fi
           version=${GITHUB_REF_NAME#v}
-          packages=
+          # The path of a crate in the index (a name of 4 or more letters).
+          in_index() {
+            path=$(printf '%s' "$1" | cut -c1-2)/$(printf '%s' "$1" | cut -c3-4)/$1
+            curl -fsS "https://index.crates.io/$path" 2> /dev/null | grep -q "\"vers\":\"$version\""
+          }
           for crate in tailwind-classification-macros tailwind-ignore tailwind-scanner tailwind; do
             status=$(curl -s -o /dev/null -w '%{http_code}' -A "tailwind.com release" "https://crates.io/api/v1/crates/$crate/$version")
             if [ "$status" = 200 ]; then
               echo "$crate $version is on crates.io already."
             else
-              packages="$packages -p $crate"
+              cargo publish -p "$crate"
             fi
+            i=0
+            until in_index "$crate"; do
+              i=$((i + 1))
+              [ $i -le 60 ] || { echo "$crate $version is not in the index of crates.io after 10 minutes." >&2; exit 1; }
+              sleep 10
+            done
+            echo "$crate $version is in the index of crates.io."
           done
-          [ -z "$packages" ] || cargo publish $packages
       # The site has the program of each release: deploy it again, with
       # this release in the list. The token of a workflow can start a run
       # of workflow_dispatch, and no other event.

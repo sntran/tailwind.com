@@ -222,13 +222,22 @@ packages starts the release job of CI. The job:
    of version X.Y.Z download from this release. One file has each version
    of Tailwind CSS, so the version of tailwind.com is not the version of
    Tailwind CSS.
-2. Publishes the npm package `tailwind.com` to npm, when the repository
-   has the secret `NPM_TOKEN`.
+2. Stages the npm package `tailwind.com` on npm, with trusted
+   publishing (no token). The trusted publisher of npmjs.com allows only
+   `npm stage publish`. The owner then approves the version on
+   npmjs.com with 2FA, and the version is on npm.
 3. Publishes the same package to GitHub Packages, with the name
    `@OWNER/tailwind.com` (GitHub Packages accepts only a name with the
    scope of the owner).
-4. Publishes the four crates to crates.io, when the repository has the
-   secret `CARGO_REGISTRY_TOKEN` (see "The crates" below).
+4. Publishes the four crates to crates.io, one at a time, when the
+   repository has the secret `CARGO_REGISTRY_TOKEN` (see "The crates"
+   below). Before the next crate, the index of crates.io must list the
+   crate (at most 10 minutes).
+
+Each step skips a version that its registry has already. So when a step
+fails, "Re-run failed jobs" continues the release: the GitHub release
+gets its files again, and the other steps publish only what is not
+there.
 5. Starts `.github/workflows/pages.yml`, so the site has the program of
    the new release ([`SITE.md`](SITE.md)).
 
